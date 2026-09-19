@@ -52,11 +52,11 @@ DeskBand 乐器对照表
     原始音色库：—
     程序实际读：—
 
-【张开的嘴 mouth】 → 人声 Voices（ElevenLabs 生成的 "ooh" 长音）
+【张开的嘴 mouth】 → 录音室上低音萨克斯 Studio Baritone Sax（主旋律）
     怎么认：MediaPipe 人脸关键点，最大的那张脸张着嘴拍照（deskband/face.py）
-    在 Logic 里：无，不来自 Logic
-    原始音色库：ElevenLabs 音效生成接口，提示词在 deskband/config.py 的 VOCAL_PROMPTS
-    程序实际读：/Users/jiamulin/Desktop/DeskBand/cache/vocal/   （第一次启动时生成，测音高后微调到半音；现在没有生成好的）
+    在 Logic 里：Logic 音色库 → 录音室管乐 → 单件乐器 → Studio Baritone Sax
+    原始音色库：/Library/Application Support/Logic/EXS Factory Samples/Studio Horns/Studio Baritone Sax.caf
+    程序实际读：/Users/jiamulin/Desktop/DeskBand/cache/bari_sax/   （tools/make_bari_sax.py 抽出来的 22 个单音；现在有抽好的）
 
 二、想换音色，库里还有这些
 ------------------------------------------------------------

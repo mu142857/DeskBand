@@ -70,6 +70,10 @@ def info(voice):
     if voice == "keys":
         return dict(name="柔和电钢琴（程序合成，不用采样）", logic="无，代码在 deskband/synth.py 里的 keys 音色",
                     source="—", used="—")
+    if voice == "sax":
+        return dict(name="录音室上低音萨克斯 Studio Baritone Sax（主旋律）", logic="Logic 音色库 → 录音室管乐 → 单件乐器 → Studio Baritone Sax",
+                    source="/Library/Application Support/Logic/EXS Factory Samples/Studio Horns/Studio Baritone Sax.caf",
+                    used=f"{C.BARI_SAX}/   （tools/make_bari_sax.py 抽出来的 22 个单音；现在{exists(os.path.join(C.BARI_SAX, 'keymap.json'))}抽好的）")
     if voice == "vocal":
         return dict(name="人声 Voices（ElevenLabs 生成的 \"ooh\" 长音）", logic="无，不来自 Logic",
                     source="ElevenLabs 音效生成接口，提示词在 deskband/config.py 的 VOCAL_PROMPTS",

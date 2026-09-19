@@ -156,7 +156,7 @@ class SampleVoice(Voice):
         return out
 
 
-RELEASE = {"piano": 1.6, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2, "vocal": 0.5}
+RELEASE = {"piano": 1.6, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2, "vocal": 0.5, "sax": 0.18}
 
 
 # ---------------------------------------------------------------- engine ----
@@ -234,6 +234,11 @@ class Engine:
             self.keymaps["strings"] = km
             self.loaded.add("strings")
             log(f"[sampler] strings: King's Cross, {len(km.keys)} notes")
+        km = sampler.load_bari_sax()
+        if km is not None:
+            self.keymaps["sax"] = km
+            self.loaded.add("sax")
+            log(f"[sampler] sax: Studio Baritone Sax, {len(km.keys)} notes")
         for kind in C.SAMPLE_SETS:
             if kind in self.loaded:
                 continue
@@ -256,7 +261,8 @@ class Engine:
             log(f"[sampler] vinyl loop unavailable: {e}")
         log(f"[sampler] all loaded in {_time.time() - t0:.1f}s")
         try:                                # last: the first time, this waits on ElevenLabs
-            km = vocals.load(log)
+            uses_vocal = any(spec["voice"] == "vocal" for spec in C.INSTRUMENTS.values())
+            km = vocals.load(log) if uses_vocal else None
             if km is not None:
                 self.keymaps["vocal"] = km
                 self.loaded.add("vocal")

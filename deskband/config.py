@@ -69,9 +69,10 @@ INSTRUMENTS = {
                        detect=["cell phone"], tint="#4FBFA8"),
     "laptop":     dict(label="Soft Keys",        voice="keys",    lo=64, hi=88, level=0.30, send=0.55,
                        detect=["laptop", "tablet", "ipad"], tint="#A3C26A"),
-    # Sung "ooh" samples made once by ElevenLabs (deskband/vocals.py); silent until they exist.
     # Not an object: an open mouth in the photo (deskband/face.py), so no text prompts.
-    "mouth":      dict(label="Voices",           voice="vocal",   lo=57, hi=74, level=0.16, send=0.60,
+    # The lead line: a baritone sax is bright enough to carry a tune in the tenor register.
+    # (voice="vocal" instead gives the ElevenLabs "ooh" samples of deskband/vocals.py.)
+    "mouth":      dict(label="Studio Baritone Sax", voice="sax",  lo=45, hi=64, level=0.24, send=0.35,
                        detect=[], tint="#D8BE5A"),
 }
 # The Zybo sequencer has seven tracks, in this order (tools/zybo_bridge.py). A part
@@ -125,6 +126,8 @@ PIANO_LOWPASS_HZ = 3000          # 0 = off
 # King's Cross (Studio Strings "String Ensemble") unpacked by tools/make_kings_cross.py;
 # replaces the EXS Strings 2 set when present.
 KINGS_CROSS = os.path.join(CACHE_DIR, "kings_cross")
+# Studio Horns "Studio Baritone Sax" unpacked by tools/make_bari_sax.py; silent until it has been run.
+BARI_SAX = os.path.join(CACHE_DIR, "bari_sax")
 # Voices (open mouth): sung takes generated once by ElevenLabs' sound-effects model,
 # pitch-detected, tuned to the nearest semitone and kept here as <midi>.wav +
 # keymap.json. Delete the folder to make new ones. Needs ELEVENLABS_API_KEY.

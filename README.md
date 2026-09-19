@@ -17,7 +17,7 @@ DeskBand looks at a photo of your desk and turns every object it recognises into
 | glasses | King's Cross (Studio Strings ensemble) | sustained chords |
 | cell phone | Glockenspiel | high sparkle |
 | laptop or tablet | Soft FM electric piano (synthesised) | dotted-8th shimmer an octave up |
-| an open mouth (MediaPipe face landmarks, largest face) | Voices: sung "ooh" samples made by ElevenLabs | a slow two-voice line on chord tones |
+| an open mouth (MediaPipe face landmarks, largest face) | Studio Baritone Sax (Logic Studio Horns) | the lead: a legato one-note-at-a-time tune, its motif drawn from the item's seed |
 
 Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. Each capture gives that category a fresh random seed; its saved seed and selection survive a restart until it is captured again. A play / pause button beside the shutter silences the band without losing the selection. Nothing plays while the camera and the detector load: the restored band comes in at bar one once they are ready, and a photo, a tile or `p` brings it in sooner. Press `0` to clear the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
 
@@ -32,7 +32,8 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 - **Vision:** YOLO-World (`ultralytics`) with the object names given as text prompts, so classes that are not in COCO (pen, glasses, tablet) work without training; each instrument accepts several synonyms, and one object read under two names is counted once. The app shows and saves one target at a time, with a smoothly moving outline. The large model runs on Apple Silicon via `mps` in its own thread at 960 px while a separate capture thread keeps the preview smooth, and the frozen photo gets one more pass at full resolution.
 - **Music:** a fixed loop of four close voicings, one bar each at 120 BPM: `F A C E` → `G B D E` → `E G B D` → `E A B C`. They move by step and keep common tones, which gives the hovering, blurred harmony. The bass always plays the chord root (F, G, E, A). The piano rolls each voicing softly and lets it ring into the next bar, then adds a sparse line on top: one motif per trip round the loop, restated over each chord. Melodic notes come only from the C major pentatonic scale, which fits all four chords, so random choices always sound right. The rhythm skeleton is a 3-3-2 accent pattern (the quantise-everything idea is Mikutap's). Everything lands on a 16th-note grid.
 - **Math mode** (`m`, or the φ button left of the shutter): the melodic parts (piano line, guitar, keys, glockenspiel, voices) stop restating patterns and are computed bar by bar, so the music never comes round again. Rhythms are Euclidean (k onsets spread evenly over the bar, turned; E(3,8) is the 3-3-2 above), and how many onsets and how far they turn comes from the logistic map in its chaotic range. Pitches walk, mostly by step, towards a 1/f contour built by Voss's method from irrational rotations (Weyl sequences), so no value ever recurs. Notes are still pentatonic with chord tones on the accents, so it stays in tune. It switches on the next bar line; bass, drums and strings keep their patterns.
-- **Voices (ElevenLabs):** the first start with `ELEVENLABS_API_KEY` set asks ElevenLabs' sound-effects model for a few sustained sung notes, pitch-tracks each take, drops any that wander, retunes the rest to the nearest semitone and files them in `cache/vocal/` as an ordinary sample keymap. From then on they are played like any other sampler instrument, following the chords. Delete `cache/vocal/` to make new ones, or run `.venv/bin/python -m deskband.vocals`.
+- **Baritone sax:** `tools/make_bari_sax.py` cuts Logic's Studio Horns "Studio Baritone Sax" into 22 single notes in `cache/bari_sax/` (each note there is stored as a 35 ms attack zone plus a body zone; the tool joins them). Until it has been run the open-mouth instrument is silent.
+- **Voices (ElevenLabs), not used by default:** set `voice="vocal"` on an instrument in `config.py` to use them. The first start with `ELEVENLABS_API_KEY` set asks ElevenLabs' sound-effects model for a few sustained sung notes, pitch-tracks each take, drops any that wander, retunes the rest to the nearest semitone and files them in `cache/vocal/` as an ordinary sample keymap. From then on they are played like any other sampler instrument, following the chords. Delete `cache/vocal/` to make new ones, or run `.venv/bin/python -m deskband.vocals`.
 - **Photo description (Gemini):** with `GEMINI_API_KEY` set, every photo is sent to Gemini (`GEMINI_MODEL` in `deskband/config.py`) in the background, and its one- or two-sentence description of the object appears under the title while the photo is shown. It is display only and changes nothing in the music.
 - **Saved motifs:** every successful capture generates a new random motif seed for its category, even when the same category is photographed again. The latest seed and selected state are saved. In standard mode, parts that use randomness repeat their resulting pattern on every full chord cycle; bass and strings are determined by the chords and do not change notes when reseeded. Math mode intentionally keeps evolving. If a style changes the chords, the saved seed produces notes harmonized to the new progression. `App.arrangement_snapshot()` freezes the saved items, selected parts, current BPM, and the active chord progression into an immutable score for a **new complete cycle beginning at bar one**. A pending style is marked in the snapshot. Pitched parts have note timelines; drums have hit steps for a beat grid.
 - **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a long Schroeder hall reverb. The engine runs at the output device's own sample rate, and the master bus uses a gain-riding limiter rather than clipping. The audio callback never blocks on vision; a slow frame only delays the picture.
@@ -66,7 +67,7 @@ export GEMINI_API_KEY=...        # photo descriptions
 ```
 
 ```bash
-export ELEVENLABS_API_KEY=...    # the Voices instrument (open mouth)
+export ELEVENLABS_API_KEY=...    # only if an instrument is set to voice="vocal"
 ```
 
 `DeskBand.app` started from Finder does not see shell variables; start it from a terminal, or use `launchctl setenv GEMINI_API_KEY ...` once per login.
@@ -81,6 +82,7 @@ Optional but recommended, the two sounds the piece is written for (both are unpa
 
 ```bash
 .venv/bin/python tools/make_kings_cross.py
+.venv/bin/python tools/make_bari_sax.py
 ```
 
 ## Run
@@ -117,6 +119,7 @@ which writes `dist/DeskBand.app`: a small native launcher (`tools/launcher.c`) t
 - `tools/write_instruments_txt.py` regenerates `INSTRUMENTS.txt` from `deskband/config.py`.
 - `tools/exs_extract.py` unpacks a Logic "consolidated" EXS instrument (such as the Concert Grand Piano) into per-note WAVs the sampler can use.
 - `tools/eval_prompts.py` replays the saved photos through the detector with any prompts, threshold, size or model.
+- `tools/make_bari_sax.py` builds the baritone sax notes into `cache/bari_sax/`.
 - `tools/make_kings_cross.py` builds the King's Cross string ensemble (five sections layered) into `cache/kings_cross/`.
 - `tests/` checks the reverb against a per-sample reference and the sample player for exactness: `.venv/bin/python tests/test_reverb.py`.
 

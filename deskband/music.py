@@ -490,8 +490,76 @@ class Vocal(Pattern):
             self.sing(4 * a, self.prev, 4 * (b - a) + 4, chord)
 
 
+class Sax(Pattern):
+    """Baritone sax, the lead: one line, one note at a time, each held until the
+    next. A motif (which 8ths, and the shape across them) is invented from the
+    item's seed once per trip round the loop and restated over each chord, so
+    every saved mouth has its own tune; accents land on chord tones."""
+    SLOTS = [0, 2, 4, 6, 8, 10, 12, 14]
+
+    def __init__(self, name, spec):
+        super().__init__(name, spec)
+        self.motif = None
+        self.bars_left = 0
+
+    def reset_cycle(self, seed):
+        super().reset_cycle(seed)
+        self.motif = None
+        self.bars_left = 0
+
+    def new_motif(self):
+        rng = self.rng
+        steps = sorted(rng.sample(self.SLOTS, rng.randint(3, 5)))
+        contour = [rng.choice([-1, 0, 1])]
+        for _ in steps[1:]:
+            contour.append(contour[-1] + rng.choice([-2, -1, -1, 1, 1, 2]))
+        return steps, contour
+
+    def line(self, notes):
+        """[(step, midi, vel)] -> the bar, legato: a note lasts until the next
+        begins, the last one to the bar line."""
+        for (s, midi, vel), (nxt, *_) in zip(notes, notes[1:] + [(P,)]):
+            self.put(s, midi, vel, nxt - s)
+
+    def plan(self, chord, nxt):
+        self.bar = {}
+        rng = self.rng
+        if self.bars_left == 0:
+            self.motif = self.new_motif()
+            self.bars_left = self.loop_len
+        self.bars_left -= 1
+        steps, contour = self.motif
+        ladder = in_range(C.PENTATONIC, self.lo, self.hi)
+        strong = in_range(chord.strong, self.lo, self.hi)
+        centre = (self.lo + self.hi) // 2
+        anchor = min(strong, key=lambda m: abs(m - centre))
+        base = ladder.index(min(ladder, key=lambda m: abs(m - anchor)))
+        notes = []
+        for i, s in enumerate(steps):
+            midi = ladder[min(max(base + contour[i], 0), len(ladder) - 1)]
+            if s in ACC:
+                midi = min(strong, key=lambda m: abs(m - midi))
+            notes.append((s, midi, rng.uniform(0.55, 0.75)))
+        self.line(notes)
+
+    def plan_math(self, chord, nxt):
+        """Computed afresh every bar: a Euclidean rhythm of 3-5 eighths, turned,
+        with the pitches walking the 1/f contour over the pentatonic."""
+        self.bar = {}
+        seq = self.seq
+        ladder = in_range(C.PENTATONIC, self.lo, self.hi)
+        strong = in_range(chord.strong, self.lo, self.hi)
+        notes = []
+        for slot in euclid(seq.pick(3, 5), 8, seq.pick(0, 7)):
+            self.prev = seq.walk(ladder, self.prev)
+            if 2 * slot in ACC:
+                self.prev = min(strong, key=lambda m: abs(m - self.prev))
+            notes.append((2 * slot, self.prev, 0.55 + 0.2 * seq.chaos()))
+        self.line(notes)
+
+
 PATTERNS = {"piano": Piano, "keys": Keys, "guitar": Guitar, "bass": Bass,
-            "drums": Drums, "strings": Strings, "bells": Bells, "vocal": Vocal}
+            "drums": Drums, "strings": Strings, "bells": Bells, "vocal": Vocal, "sax": Sax}
 
 
 class Backing(Pattern):
