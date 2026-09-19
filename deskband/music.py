@@ -30,7 +30,8 @@ class Chord:
     def __init__(self, name, root, voicing):
         self.name, self.root, self.voicing = name, root, voicing
         self.pcs = sorted({m % 12 for m in voicing} | {root})
-        self.strong = [p for p in self.pcs if p in C.PENTATONIC]   # chord tones that are also pentatonic
+        # chord tones that are also pentatonic (any chord tone if a remote style has none)
+        self.strong = [p for p in self.pcs if p in C.PENTATONIC] or self.pcs
 
 
 CHORDS = [Chord(*c) for c in C.CHORDS]
@@ -46,6 +47,7 @@ class Pattern:
         self.rng = random.Random(hash(name) & 0xFFFF)
         self.prev = (self.lo + self.hi) // 2
         self.bar = {}
+        self.loop_len = len(CHORDS)       # bars in the chord loop (the composer keeps it current)
 
     def put(self, step, midi, vel, dur, delay=0.0):
         self.bar.setdefault(step, []).append((midi, vel, dur, delay))
@@ -90,7 +92,7 @@ class Piano(Pattern):
         # --- the line above it
         if self.bars_left == 0:
             self.motif = self.new_motif()
-            self.bars_left = len(CHORDS)
+            self.bars_left = self.loop_len
         self.bars_left -= 1
         steps, contour = self.motif
         ladder = in_range(C.PENTATONIC, self.lo, self.hi)
@@ -131,7 +133,7 @@ class Guitar(Pattern):
         rng = self.rng
         roots = in_range([chord.root], self.lo - 8, self.lo + 7)
         self.put(0, roots[0], 0.75, 14)
-        notes = [m for m in chord.voicing if self.lo <= m <= self.hi][::-1]
+        notes = ([m for m in chord.voicing if self.lo <= m <= self.hi] or in_range(chord.pcs, self.lo, self.hi))[::-1]
         j = rng.randrange(len(notes))
         for s in (4, 6, 10, 12, 14):
             self.put(s, notes[j % len(notes)], rng.uniform(0.45, 0.6), 10)
@@ -177,7 +179,7 @@ class Strings(Pattern):
         self.bar = {}
         v = chord.voicing
         low = in_range([chord.root], self.lo - 12, self.lo)[-1:]      # root an octave down
-        for i, m in enumerate(low + [v[0], v[2], v[3]]):
+        for i, m in enumerate(low + [v[0], v[len(v) // 2], v[-1]]):       # bottom, middle, top
             if m < self.lo - 12 or m > self.hi:
                 continue
             self.put(0, m, 0.55 - 0.05 * i, P + 3)
@@ -228,18 +230,33 @@ class Composer:
         self.parts = {name: PATTERNS[spec["voice"]](name, spec)
                       for name, spec in C.INSTRUMENTS.items()}
         self.backing = Backing()
+        self.chords = list(CHORDS)
+        self.pending = None            # a new chord loop waiting for the next loop start
+        self.bar_count = -1
         self.chord_index = 0
 
     @property
     def chord_name(self):
-        return CHORDS[self.chord_index].name
+        return self.chords[self.chord_index].name
+
+    def request_style(self, chords):
+        """chords: [(name, root_pc, [midi...]), ...]. Takes effect when the
+        current loop comes round, so the change always lands on a downbeat."""
+        self.pending = [Chord(*c) for c in chords]
 
     def step(self, step):
         s = step % P
         if s == 0:
-            self.chord_index = (step // P) % len(CHORDS)
-            chord = CHORDS[self.chord_index]
-            nxt = CHORDS[(self.chord_index + 1) % len(CHORDS)]
+            self.bar_count += 1
+            if self.pending is not None and self.bar_count % len(self.chords) == 0:
+                self.chords, self.pending, self.bar_count = self.pending, None, 0
+                for p in self.parts.values():
+                    p.loop_len = len(self.chords)
+                    if hasattr(p, "bars_left"):
+                        p.bars_left = 0                  # new harmony, new motif
+            self.chord_index = self.bar_count % len(self.chords)
+            chord = self.chords[self.chord_index]
+            nxt = self.chords[(self.chord_index + 1) % len(self.chords)]
             self.backing.plan(chord, nxt)
             for p in self.parts.values():
                 p.plan(chord, nxt)

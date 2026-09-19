@@ -22,11 +22,14 @@ An empty desk is silent: the band is exactly what you photographed, played throu
 
 The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](INSTRUMENTS.txt).
 
+> Team members picking this up: read [HANDOFF.md](HANDOFF.md) first (in Chinese). It covers the exact environment, architecture, music design, detection trade-offs, the remote-control protocol for hardware and AI integrations, troubleshooting and the open issues.
+
 ## How it works
 
 - **Vision:** YOLO-World (`ultralytics`) with the object names given as text prompts, so classes that are not in COCO (pen, glasses, tablet) work without training; each instrument accepts several synonyms. The large model runs on Apple Silicon via `mps` in its own thread at 960 px while a separate capture thread keeps the preview smooth, and the frozen photo gets one more pass at full resolution.
 - **Music:** a fixed loop of four close voicings, one bar each at 120 BPM: `F A C E` → `G B D E` → `E G B D` → `E A B C`. They move by step and keep common tones, which gives the hovering, blurred harmony. The bass always plays the chord root (F, G, E, A). The piano rolls each voicing softly and lets it ring into the next bar, then adds a sparse line on top: one motif per trip round the loop, restated over each chord. Melodic notes come only from the C major pentatonic scale, which fits all four chords, so random choices always sound right. The rhythm skeleton is a 3-3-2 accent pattern (the quantise-everything idea is Mikutap's). Everything lands on a 16th-note grid.
 - **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a long Schroeder hall reverb. The engine runs at the output device's own sample rate, and the master bus uses a gain-riding limiter rather than clipping. The audio callback never blocks on vision; a slow frame only delays the picture.
+- **Remote port:** JSON over UDP (port 9000) so a badge, an FPGA board or another program can take the photo, force parts on and off, change tempo and chords, play a sound in time, and subscribe to the beat. `tools/remote_sim.py` is a dependency-free simulator of it. Protocol in [HANDOFF.md](HANDOFF.md) section 10.
 - **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake.
 
 ## Requirements
@@ -92,6 +95,8 @@ deskband/synth.py      audio engine, voices, sequencer
 deskband/sampler.py    sample loading and key maps
 deskband/fx.py         hall reverb
 deskband/ui.py         drawing primitives (duotone, outlines, text, cards)
+deskband/remote.py     UDP/JSON remote-control port
+styles/                example chord loops for the remote "style" command
 tools/                 demo renderer, checks, packaging
 ```
 

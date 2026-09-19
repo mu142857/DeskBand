@@ -19,6 +19,7 @@ import numpy as np
 from deskband import config as C
 from deskband import ui
 from deskband.music import Composer
+from deskband.remote import Remote
 from deskband.synth import Engine
 from deskband.vision import Vision, merge_duplicates, open_camera
 
@@ -53,6 +54,9 @@ class App:
         self.shutter = (W // 2, H - 64, 26)
         self.t_prev = time.time()
         self.disp_fps = 0.0
+        self.manual = {}                # part -> True/False, forced from the remote port
+        self.photo_parts = set()        # parts found in the current photo
+        self.remote = Remote(self.state_dict)
 
     # ------------------------------------------------------------ actions
     def shoot(self):
@@ -70,8 +74,60 @@ class App:
         self.save_frame(frame, "shot")
         self.state = SHOW
         self.flash = 1.0
+        self.photo_parts = names
+        self.apply_parts()
+
+    def apply_parts(self):
+        """Band = what the photo shows, plus/minus anything forced remotely."""
         for name in C.INSTRUMENTS:
-            self.engine.set_active(name, name in names)
+            on = self.manual.get(name, name in self.photo_parts)
+            self.engine.set_active(name, on)
+
+    # ------------------------------------------------------------ remote port
+    def state_dict(self):
+        e = self.engine
+        heard = max(0, e.pos - int(e.latency * C.SAMPLE_RATE))       # what is audible now
+        step_f = heard / e.step_len
+        beat_f = step_f / C.STEPS_PER_BEAT
+        dets = self.captured[1] if self.captured else self.vision.snapshot()[1]
+        return {
+            "type": "state", "mode": self.state, "bpm": e.bpm,
+            "bar": int(step_f // C.STEPS_PER_BAR), "step": int(step_f) % C.STEPS_PER_BAR,
+            "beat": int(beat_f) % 4, "beat_phase": round(beat_f % 1.0, 3),
+            "chord": self.composer.chord_name, "chord_index": self.composer.chord_index,
+            "parts": {n: {"on": e.parts[n].target > 0, "glow": round(self.glow(n), 3)} for n in C.INSTRUMENTS},
+            "detected": sorted({d.shown for d in dets}),
+        }
+
+    def handle_command(self, msg):
+        cmd = msg.get("cmd")
+        if cmd == "shoot" and self.state == PREVIEW:
+            self.shoot()
+        elif cmd == "retake" and self.state == SHOW:
+            self.retake()
+        elif cmd == "toggle":
+            self.toggle()
+        elif cmd == "part" and msg.get("name") in C.INSTRUMENTS:
+            if msg.get("on") is None:
+                self.manual.pop(msg["name"], None)
+            else:
+                self.manual[msg["name"]] = bool(msg["on"])
+            self.apply_parts()
+        elif cmd == "sfx" and os.path.isfile(str(msg.get("file"))):
+            self.engine.play_file(msg["file"], msg.get("gain", 0.6))
+        elif cmd == "bpm":
+            self.engine.set_bpm(msg.get("value", C.BPM))
+        elif cmd == "style":
+            self.composer.request_style(msg["chords"])
+            if msg.get("bpm"):
+                self.engine.set_bpm(msg["bpm"])
+
+    def process_commands(self):
+        while not self.remote.commands.empty():
+            try:
+                self.handle_command(self.remote.commands.get_nowait())
+            except Exception as e:                     # a bad packet must never stop the show
+                print("remote command failed:", repr(e), flush=True)
 
     def save_frame(self, frame, prefix):
         """Keep the raw picture: tools/eval_prompts.py replays these to tune detection."""
@@ -83,8 +139,8 @@ class App:
     def retake(self):
         self.state = PREVIEW
         self.captured = None
-        for name in C.INSTRUMENTS:
-            self.engine.set_active(name, False)
+        self.photo_parts = set()
+        self.apply_parts()
 
     def toggle(self):
         if self.state == PREVIEW:
@@ -236,6 +292,7 @@ class App:
     # -------------------------------------------------------------- loop
     def run(self):
         self.engine.start()
+        self.remote.start()
         cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
         cv2.setMouseCallback(WINDOW, self.on_mouse)
         camera_ok, next_try = False, 0.0
@@ -258,6 +315,7 @@ class App:
                 dt = min(max(t0 - self.t_prev, 1e-3), 0.1)
                 self.t_prev = t0
                 self.disp_fps = 0.9 * self.disp_fps + 0.1 / dt
+                self.process_commands()
                 cv2.imshow(WINDOW, self.render(dt))
                 wait = max(1, int(33 - (time.time() - t0) * 1000))
                 k = cv2.waitKey(wait) & 0xFF
@@ -279,6 +337,7 @@ class App:
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break
         finally:
+            self.remote.stop()
             self.vision.stop()
             self.engine.stop()
             cv2.destroyAllWindows()

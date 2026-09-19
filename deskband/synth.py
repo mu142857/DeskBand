@@ -184,6 +184,7 @@ class Engine:
         self.drums = {}
         self.loaded = set()
         self.reverb = Reverb()
+        self.bpm = float(C.BPM)
         self.step_len = int(round(60 / C.BPM / C.STEPS_PER_BEAT * SR))
         self.pos = 0
         self.step = 0
@@ -202,6 +203,10 @@ class Engine:
             self.parts[name] = Part(name, spec["level"], spec["send"])
         self.parts["backing"] = Part("backing", C.BACKING["level"], C.BACKING["send"])
         self.parts["backing"].target = 1.0
+        self.parts["sfx"] = Part("sfx", 1.0, 0.30)       # one-shots from the remote port
+        self.parts["sfx"].target = 1.0
+        self.pending_sfx = []        # (buffer, gain), started on the next 8th note
+        self.sfx_cache = {}
 
     # -- loading (background thread; parts become audible as they land)
     def load_instruments(self, log=print):
@@ -237,6 +242,22 @@ class Engine:
         except Exception as e:
             log(f"[sampler] vinyl loop unavailable: {e}")
         log(f"[sampler] all loaded in {_time.time() - t0:.1f}s")
+
+    def set_bpm(self, bpm):
+        self.bpm = float(min(max(bpm, 60), 180))
+        self.step_len = int(round(60 / self.bpm / C.STEPS_PER_BEAT * SR))
+
+    def play_file(self, path, gain=0.6):
+        """Queue a sound file to start on the next 8th note (so even a spoken
+        line or a generated effect lands in time). Decoding happens here, in
+        the caller's thread; the audio callback only picks up the buffer."""
+        buf = self.sfx_cache.get(path)
+        if buf is None:
+            buf = sampler.fade_tail(sampler.read_audio(path, 20.0))
+            if len(self.sfx_cache) > 32:
+                self.sfx_cache.clear()
+            self.sfx_cache[path] = buf
+        self.pending_sfx.append((buf, float(min(max(gain, 0.0), 1.5))))
 
     def set_active(self, name, active):
         self.parts[name].target = 1.0 if active else 0.0
@@ -275,7 +296,7 @@ class Engine:
             buf = self.drums.get(midi)          # midi field carries the hit name
             if buf is not None:
                 v = SampleVoice(buf, 1.0, vel, 0, release_s=0.05)
-        elif kind in self.keymaps:
+        elif kind in self.keymaps and self.keymaps[kind].ready:     # silent, not broken, if a library is missing
             km = self.keymaps[kind]
             buf, ratio = km.lookup(midi)
             # spread the upper register a little; keep bass centred
@@ -297,6 +318,12 @@ class Engine:
             offset = self.next_step_at - self.pos
             for ev in self.composer.step(self.step):
                 self._trigger(ev, offset)
+            if self.step % 2 == 0 and self.pending_sfx:           # 8th-note grid
+                pending, self.pending_sfx = self.pending_sfx, []
+                for buf, gain in pending:
+                    v = SampleVoice(buf, 1.0, gain, 0, release_s=0.05)
+                    v.part, v.offset = self.parts["sfx"], offset
+                    self.voices.append(v)
             self.step += 1
             self.next_step_at += self.step_len
         # part gains: one linear ramp per block, ~0.5 s fade
@@ -334,7 +361,7 @@ class Engine:
         if status:
             self.xruns += 1
         # makeup for sparse bands, smoothed over ~1 s
-        active = sum(1 for n, p in self.parts.items() if n != "backing" and p.target > 0)
+        active = sum(1 for n, p in self.parts.items() if n not in ("backing", "sfx") and p.target > 0)
         want = C.MAKEUP.get(active, 1.0)
         self.makeup += (want - self.makeup) * min(1.0, frames / (1.0 * SR))
         mix *= self.makeup

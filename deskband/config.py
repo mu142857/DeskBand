@@ -128,6 +128,11 @@ MAKEUP = {0: 1.5, 1: 1.5, 2: 1.3, 3: 1.15}     # active parts -> gain, else 1.0
 CEILING = 0.89
 LIMITER_RELEASE_S = 0.5
 
+# --- remote control (deskband/remote.py): JSON over UDP for hardware and other programs
+REMOTE_HOST = "0.0.0.0"        # "127.0.0.1" to accept commands from this Mac only
+REMOTE_PORT = 9000
+REMOTE_STATE_HZ = 20
+
 # --- vision
 CAMERA_INDEX = 0
 DETECT_CONF = 0.25          # open-vocabulary scores run low; press d to see them
