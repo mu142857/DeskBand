@@ -315,15 +315,15 @@ class App:
             y = self.dock_y + i * (TILE + TILE_GAP)
             entry = self.shelf.entries[name]
             lift = 0.25 if name == hover else 0.0
-            if entry.tiles is None:
+            if entry.tile is None:                         # each instrument under its own colour filter
                 small = cv2.resize(entry.thumb, (TILE, TILE), interpolation=cv2.INTER_AREA)
-                entry.tiles = (small.astype(np.float32), ui.duotone(small).astype(np.float32))
+                entry.tile = ui.tint(small, C.INSTRUMENTS[name]["tint"])
             if name in self.band:
                 g = self.glow(name)
-                ui.picture(out, entry.tiles[0], self.tile_mask, x, y)
+                ui.picture(out, entry.tile, self.tile_mask, x, y)
                 ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, min(1.0, 0.45 + 0.55 * g + lift))
             else:
-                ui.picture(out, entry.tiles[1], self.tile_mask, x, y, 0.5 + lift)
+                ui.picture(out, entry.tile, self.tile_mask, x, y, 0.5 + lift)
                 ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, 0.2 + lift)
         if hover:
             y = self.dock_y + slots.index(hover) * (TILE + TILE_GAP)

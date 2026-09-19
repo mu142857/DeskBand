@@ -46,21 +46,22 @@ PENTATONIC = [0, 2, 4, 7, 9]     # C D E G A: fits every chord above
 #   lo/hi:   MIDI register (Logic convention, C3 = 60)
 #   level:   channel gain, send: reverb send
 #   detect:  text prompts that count as this object (any of them)
+#   tint:    colour filter laid over its shelf thumbnail (ui.tint)
 INSTRUMENTS = {
     "cup":        dict(label="Concert Grand, soft", voice="piano", lo=67, hi=88, level=0.28, send=0.55,
-                       detect=["cup", "mug"]),
+                       detect=["cup", "mug"], tint="#E8A25E"),
     "pen":        dict(label="Classical Guitar", voice="guitar",  lo=48, hi=67, level=0.41, send=0.25,
-                       detect=["pen", "pencil", "marker"]),
+                       detect=["pen", "pencil", "marker"], tint="#E57F6B"),
     "bottle":     dict(label="Double Bass",      voice="bass",    lo=36, hi=47, level=0.34, send=0.05,
-                       detect=["bottle", "water bottle"]),
+                       detect=["bottle", "water bottle"], tint="#5B8FD6"),
     "book":       dict(label="Trap Heat Drums",  voice="drums",   lo=0,  hi=0,  level=0.22, send=0.10,
-                       detect=["book", "notebook"]),
+                       detect=["book", "notebook"], tint="#D9739B"),
     "glasses":    dict(label="King's Cross Strings", voice="strings", lo=52, hi=76, level=0.14, send=0.50,
-                       detect=["glasses", "eyeglasses", "sunglasses"]),
+                       detect=["glasses", "eyeglasses", "sunglasses"], tint="#9A82D6"),
     "cell phone": dict(label="Glockenspiel",     voice="bells",   lo=84, hi=96, level=0.24, send=0.40,
-                       detect=["cell phone"]),
+                       detect=["cell phone"], tint="#4FBFA8"),
     "laptop":     dict(label="Soft Keys",        voice="keys",    lo=64, hi=88, level=0.30, send=0.55,
-                       detect=["laptop", "tablet", "ipad"]),
+                       detect=["laptop", "tablet", "ipad"], tint="#A3C26A"),
 }
 # Text prompts given to YOLO-World, and which part each one belongs to.
 ALIASES = {alias: name for name, spec in INSTRUMENTS.items() for alias in spec["detect"]}

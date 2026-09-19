@@ -1,5 +1,6 @@
 """Rendering: desaturated duotone base, colour kept inside detected objects,
-1px rounded outlines, SF Pro labels, a frosted band card and a shutter button.
+1px rounded outlines, SF Pro labels, a frosted band card, colour-filtered shelf
+thumbnails and a shutter button.
 Pure functions over numpy frames; no OpenCV GUI calls here."""
 
 import math
@@ -170,9 +171,21 @@ def _duotone_lut():
 LUT = _duotone_lut()
 
 
-def duotone(bgr):
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    return cv2.LUT(cv2.merge([gray, gray, gray]), LUT.reshape(1, 256, 3))
+def hex_bgr(s):
+    """'#RRGGBB' -> BGR float32."""
+    s = s.lstrip("#")
+    return np.array((int(s[4:6], 16), int(s[2:4], 16), int(s[0:2], 16)), np.float32)
+
+
+def tint(bgr, color, strength=0.78):
+    """Colour filter over a picture: its brightness re-lit in one hue (a deep shade
+    of `color` in the shadows, a pale one in the highlights), laid over the
+    original at `strength`, so every thumbnail reads as its instrument's colour.
+    -> float32 BGR."""
+    c = hex_bgr(color)
+    luma = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)[:, :, None] / 255.0
+    filt = c * 0.20 * (1 - luma) + (c + (255 - c) * 0.35) * luma
+    return bgr.astype(np.float32) * (1 - strength) + filt * strength
 
 
 def picture(img, src, mask, x0, y0, alpha=1.0):

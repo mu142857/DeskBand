@@ -34,7 +34,7 @@ class Entry:
         self.name, self.shown, self.conf, self.thumb = name, shown, conf, thumb
         self.saved_at = saved_at or time.time()
         self.selected = False
-        self.tiles = None            # drawing cache, owned by the UI
+        self.tile = None             # drawing cache, owned by the UI
 
 
 class Shelf:
