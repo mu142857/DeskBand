@@ -1,6 +1,6 @@
 # DeskBand ending screen, loop export, and ElevenLabs song roadmap
 
-Status: Milestones 0–2 complete. Milestones 3–5 remain open.
+Status: Milestones 0–2 complete. Milestone 3 code and automated checks complete; speaker listening on the presentation Mac remains. Milestones 4–5 remain open.
 
 ## Product flow and decisions
 
@@ -85,17 +85,19 @@ Implementation note: `deskband/summary.py` draws the collection and caches its s
 
 **Goal:** generate a listenable file from the exact arrangement shown on the ending screen.
 
-- [ ] M3.1 Extract a reusable offline render path from the approach in `tools/render_demo.py`; give it an `ArrangementSnapshot` input and a WAV output path. Do not reuse its hard-coded demo script.
-- [ ] M3.2 Create a separate `Composer` and `Engine` for export. Load the needed samples outside the audio callback, use the snapshot's tempo/chords/motifs, and use the Mac clock even when live playback is FPGA-controlled.
-- [ ] M3.3 Render from a bar-one downbeat for exactly one active chord cycle. Account for the engine's initial gain ramp and reverb state with pre-roll or another explicit strategy, then apply a short boundary-safe fade so the exported file does not click.
-- [ ] M3.4 Use the same recorded event timeline to draw each card's melody/rhythm and to render the mix. Exclude live-only `sfx` and transient hardware events unless deliberately captured in the snapshot.
-- [ ] M3.5 Write stereo PCM WAV to a temporary file, validate sample rate/frame count/non-silence/finite samples/peak, then atomically move it into `cache/exports/`. Include a readable timestamp and fingerprint in the filename or metadata.
-- [ ] M3.6 Show rendering progress and errors without freezing the UI. Prevent a second concurrent render from corrupting the first.
-- [ ] M3.7 Let the user play, stop, and reveal the resulting clip. Keep playback from the summary from accidentally layering with the live band; define whether entering summary pauses the live engine and restore its prior play state on Back.
-- [ ] M3.8 Invalidate the “send current loop” action if the selected band, BPM, chords, or motif changed since export. Offer **Render again**.
+- [x] M3.1 Extract a reusable offline render path from the approach in `tools/render_demo.py`; give it an `ArrangementSnapshot` input and a WAV output path. Do not reuse its hard-coded demo script.
+- [x] M3.2 Create a separate `Composer` and `Engine` for export. Load the needed samples outside the audio callback, use the snapshot's tempo/chords/motifs, and use the Mac clock even when live playback is FPGA-controlled.
+- [x] M3.3 Render from a bar-one downbeat for exactly one active chord cycle. Account for the engine's initial gain ramp and reverb state with pre-roll or another explicit strategy, then apply a short boundary-safe fade so the exported file does not click.
+- [x] M3.4 Use the same recorded event timeline to draw each card's melody/rhythm and to render the mix. Exclude live-only `sfx` and transient hardware events unless deliberately captured in the snapshot.
+- [x] M3.5 Write stereo PCM WAV to a temporary file, validate sample rate/frame count/non-silence/finite samples/peak, then atomically move it into `cache/exports/`. Include a readable timestamp and fingerprint in the filename or metadata.
+- [x] M3.6 Show rendering progress and errors without freezing the UI. Prevent a second concurrent render from corrupting the first.
+- [x] M3.7 Let the user play, stop, and reveal the resulting clip. Keep playback from the summary from accidentally layering with the live band; define whether entering summary pauses the live engine and restore its prior play state on Back.
+- [x] M3.8 Invalidate the “send current loop” action if the selected band, BPM, chords, or motif changed since export. Offer **Render again**.
 - [ ] M3.9 Test empty band, single instrument, all eight instruments, custom chord-loop length, changed BPM, paused live playback, FPGA mode, output length, clipping, and deterministic repeat export in standard mode. Define and test fresh-cycle export behavior for evolving math mode. Listen to at least one real WAV.
 
 **Done when:** the WAV and the on-screen item patterns refer to the same arrangement, and a default four-bar export lasts about eight seconds at 120 BPM.
+
+Implementation note: `deskband/export.py` rebuilds the displayed score from the frozen snapshot, verifies the events match, and renders through an isolated `Engine`. Selected channel gains are initialized to full level before the first downbeat, so the live engine's fade-in is not recorded; the offline reverb begins empty and a 20 ms ending fade removes a cut-edge click. `deskband/clip.py` plays the WAV through a separate stream. The live band is muted while the Collected page is open and resumes to its previous play/pause state on Back. Existing vocal samples are required for a headphones export; exporting never generates them. Automated audio, duration, provenance, and UI tests pass. The environment used for these checks exposes no output audio device, so the listening portion of M3.9 must be done on the presentation Mac.
 
 ## Milestone 4 — ElevenLabs full-song continuation
 

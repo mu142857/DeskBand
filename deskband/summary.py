@@ -177,7 +177,8 @@ class SummaryView:
         song_busy = song_jobs.busy if song_jobs is not None else False
         busy = jobs.busy or song_busy
         render_enabled = bool(selected) and not snapshot.style_pending and can_render and not busy
-        controls = (("render", "Render loop", render_enabled),
+        render_label = "Render again" if jobs.status == "done" and not ready else "Render loop"
+        controls = (("render", render_label, render_enabled),
                     ("play", "Stop clip" if clip_playing else "Play clip", ready and can_play and not busy),
                     ("reveal", "Reveal file", ready and can_reveal and not busy),
                     ("extend", "Continue with ElevenLabs", ready and can_extend and not busy))
@@ -198,7 +199,7 @@ class SummaryView:
         elif not selected:
             message = "Choose at least one item for this song."
         elif not can_render:
-            message = "Loop rendering comes in the next milestone. Your selection is saved."
+            message = "Loop rendering is unavailable. Your selection is saved."
         elif jobs.status == "done" and not ready:
             message = "The song changed. Render again to use the new arrangement."
         else:

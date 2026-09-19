@@ -2,6 +2,7 @@
 
 import math
 import os
+import subprocess
 import sys
 import time
 
@@ -19,6 +20,8 @@ import numpy as np
 from deskband import config as C
 from deskband import ui
 from deskband.cloud import Describer
+from deskband.clip import ClipPlayer
+from deskband.export import render_loop
 from deskband.arrangement import build_snapshot
 from deskband.music import Composer
 from deskband.remote import Remote
@@ -84,10 +87,10 @@ class App:
         self.song_jobs = SummaryJobs()
         self.summary_snapshot = None
         self.summary_signature = None
-        self.render_worker = None      # connected by Milestone 3
+        self.render_worker = render_loop
         self.extend_worker = None      # connected by Milestone 4
-        self.clip_player = None        # connected by Milestone 3
-        self.clip_revealer = None      # connected by Milestone 3
+        self.clip_player = ClipPlayer()
+        self.clip_revealer = self.reveal_clip
         self.clip_playing = False
         self.playing = True             # the master switch beside the shutter
         self.t_prev = time.time()
@@ -153,7 +156,7 @@ class App:
         """Band = the instruments selected on the shelf, plus/minus anything forced remotely."""
         selected = self.shelf.selected()
         self.band = {n for n in C.INSTRUMENTS if self.manual.get(n, n in selected)}
-        self.on = self.band if self.playing else set()
+        self.on = self.band if self.playing and self.state != SUMMARY else set()
         self.stage.settle()                     # newcomers get a spot on the stage...
         self.stage.apply()                      # ...and every spot sets a loudness and a complexity
         for name in C.INSTRUMENTS:
@@ -198,16 +201,26 @@ class App:
         self.state = SUMMARY
         self.stage.drag = None
         self.summary_signature = None
+        self.apply_parts()
 
     def leave_summary(self):
         if self.state == SUMMARY:
             self.stop_clip()
             self.state = self.summary_return_state
+            self.apply_parts()
 
     def stop_clip(self):
-        if self.clip_playing and self.clip_player is not None:
+        if isinstance(self.clip_player, ClipPlayer):
+            self.clip_player.stop()
+        elif self.clip_playing and self.clip_player is not None:
             self.clip_player(self.summary_jobs.result, False)
         self.clip_playing = False
+
+    @staticmethod
+    def reveal_clip(clip):
+        if not os.path.isfile(clip.path):
+            raise FileNotFoundError("Rendered loop file is missing")
+        subprocess.Popen(["open", "-R", clip.path])
 
     def current_summary(self):
         """Only rebuild scores when a sound or displayed card actually changes."""
@@ -239,11 +252,19 @@ class App:
                 self.summary_jobs.start("render", snapshot, self.render_worker)
         elif (action == "play" and self.clip_player is not None and self.current_clip_ready()
               and not self.song_jobs.busy):
-            self.clip_playing = not self.clip_playing
-            self.clip_player(self.summary_jobs.result, self.clip_playing)
+            try:
+                self.clip_player(self.summary_jobs.result, not self.clip_playing)
+                self.clip_playing = not self.clip_playing
+                self.summary_jobs.message = "Playing loop" if self.clip_playing else "Ready"
+            except Exception as exc:
+                self.clip_playing = False
+                self.summary_jobs.message = f"Playback failed: {exc}"
         elif (action == "reveal" and self.clip_revealer is not None and self.current_clip_ready()
               and not self.song_jobs.busy):
-            self.clip_revealer(self.summary_jobs.result)
+            try:
+                self.clip_revealer(self.summary_jobs.result)
+            except Exception as exc:
+                self.summary_jobs.message = f"Could not reveal file: {exc}"
         elif action == "extend" and self.extend_worker is not None:
             snapshot = self.current_summary()
             if self.current_clip_ready() and not self.song_jobs.busy:
@@ -606,8 +627,13 @@ class App:
         if self.state == SUMMARY:
             self.summary_jobs.poll()
             self.song_jobs.poll()
+            if isinstance(self.clip_player, ClipPlayer):
+                self.clip_playing = self.clip_player.playing
+            snapshot = self.current_summary()
+            if self.clip_playing and self.summary_jobs.fingerprint != snapshot.fingerprint:
+                self.stop_clip()
             return self.summary_view.render(
-                self.current_summary(), self.shelf, self.summary_jobs, self.mouse,
+                snapshot, self.shelf, self.summary_jobs, self.mouse,
                 song_jobs=self.song_jobs,
                 clip_playing=self.clip_playing,
                 can_render=self.render_worker is not None,
