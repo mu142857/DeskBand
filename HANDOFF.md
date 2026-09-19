@@ -224,6 +224,7 @@ tools/build_app.sh
 | 点击乐器架上的缩略图，或 `1`–`8`（从上往下数） | 开关一件已保存的乐器 |
 | `p` / 回车 / 点快门右边的小圆钮 | 演奏 / 暂停（总开关，选择保留） |
 | `m` / 点快门左边的 φ 钮 | 数学旋律模式开 / 关（点亮 = 开），从下一小节生效，见 7.2 |
+| `tab` / 点最左边的钮 | 摄像头画面 ↔ 舞台（stage）。舞台是一个平面：纵轴响度、横轴复杂度。把右边乐器架上的缩略图拖进去 = 加入乐队，把圆形的 token 拖出平面（或右键）= 移出乐队；在平面里拖动就是调响度和复杂度。舞台上按空格回到摄像头。见 7.2 末尾 |
 | `0` | 乐器架全部取消选择，保存的东西不丢 |
 | 右键点槽，或悬停在槽上按 `x` | 删除这个槽里保存的乐器 |
 | `s` | 把当前实时画面存到 `cache/shots/frame_时间.jpg`（屏幕轻闪一下）。用于收集"认不出来"的样本 |
@@ -292,6 +293,7 @@ tools/build_app.sh
 | `deskband/fx.py` | ~100 | 大厅混响（Freeverb 结构，按 256 采样的子块向量化） |
 | `deskband/ui.py` | ~200 | 绘图原语：双色调底图、保留彩色区域、细线圆角框、SF Pro 文字、毛玻璃卡片、乐器架的颜色滤镜 |
 | `deskband/remote.py` | ~110 | UDP/JSON 远程端口 |
+| `deskband/stage.py` | ~260 | 舞台：响度 × 复杂度平面，拖放、位置 → 引擎增益和作曲复杂度 |
 | `deskband/cloud.py` | ~120 | Gemini 看照片写描述（后台线程，只显示）、ElevenLabs 生成音效；只用 urllib，key 只从环境变量读 |
 | `deskband/vocals.py` | ~110 | 人声采样：ElevenLabs 生成 → 测音高 → 微调到半音 → keymap |
 | `tools/exs_extract.py` | ~770 | 把 Logic 的"打包"采样器乐器（.exs + consolidated .caf）解成一个音一个 wav |
@@ -306,6 +308,7 @@ tools/build_app.sh
 | `tests/test_reverb.py` | | 向量化混响 vs 逐采样参考实现，误差须 < 1e-4 |
 | `tests/test_voice.py` | | 采样播放器跨块播放须与原始采样逐位一致 |
 | `tests/test_remote.py` | | 远程端口端到端：指令、强制开关、变速、换和弦、音效、状态推送 |
+| `tests/test_stage.py` | | 舞台：响度映射单调、复杂度中间不变/左稀右密/不跑调、位置存盘 |
 | `styles/*.json` | | 和弦循环的示例文件（给 `style` 指令用） |
 
 **跑全部测试**（不需要摄像头、不出声）：
@@ -364,6 +367,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python tests/test_reverb.py && .venv/bin/pyth
 - **Bells（cell phone）**：每小节 1–2 个高音区和弦音，只落在第 2、6、10、14 步（反拍）。
 - **Vocal（headphones）**：ElevenLabs 生成的 "ooh" 人声采样（`deskband/vocals.py`）。每小节一到两个长音，落在和弦音上、就近移动，下面再叠一个轻一点的和弦音（两声部）。第一次启动且设了 `ELEVENLABS_API_KEY` 时，用 `config.VOCAL_PROMPTS` 里的每句提示词各生成一条几秒的长音，自动测音高，音高飘的丢掉，稳的微调到最近的半音，存成 `cache/vocal/<midi>.wav + keymap.json`，之后就和其他采样乐器一样按和弦变调播放。想重新生成就删掉 `cache/vocal/`，或运行 `.venv/bin/python -m deskband.vocals`。没有 key 时这件乐器不出声，其他一切照常。
 - **数学模式**（`m`，`music.Sequence` 和各声部的 `plan_math`）：钢琴旋律、吉他、电钢琴、钟琴、人声不再重复固定的型，每小节现算，永不循环。节奏用欧几里得节奏（k 个音尽量均匀地铺在一小节里再旋转；E(3,8) 就是 3-3-2），k 和旋转量由混沌区的 logistic 映射 x→r·x·(1−x)（r=`config.LOGISTIC_R`）决定。音高朝一条 1/f 走向（Voss 算法，每一行是一个无理数旋转 frac(n·α)，所以永远不会回到同一个值）以级进为主地移动。音仍然只取五声音阶，强拍落在和弦音上，所以不会跑调。从下一小节线开始生效；贝斯、鼓、弦乐不变。
+- **舞台（stage，`tab`，`deskband/stage.py`）**：每件乐器在平面上的位置决定两件事。**纵轴 = 响度**：在声部自己的 `level` 上再乘一个增益，正中间 0 dB，最下 −24 dB，最上 +9 dB（`config.STAGE_DB`，上下两半各自按 dB 线性），引擎里约 50ms 平滑（`Part.trim`），拖的时候立刻听到。**横轴 = 复杂度**（`Pattern.arrange`，每小节在 `plan`/`plan_math` 之后执行，所以从下一小节线生效）：中间一条（`config.STAGE_AS_WRITTEN`，0.4–0.6）原样演奏；往左按拍位强弱（`music.weight`：正拍 4、3-3-2 的另两个重音 3、四分拍 2、八分 1、十六分 0）从弱到强删音，最左只剩第 0 步，但永远不会删空；往右在空着的八分（弦乐和人声是四分）上加经过音，从前一个音朝后一个音级进，连着加就成了音阶跑动，过了一半还会给部分音加十六分倚音；鼓是加十六分闭镲、重音前的轻 rim、第 6 步底鼓。加的音只取五声音阶（吉他、贝斯、弦乐、人声取和弦音），所以不会跑调。加花用每个声部自己的随机数（`Pattern.orn`），所以放在中间时和原来的演奏一模一样。位置存在 `cache/shelf/shelf.json` 的 `pos` 里，重启后还在；拍照或点乐器架加入、但从没放过位置的乐器，会自动放在中线上靠中间的空位。
 - **Backing**：可选的背景层（黑胶噪声、沙锤、低音铺底），**默认全关**，因为 Aaron 觉得它"诡异"。开关在 `config.BACKING`。
 
 ### 7.3 电平与总线（踩过坑，别乱动）
@@ -479,6 +483,8 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 | `{"cmd":"toggle"}` | 等同于按空格 |
 | `{"cmd":"play","on":true}` | 演奏 / 暂停总开关，等同于快门右边的按钮。不带 `on`（或 `null`）= 切换。暂停时所有 `parts[x].on` 都是 false，但 `selected` 不变。**Zybo 的 BTN1 发的就是这个** |
 | `{"cmd":"math","on":true}` | 数学旋律模式开 / 关，等同于 `m`。不带 `on`（或 `null`）= 切换。从下一小节生效 |
+| `{"cmd":"place","name":"cup","complexity":0.7,"loudness":0.4}` | 把一件**已保存**的乐器移到舞台上的某个位置，两个值都是 0–1，可以只给一个。响度 0.5 = 声部原音量，复杂度 0.5 = 原样。只移动位置，不开关乐器（开关用 `select`） |
+| `{"cmd":"view","stage":true}` | 切到舞台 / 摄像头画面，等同于 `tab`。不带（或 `null`）= 切换 |
 | `{"cmd":"select","name":"cup","on":true}` | 开关乐器架上一件**已保存**的乐器，等同于点击那个槽。不带 `on`（或 `null`）= 切换。没保存过的会被忽略。**硬件按键选乐器用这个** |
 | `{"cmd":"silence"}` | 乐器架全部关掉，保存的东西不丢（等同于按 `0`） |
 | `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop headphones` |
@@ -496,7 +502,8 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
  "parts":{"cup":{"on":true,"glow":0.83},"pen":{"on":false,"glow":0.0}, "...":{}},
  "detected":["cup","tablet"],
  "playing":true,"math":false,"description":"A white ceramic mug with a chipped rim.",
- "saved":["pen","cup"],"selected":["cup"]}
+ "saved":["pen","cup"],"selected":["cup"],
+ "view":"camera","placed":{"cup":{"complexity":0.5,"loudness":0.5}}}
 ```
 
 - `mode`：`preview`（实时预览）或 `show`（照片定格中）。两种状态下乐队都可能在演奏，是否有声看 `parts`
@@ -506,6 +513,7 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 - `detected`：当前画面（或定格照片）里认出的东西，用的是屏幕上显示的名字
 - `playing`：演奏 / 暂停总开关的状态
 - `math`：数学旋律模式是否打开
+- `view`：当前显示的是 `camera` 还是 `stage`；`placed`：每件已保存、放过位置的乐器在舞台上的坐标（0–1，和 `place` 指令一样）
 - `description`：Gemini 对当前定格照片的描述；还没回来、出错、没设 `GEMINI_API_KEY` 或已回到预览时为 `null`
 - `saved`：乐器架上已经保存的乐器，**顺序就是乐器架从上到下的顺序**（先拍到的在前）；`selected`：其中点亮的。两者用的都是 `INSTRUMENTS` 的 key
 - 判断“现在有没有声音”看 `parts[x].on`（= 被选中 **且** 没有暂停），不要看 `mode`：预览状态下乐队也可以在演奏

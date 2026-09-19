@@ -22,6 +22,7 @@ from deskband.cloud import Describer
 from deskband.music import Composer
 from deskband.remote import Remote
 from deskband.shelf import Shelf
+from deskband.stage import Stage
 from deskband.synth import Engine
 from deskband.vision import Vision, echoes, merge_duplicates, open_camera
 from deskband.zybo import ZyboLink
@@ -59,6 +60,8 @@ class App:
         self.shutter = (W // 2, H - 64, 26)
         self.play_button = (W // 2 + 84, H - 64, 19)
         self.math_button = (W // 2 - 84, H - 64, 19)
+        self.view_button = (W // 2 - 168, H - 64, 19)   # camera <-> stage
+        self.on_stage = False
         self.playing = True             # the master switch beside the shutter
         self.t_prev = time.time()
         self.disp_fps = 0.0
@@ -69,6 +72,7 @@ class App:
         self.dock_x = W - 28 - TILE
         self.dock_y = 28                # eight slots fit above the bottom margin
         self.tile_mask = ui.rounded_mask(TILE, TILE, TILE_R).astype(np.float32) / 255.0
+        self.stage = Stage(self, 132, 100, self.dock_x - 56, H - 136)   # the plane: loudness x complexity
         self.remote = Remote(self.state_dict)
         self.describer = Describer()    # Gemini's description of the current photo (display only)
         self.caption = (None, [])       # (text, wrapped lines)
@@ -109,6 +113,8 @@ class App:
         selected = self.shelf.selected()
         self.band = {n for n in C.INSTRUMENTS if self.manual.get(n, n in selected)}
         self.on = self.band if self.playing else set()
+        self.stage.settle()                     # newcomers get a spot on the stage...
+        self.stage.apply()                      # ...and every spot sets a loudness and a complexity
         for name in C.INSTRUMENTS:
             self.engine.set_active(name, name in self.on)
 
@@ -120,6 +126,11 @@ class App:
     def math_mode(self, on=None):
         """Math mode for the melodic parts (music.Sequence); heard from the next bar."""
         self.composer.set_math(on)
+
+    def show_stage(self, on=None):
+        """Camera view <-> the stage (None flips). The band plays on either way."""
+        self.on_stage = (not self.on_stage) if on is None else bool(on)
+        self.stage.drag = None
 
     def select(self, name, on=None):
         self.shelf.select(name, on)
@@ -152,6 +163,9 @@ class App:
             "description": self.describer.text if self.describer.status == "done" else None,
             "saved": self.shelf.order(),                                    # top of the shelf first
             "selected": [n for n in self.shelf.order() if self.shelf.entries[n].selected],
+            "view": "stage" if self.on_stage else "camera",
+            "placed": {n: {"complexity": round(e.pos[0], 3), "loudness": round(e.pos[1], 3)}
+                       for n, e in self.shelf.entries.items() if e.pos},
         }
 
     def handle_command(self, msg):
@@ -176,6 +190,10 @@ class App:
             self.play(msg.get("on"))
         elif cmd == "math":
             self.math_mode(msg.get("on"))
+        elif cmd == "place" and msg.get("name") in self.shelf.entries:
+            self.stage.place(msg["name"], msg.get("complexity"), msg.get("loudness"))
+        elif cmd == "view":
+            self.show_stage(msg.get("stage"))
         elif cmd == "sfx" and os.path.isfile(str(msg.get("file"))):
             self.engine.play_file(msg["file"], msg.get("gain", 0.6))
         elif cmd == "bpm":
@@ -214,7 +232,9 @@ class App:
         self.describer.clear()
 
     def toggle(self):
-        if self.state == PREVIEW:
+        if self.on_stage:                       # space bar on the stage: back to the camera
+            self.show_stage(False)
+        elif self.state == PREVIEW:
             self.shoot()
         else:
             self.retake()
@@ -233,8 +253,12 @@ class App:
 
     def on_mouse(self, event, x, y, flags, param):
         self.mouse = (x, y)
-        if event == cv2.EVENT_LBUTTONDOWN:
-            if self.over(self.shutter, x, y):
+        if event == cv2.EVENT_LBUTTONDOWN and self.over(self.view_button, x, y):
+            self.show_stage()
+        elif self.on_stage and self.stage.on_mouse(event, x, y):
+            pass                                # a token, or a shelf tile being dragged in
+        elif event == cv2.EVENT_LBUTTONDOWN:
+            if self.over(self.shutter, x, y) and not self.on_stage:
                 self.toggle()
             elif self.over(self.play_button, x, y):
                 self.play()
@@ -376,6 +400,23 @@ class App:
                 align="center")
         ui.text(out, "m  ·  math", cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
 
+    def draw_view_button(self, out):
+        """Far left of the row: to the stage (a plot with dots), or back to the camera."""
+        cx, cy, r = self.view_button
+        a = 0.95 if self.over(self.view_button, *self.mouse) else 0.75
+        ui.circle(out, cx, cy, r, a - 0.15, thickness=1)
+        if self.on_stage:                       # a camera
+            ui.outline(out, cx - 9, cy - 6, cx + 10, cy + 8, 3, a)
+            ui._blend(out, np.ones((2, 6), np.float32), ui.WHITE, a, cx - 3, cy - 8)
+            ui.circle(out, cx + 0.5, cy + 1, 3, a, thickness=1)
+        else:                                   # two axes and three dots
+            ui._blend(out, np.ones((15, 1), np.float32), ui.WHITE, a, cx - 7, cy - 8)
+            ui._blend(out, np.ones((1, 16), np.float32), ui.WHITE, a, cx - 7, cy + 7)
+            for dx, dy in ((-2, 2), (2, -4), (6, 0)):
+                ui.circle(out, cx + dx, cy + dy, 1.5, a, thickness=-1)
+        ui.text(out, "tab  ·  camera" if self.on_stage else "tab  ·  stage", cx, cy + self.shutter[2] + 10,
+                13, 0.55, "Light", align="center")
+
     def draw_caption(self, out):
         """Top left, under the title: what Gemini sees in the photo."""
         d = self.describer
@@ -413,6 +454,13 @@ class App:
         ui.text(out, hint, cx, cy + r + 10, 13, 0.55, "Light", align="center")
 
     def render(self, dt):
+        if self.on_stage:
+            out = self.stage.render()
+            self.draw_math_button(out)
+            self.flash = 0.0                    # a photo taken from the remote port: no flash here
+            if self.debug:
+                self.draw_debug(out)
+            return out
         if self.state == SHOW:
             frame, dets = self.captured
         else:
@@ -445,6 +493,7 @@ class App:
         self.draw_shutter(out)
         self.draw_play_button(out)
         self.draw_math_button(out)
+        self.draw_view_button(out)
         if self.state == SHOW:
             self.draw_caption(out)
         if self.flash > 0.01:
@@ -511,6 +560,8 @@ class App:
                     self.play()
                 elif k == ord("m"):
                     self.math_mode()
+                elif k == 9:                              # tab
+                    self.show_stage()
                 elif ord("1") <= k <= ord("9"):           # shelf slots, from the top
                     slots = self.shelf.order()
                     if k - ord("1") < len(slots):

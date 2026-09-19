@@ -11,6 +11,10 @@ nothing in this thread can disturb audio or drawing.
   {"cmd": "play", "on": true}                     the master switch beside the shutter ("on": null or absent toggles);
                                                   paused = silent, but the selection on the shelf is kept
   {"cmd": "math", "on": true}                     math mode: melodies computed, never repeating (null toggles; from the next bar)
+  {"cmd": "place", "name": "cup", "complexity": 0.7, "loudness": 0.4}
+                                                  move a saved instrument on the stage, both 0..1 (either may be left out);
+                                                  loudness 0.5 = its own level, complexity 0.5 = as written (from the next bar)
+  {"cmd": "view", "stage": true}                  show the stage / the camera (null toggles, like tab)
   {"cmd": "select", "name": "cup", "on": true}    switch a saved instrument on/off on the shelf, like a click ("on": null toggles)
   {"cmd": "silence"}                              switch the whole shelf off (nothing is forgotten)
   {"cmd": "part", "name": "cup", "on": true}      force a part on/off, saved or not; "on": null = follow the shelf again
@@ -25,6 +29,7 @@ State packet (what is *audible* now, already compensated for output latency):
    "beat": 1, "beat_phase": 0.5, "chord": "G6", "chord_index": 1,
    "parts": {"cup": {"on": true, "glow": 0.83}, ...}, "detected": ["cup", "tablet"],
    "playing": true, "saved": ["cup", "pen"], "selected": ["cup"]}     (saved: top of the shelf first)
+   ... "view": "camera"|"stage", "placed": {"cup": {"complexity": 0.5, "loudness": 0.5}, ...}
 """
 
 import json
@@ -35,7 +40,7 @@ import time
 
 from . import config as C
 
-COMMANDS = {"shoot", "retake", "toggle", "play", "math", "part", "select", "silence", "sfx", "bpm", "style",
+COMMANDS = {"shoot", "retake", "toggle", "play", "math", "place", "view", "part", "select", "silence", "sfx", "bpm", "style",
             "fpga_mode", "fpga_event", "fpga_controls"}
 
 

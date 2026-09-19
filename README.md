@@ -38,6 +38,7 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 - **Remote port:** JSON over UDP (port 9000) so a badge, an FPGA board or another program can take the photo, switch saved instruments on and off, change tempo and chords, play a sound in time, and subscribe to the beat. `tools/remote_sim.py` is a dependency-free simulator of it. Protocol in [HANDOFF.md](HANDOFF.md) section 10.
 - **FPGA conductor:** a Zybo Z7-20 owns the master beat clock, seven-track pattern sequencer, beat-quantized controls, envelopes and LFOs. Its Cortex-A9 firmware bridges the programmable logic to the Mac over UART, while the Mac keeps vision and audio synthesis. See [fpga/README.md](fpga/README.md).
 - **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, the shelf of saved instruments (each thumbnail under its instrument's own colour filter, `tint` in `INSTRUMENTS`), and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake.
+- **Stage:** `tab` (or the button at the left of the row) swaps the camera for a plane on which the band is laid out by hand. Drag a thumbnail from the shelf onto it to bring that instrument in, drag its token off (or right-click it) to take it out. Up is loudness (the part's own level in the middle, −24 dB at the bottom, +9 dB at the top), across is complexity: the middle band plays the part as written, to the left notes drop away from the weakest beats first down to the downbeat alone, to the right passing notes and 16th grace notes fill in. Loudness follows the hand at once, complexity from the next bar line. Where each instrument stands is kept on the shelf, so it comes back to the same spot.
 
 ## Requirements
 
@@ -83,7 +84,7 @@ Optional but recommended, the two sounds the piece is written for (both are unpa
 .venv/bin/python main.py
 ```
 
-Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `p` or return play / pause · `m` math mode on / off · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
+Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `p` or return play / pause · `m` math mode on / off · `tab` camera / stage · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
 
 With the Zybo's J12 `PROG/UART` port connected using a Micro-USB data cable,
 install `pyserial` and run the bridge in a second terminal:
@@ -126,7 +127,8 @@ deskband/sampler.py    sample loading and key maps
 deskband/fx.py         hall reverb
 deskband/ui.py         drawing primitives (duotone, outlines, text, cards)
 deskband/remote.py     UDP/JSON remote-control port
-deskband/shelf.py      saved instruments (thumbnails + selection), kept in cache/shelf/
+deskband/shelf.py      saved instruments (thumbnails + selection + stage spots), kept in cache/shelf/
+deskband/stage.py      the stage: the band placed on a loudness x complexity plane
 deskband/fpga_protocol.py  Zybo UART command/event codec
 fpga/                  RTL, simulations, Zynq firmware, Vivado/Vitis builds
 styles/                example chord loops for the remote "style" command

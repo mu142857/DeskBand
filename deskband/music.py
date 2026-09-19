@@ -121,7 +121,7 @@ class Pattern:
         self.lo, self.hi = spec["lo"], spec["hi"]
         self.rng = random.Random(hash(name) & 0xFFFF)
         self.orn = random.Random(zlib.crc32(name.encode()))   # its own, so "as written" stays as written
-        self.complexity = 0.5                                  # the space view's x axis, 0..1
+        self.complexity = 0.5                                  # the stage's x axis, 0..1
         self.seq = Sequence(name)
         self.prev = (self.lo + self.hi) // 2
         self.bar = {}
@@ -140,12 +140,12 @@ class Pattern:
     def events(self, s):
         return [(self.name, self.voice, m, v, d, dl) for m, v, d, dl in self.bar.get(s, [])]
 
-    # --- complexity: the space view's x axis, applied to each planned bar
+    # --- complexity: the stage's x axis, applied to each planned bar
     def arrange(self, chord):
-        """Inside config.SPACE_AS_WRITTEN the bar is left alone. Below it notes
+        """Inside config.STAGE_AS_WRITTEN the bar is left alone. Below it notes
         drop away from the weakest beats first, down to the downbeat alone;
         above it the gaps fill in."""
-        lo, hi = C.SPACE_AS_WRITTEN
+        lo, hi = C.STAGE_AS_WRITTEN
         c = self.complexity
         if c < lo:
             self.thin(4 * min(1.0, (lo - c) / (0.85 * lo)))
@@ -497,7 +497,7 @@ class Composer:
         self.math = (not self.math) if on is None else bool(on)
 
     def set_complexity(self, name, c):
-        """The space view's x axis for one part, 0..1. Heard from the next bar line."""
+        """The stage's x axis for one part, 0..1. Heard from the next bar line."""
         self.parts[name].complexity = min(max(float(c), 0.0), 1.0)
 
     def request_style(self, chords):

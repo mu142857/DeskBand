@@ -170,7 +170,7 @@ class Part:
         self.send = send
         self.target = 0.0
         self.gain = 0.0
-        self.trim = self.trim_to = 1.0     # loudness placed in the space view, glides ~50 ms
+        self.trim = self.trim_to = 1.0     # loudness set on the stage, glides ~50 ms
 
     @property
     def audible(self):
@@ -288,7 +288,7 @@ class Engine:
         self.parts[name].target = 1.0 if active else 0.0
 
     def set_trim(self, name, gain):
-        """Loudness from the space view, on top of the part's level."""
+        """Loudness from the stage, on top of the part's level."""
         self.parts[name].trim_to = float(gain)
 
     def set_fpga_mode(self, enabled, lookahead_steps=2):

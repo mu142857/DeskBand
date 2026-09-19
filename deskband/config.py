@@ -163,13 +163,13 @@ MAKEUP = {0: 1.5, 1: 1.5, 2: 1.3, 3: 1.15}     # active parts -> gain, else 1.0
 CEILING = 0.89
 LIMITER_RELEASE_S = 0.5
 
-# --- space view (tab): the band placed by hand on a plane (deskband/space.py).
-# Up is loudness: the part's own level in the middle, SPACE_DB at the bottom
-# and top edges. Across is complexity: the middle band (SPACE_AS_WRITTEN) plays
+# --- the stage (tab): the band placed by hand on a plane (deskband/stage.py).
+# Up is loudness: the part's own level in the middle, STAGE_DB at the bottom
+# and top edges. Across is complexity: the middle band (STAGE_AS_WRITTEN) plays
 # the part as written, left of it notes drop away from the weakest beats first,
 # right of it passing notes and graces fill in (music.Pattern.arrange).
-SPACE_DB = (-24.0, 9.0)
-SPACE_AS_WRITTEN = (0.4, 0.6)
+STAGE_DB = (-24.0, 9.0)
+STAGE_AS_WRITTEN = (0.4, 0.6)
 
 # --- remote control (deskband/remote.py): JSON over UDP for hardware and other programs
 REMOTE_HOST = "0.0.0.0"        # "127.0.0.1" to accept commands from this Mac only

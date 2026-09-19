@@ -7,7 +7,7 @@ in front of the camera, so a band is built one photo at a time. The shelf
 starts empty and fills in the order things were first shot (one place per
 instrument; shooting the same kind of object again replaces its picture but
 keeps its place). Kept on disk, so it survives a restart, along with where
-each instrument was put in the space view (Entry.pos)."""
+each instrument was put on the stage (Entry.pos)."""
 
 import json
 import os
@@ -34,7 +34,7 @@ class Entry:
     def __init__(self, name, shown, conf, thumb, saved_at=None, pos=None):
         self.name, self.shown, self.conf, self.thumb = name, shown, conf, thumb
         self.saved_at = saved_at or time.time()
-        self.pos = tuple(pos) if pos else None      # (complexity, loudness) in the space, 0..1
+        self.pos = tuple(pos) if pos else None      # (complexity, loudness) on the stage, 0..1
         self.selected = False
         self.tile = None             # drawing cache, owned by the UI
 
@@ -106,7 +106,7 @@ class Shelf:
             pass
 
     def place(self, name, pos, save=True):
-        """Put a saved instrument at (complexity, loudness) in the space, both
+        """Put a saved instrument at (complexity, loudness) on the stage, both
         0..1. save=False while it is being dragged; the drop writes it down."""
         entry = self.entries.get(name)
         if entry is None:
