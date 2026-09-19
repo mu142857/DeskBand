@@ -1,4 +1,4 @@
-"""Voices: sung samples for the headphones part, made once by ElevenLabs.
+"""Voices: sung samples for the mouth part (an open mouth, deskband/face.py), made once by ElevenLabs.
 
 Each prompt in config.VOCAL_PROMPTS asks the sound-effects model for one long
 sung note. It comes back at whatever pitch the model chose, so the take is

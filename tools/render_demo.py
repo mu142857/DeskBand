@@ -25,6 +25,7 @@ def main(out_path, script=None):
         SCRIPT = [s.strip() or None for s in script.split(",")]
     engine = Engine(Composer())
     engine.load_instruments()
+    engine.start_transport()              # the clock waits for it; the app starts it in start_band
     frames = C.BLOCK_SIZE
     phrase_samples = engine.step_len * C.STEPS_PER_PHRASE * len(C.CHORDS)     # one full chord loop
     blocks_per_phrase = phrase_samples // frames + 1

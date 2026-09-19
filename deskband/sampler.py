@@ -180,6 +180,10 @@ def load_kings_cross():
     return km
 
 
+def load_bari_sax():
+    return load_keymap_dir("sax", C.BARI_SAX, 4.0)
+
+
 def load_drums():
     kit = {}
     folder = C.sample_dir("drums", C.DRUM_DIR)

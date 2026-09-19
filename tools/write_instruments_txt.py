@@ -12,7 +12,7 @@ from deskband import config as C
 LOGIC = "/Library/Application Support/Logic"
 OBJECT_CN = {"cup": "杯子", "pen": "笔", "bottle": "瓶子", "book": "书",
              "glasses": "眼镜", "cell phone": "手机", "laptop": "笔记本电脑 / 平板",
-             "headphones": "耳机"}
+             "mouth": "张开的嘴"}
 NOTE = "C C# D D# E F F# G G# A A# B".split()
 
 
@@ -70,6 +70,10 @@ def info(voice):
     if voice == "keys":
         return dict(name="柔和电钢琴（程序合成，不用采样）", logic="无，代码在 deskband/synth.py 里的 keys 音色",
                     source="—", used="—")
+    if voice == "sax":
+        return dict(name="录音室上低音萨克斯 Studio Baritone Sax（主旋律）", logic="Logic 音色库 → 录音室管乐 → 单件乐器 → Studio Baritone Sax",
+                    source="/Library/Application Support/Logic/EXS Factory Samples/Studio Horns/Studio Baritone Sax.caf",
+                    used=f"{C.BARI_SAX}/   （tools/make_bari_sax.py 抽出来的 22 个单音；现在{exists(os.path.join(C.BARI_SAX, 'keymap.json'))}抽好的）")
     if voice == "vocal":
         return dict(name="人声 Voices（ElevenLabs 生成的 \"ooh\" 长音）", logic="无，不来自 Logic",
                     source="ElevenLabs 音效生成接口，提示词在 deskband/config.py 的 VOCAL_PROMPTS",
@@ -92,7 +96,8 @@ def main():
     for obj, spec in C.INSTRUMENTS.items():
         i = info(spec["voice"])
         L.append(f"【{OBJECT_CN.get(obj, obj)} {obj}】 → {i['name']}")
-        L.append(f"    摄像头认这些词：{' / '.join(spec['detect'])}")
+        L.append(f"    摄像头认这些词：{' / '.join(spec['detect'])}" if spec["detect"] else
+                 "    怎么认：MediaPipe 人脸关键点，最大的那张脸张着嘴拍照（deskband/face.py）")
         L.append(f"    在 Logic 里：{i['logic']}")
         L.append(f"    原始音色库：{i['source']}")
         L.append(f"    程序实际读：{i['used']}")

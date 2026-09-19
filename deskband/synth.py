@@ -156,7 +156,7 @@ class SampleVoice(Voice):
         return out
 
 
-RELEASE = {"piano": 1.6, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2, "vocal": 0.5}
+RELEASE = {"piano": 1.6, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2, "vocal": 0.5, "sax": 0.18}
 
 
 # ---------------------------------------------------------------- engine ----
@@ -201,6 +201,8 @@ class Engine:
         self.gain_reduction_db = 0.0
         self.pulse = 0.0
         self.hits = {}               # part -> last trigger time (for the UI)
+        self.bar_marks = ()          # the last few (sample position, Composer.BarView) bar lines (for the UI)
+        self.transport = False       # the clock waits: see start_transport
         for name, spec in C.INSTRUMENTS.items():
             self.parts[name] = Part(name, spec["level"], spec["send"])
         self.parts["backing"] = Part("backing", C.BACKING["level"], C.BACKING["send"])
@@ -232,6 +234,11 @@ class Engine:
             self.keymaps["strings"] = km
             self.loaded.add("strings")
             log(f"[sampler] strings: King's Cross, {len(km.keys)} notes")
+        km = sampler.load_bari_sax()
+        if km is not None:
+            self.keymaps["sax"] = km
+            self.loaded.add("sax")
+            log(f"[sampler] sax: Studio Baritone Sax, {len(km.keys)} notes")
         for kind in C.SAMPLE_SETS:
             if kind in self.loaded:
                 continue
@@ -254,7 +261,8 @@ class Engine:
             log(f"[sampler] vinyl loop unavailable: {e}")
         log(f"[sampler] all loaded in {_time.time() - t0:.1f}s")
         try:                                # last: the first time, this waits on ElevenLabs
-            km = vocals.load(log)
+            uses_vocal = any(spec["voice"] == "vocal" for spec in C.INSTRUMENTS.values())
+            km = vocals.load(log) if uses_vocal else None
             if km is not None:
                 self.keymaps["vocal"] = km
                 self.loaded.add("vocal")
@@ -367,10 +375,33 @@ class Engine:
         self.voices.append(v)
         self.hits[part] = self.pos + block_offset
 
+    def start_transport(self):
+        """Start the music, at step 0 of bar one. The stream opens with the app
+        and the mix runs from the first block, but no step is played until this
+        is called, so the App can stay silent while it loads and still begin at
+        the top of the chord loop. Calling it again does nothing."""
+        self.transport = True
+
+    def _mark_bar(self, at):
+        """A bar line at sample `at`: keep what the composer just planned for it.
+        The tuple is replaced whole, so the UI thread never sees it half built."""
+        self.bar_marks = self.bar_marks[-2:] + ((at, self.composer.bar_view),)
+
+    def bar_now(self):
+        """-> (seconds into the bar that is audible now, its Composer.BarView),
+        or (0.0, None) before the first bar line has been heard."""
+        heard = self.pos - int(self.latency * SR)
+        for at, view in reversed(self.bar_marks):
+            if at <= heard:
+                return (heard - at) / SR, view
+        return 0.0, None
+
     def _callback(self, out, frames, time_info, status):
         t0 = _time.perf_counter()
         end = self.pos + frames
-        if self.fpga_mode:
+        if not self.transport:
+            self.next_step_at = end          # held at bar one, so nothing has to catch up later
+        elif self.fpga_mode:
             while self.fpga_input:
                 tick, step, event_mask, active_mask = self.fpga_input.popleft()
                 at = None
@@ -394,6 +425,8 @@ class Engine:
                         self._trigger(ev, offset)
                     elif track < 0 and ev[0] in C.INSTRUMENTS:     # no track on the board: clock only
                         self._trigger(ev, offset)
+                if tick % C.STEPS_PER_PHRASE == 0:
+                    self._mark_bar(self.pos + offset)
                 if tick % 2 == 0 and self.pending_sfx:
                     pending, self.pending_sfx = self.pending_sfx, []
                     for buf, gain in pending:
@@ -406,6 +439,8 @@ class Engine:
                 offset = self.next_step_at - self.pos
                 for ev in self.composer.step(self.step):
                     self._trigger(ev, offset)
+                if self.step % C.STEPS_PER_PHRASE == 0:
+                    self._mark_bar(self.next_step_at)
                 if self.step % 2 == 0 and self.pending_sfx:       # 8th-note grid
                     pending, self.pending_sfx = self.pending_sfx, []
                     for buf, gain in pending:

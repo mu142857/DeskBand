@@ -1,4 +1,5 @@
-"""FPGA event scheduling enters the audio callback at exact sample offsets."""
+"""FPGA event scheduling enters the audio callback at exact sample offsets, and
+the clock stays at bar one until the app starts it."""
 
 import os
 import sys
@@ -14,16 +15,36 @@ from deskband.synth import Engine
 class FakeComposer:
     def __init__(self):
         self.steps = []
+        self.bar_view = None
 
     def step(self, step):
         self.steps.append(step)
         return [("cup", "keys", 60, 0.5, 1, 0.0)]
 
 
+def blocks(engine, n):
+    for _ in range(n):
+        engine._callback(np.zeros((C.BLOCK_SIZE, 2), np.float32), C.BLOCK_SIZE, None, None)
+
+
+def test_silent_until_started():
+    """Nothing is played while the app loads; the first step is step 0."""
+    composer = FakeComposer()
+    engine = Engine(composer)
+    engine.set_bpm(120)
+    blocks(engine, 200)                                    # several bars' worth of loading
+    assert composer.steps == []
+    engine.start_transport()
+    blocks(engine, 20)
+    assert composer.steps and composer.steps[0] == 0       # in at the top of the loop, not mid-bar
+    assert composer.steps == list(range(len(composer.steps)))
+
+
 def test_fpga_engine():
     composer = FakeComposer()
     engine = Engine(composer)
     engine.set_bpm(120)
+    engine.start_transport()
     engine.set_active("cup", True)
     triggered = []
     engine._trigger = lambda event, offset: triggered.append((event[0], engine.pos + offset))
@@ -65,5 +86,6 @@ def test_fpga_engine():
 
 
 if __name__ == "__main__":
+    test_silent_until_started()
     test_fpga_engine()
     print("PASS: FPGA-to-audio lookahead scheduling")

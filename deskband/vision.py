@@ -128,6 +128,8 @@ class Vision(threading.Thread):
         self.model_lock = threading.Lock()     # one inference at a time
         self.model = None
         self.model_name = ""
+        self.face = None          # face.Mouth, or None when MediaPipe / its model is missing
+        self.jaw = None           # last openness reading of the largest face, for the debug line
         self.frame = None
         self.frame_id = 0
         self.detections = []
@@ -136,7 +138,15 @@ class Vision(threading.Thread):
         self.cam_fps = 0.0
         self.infer_ms = 0.0
         self.error = None
+        self.failed = False       # the model could not be read: nothing more is coming
         self._halt = threading.Event()
+
+    @property
+    def loading(self):
+        """True until the first frame arrives (the model is read before the
+        camera loop starts), or until the model gives up. The App waits for this
+        to end before starting the music, so nothing plays over the loading screen."""
+        return self.frame is None and not self.failed
 
     def stop(self):
         self._halt.set()
@@ -173,6 +183,15 @@ class Vision(threading.Thread):
                 dets.append(Detection(C.ALIASES[alias], float(conf), box, alias))
         return merge_duplicates(dets) if merge else dets
 
+    def mouth(self, frame):
+        """[Detection] for an open mouth on the largest face, else []."""
+        if self.face is None:
+            return []
+        with self.model_lock:
+            seen = self.face.look(frame)
+        self.jaw = seen[0] if seen else None
+        return [Detection("mouth", seen[0], seen[1])] if seen and seen[0] > 0 else []
+
     def careful(self, frame):
         """The look that decides a photo: two passes at different sizes over the
         frozen frame. False positives rarely survive a change of scale, real
@@ -180,7 +199,7 @@ class Vision(threading.Thread):
         a = self.detect(frame, C.DETECT_IMGSZ, C.DETECT_FLOOR, merge=False)   # unmerged: a one-pass fluke must
         b = self.detect(frame, C.SHOOT_IMGSZ, C.DETECT_FLOOR, merge=False)    # not outrank a reading both agree on
         sure = [d for d in a if d.conf >= C.DETECT_CONF], [d for d in b if d.conf >= C.DETECT_CONF]
-        return merge_duplicates(confirm(sure[0], b, frame.shape) + confirm(sure[1], a, frame.shape))
+        return merge_duplicates(confirm(sure[0], b, frame.shape) + confirm(sure[1], a, frame.shape)) + self.mouth(frame)
 
     def run(self):
         try:
@@ -192,7 +211,13 @@ class Vision(threading.Thread):
             self.model = model
         except Exception as e:      # surface to the UI instead of dying silently
             self.error = repr(e)
+            self.failed = True
             return
+        try:
+            from .face import Mouth
+            self.face = Mouth()
+        except Exception as e:      # no MediaPipe: everything but the mouth still works
+            print("[face] unavailable:", repr(e), flush=True)
         threading.Thread(target=self._capture_loop, daemon=True).start()
         seen_id = -1
         t_prev = time.time()
@@ -204,7 +229,7 @@ class Vision(threading.Thread):
                 continue
             seen_id = fid
             t0 = time.time()
-            dets = self.detect(frame, C.DETECT_IMGSZ)
+            dets = self.detect(frame, C.DETECT_IMGSZ) + self.mouth(frame)
             now = time.time()
             self.infer_ms = 0.8 * self.infer_ms + 0.2 * (now - t0) * 1000
             for d in dets:

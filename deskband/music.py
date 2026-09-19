@@ -114,6 +114,15 @@ CHORDS = [Chord(*c) for c in C.CHORDS]
 
 
 @dataclass(frozen=True)
+class BarView:
+    """What one planned bar holds, for the UI: made whole at the bar line by the
+    audio thread and never changed after, so the UI thread can read it freely."""
+
+    math: bool                     # planned in math mode
+    onsets: dict                   # part -> sorted steps with a note (after the stage's complexity)
+
+
+@dataclass(frozen=True)
 class NoteEvent:
     """One audible note or drum hit in a complete chord cycle."""
 
@@ -481,8 +490,76 @@ class Vocal(Pattern):
             self.sing(4 * a, self.prev, 4 * (b - a) + 4, chord)
 
 
+class Sax(Pattern):
+    """Baritone sax, the lead: one line, one note at a time, each held until the
+    next. A motif (which 8ths, and the shape across them) is invented from the
+    item's seed once per trip round the loop and restated over each chord, so
+    every saved mouth has its own tune; accents land on chord tones."""
+    SLOTS = [0, 2, 4, 6, 8, 10, 12, 14]
+
+    def __init__(self, name, spec):
+        super().__init__(name, spec)
+        self.motif = None
+        self.bars_left = 0
+
+    def reset_cycle(self, seed):
+        super().reset_cycle(seed)
+        self.motif = None
+        self.bars_left = 0
+
+    def new_motif(self):
+        rng = self.rng
+        steps = sorted(rng.sample(self.SLOTS, rng.randint(3, 5)))
+        contour = [rng.choice([-1, 0, 1])]
+        for _ in steps[1:]:
+            contour.append(contour[-1] + rng.choice([-2, -1, -1, 1, 1, 2]))
+        return steps, contour
+
+    def line(self, notes):
+        """[(step, midi, vel)] -> the bar, legato: a note lasts until the next
+        begins, the last one to the bar line."""
+        for (s, midi, vel), (nxt, *_) in zip(notes, notes[1:] + [(P,)]):
+            self.put(s, midi, vel, nxt - s)
+
+    def plan(self, chord, nxt):
+        self.bar = {}
+        rng = self.rng
+        if self.bars_left == 0:
+            self.motif = self.new_motif()
+            self.bars_left = self.loop_len
+        self.bars_left -= 1
+        steps, contour = self.motif
+        ladder = in_range(C.PENTATONIC, self.lo, self.hi)
+        strong = in_range(chord.strong, self.lo, self.hi)
+        centre = (self.lo + self.hi) // 2
+        anchor = min(strong, key=lambda m: abs(m - centre))
+        base = ladder.index(min(ladder, key=lambda m: abs(m - anchor)))
+        notes = []
+        for i, s in enumerate(steps):
+            midi = ladder[min(max(base + contour[i], 0), len(ladder) - 1)]
+            if s in ACC:
+                midi = min(strong, key=lambda m: abs(m - midi))
+            notes.append((s, midi, rng.uniform(0.55, 0.75)))
+        self.line(notes)
+
+    def plan_math(self, chord, nxt):
+        """Computed afresh every bar: a Euclidean rhythm of 3-5 eighths, turned,
+        with the pitches walking the 1/f contour over the pentatonic."""
+        self.bar = {}
+        seq = self.seq
+        ladder = in_range(C.PENTATONIC, self.lo, self.hi)
+        strong = in_range(chord.strong, self.lo, self.hi)
+        notes = []
+        for slot in euclid(seq.pick(3, 5), 8, seq.pick(0, 7)):
+            self.prev = seq.walk(ladder, self.prev)
+            if 2 * slot in ACC:
+                self.prev = min(strong, key=lambda m: abs(m - self.prev))
+            notes.append((2 * slot, self.prev, 0.55 + 0.2 * seq.chaos()))
+        self.line(notes)
+
+
 PATTERNS = {"piano": Piano, "keys": Keys, "guitar": Guitar, "bass": Bass,
-            "drums": Drums, "strings": Strings, "bells": Bells, "vocal": Vocal}
+            "drums": Drums, "strings": Strings, "bells": Bells, "vocal": Vocal, "sax": Sax}
 
 
 class Backing(Pattern):
@@ -526,6 +603,9 @@ class Composer:
         self.bar_count = -1
         self.chord_index = 0
         self.math = C.MATH_MODE
+        # the parts math mode computes (the rest keep their pattern either way)
+        self.computed = frozenset(n for n, p in self.parts.items() if type(p).plan_math is not Pattern.plan_math)
+        self.bar_view = BarView(self.math, {})
         # A single immutable publication. Readers never traverse self.chords while
         # the audio callback changes the active style.
         self.active_chords = self._chord_specs()
@@ -566,6 +646,7 @@ class Composer:
     def step(self, step):
         s = step % P
         if s == 0:
+            math = self.math                   # read once: the UI thread may flip it mid-plan
             self._publishing = self.pending is not None
             try:
                 self.bar_count += 1
@@ -576,7 +657,7 @@ class Composer:
                     self.chords, self.pending, self.bar_count = self.pending, None, 0
                     for p in self.parts.values():
                         p.loop_len = len(self.chords)
-                if not self.math and self.bar_count % len(self.chords) == 0:
+                if not math and self.bar_count % len(self.chords) == 0:
                     seeds = self.motif_seeds
                     for name, p in self.parts.items():
                         p.reset_cycle(seeds[name])
@@ -588,8 +669,9 @@ class Composer:
             nxt = self.chords[(self.chord_index + 1) % len(self.chords)]
             self.backing.plan(chord, nxt)
             for p in self.parts.values():
-                (p.plan_math if self.math else p.plan)(chord, nxt)
+                (p.plan_math if math else p.plan)(chord, nxt)
                 p.arrange(chord)
+            self.bar_view = BarView(math, {n: tuple(sorted(p.bar)) for n, p in self.parts.items()})
         events = self.backing.events(s)
         for p in self.parts.values():
             events.extend(p.events(s))

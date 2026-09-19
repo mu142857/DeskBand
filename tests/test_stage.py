@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from deskband import config as C
 from deskband.music import Composer, weight
 from deskband.shelf import Shelf
-from deskband.stage import complexity_word, loudness_db, loudness_gain
+from deskband.stage import Stage, complexity_word, loudness_db, loudness_gain
 
 BARS = 16
 P = C.STEPS_PER_BAR
@@ -59,6 +59,64 @@ def test_complexity():
     assert len(play(1.0, math=True)["cup"]) > len(play(0.5, math=True)["cup"])
 
 
+class FakeApp:
+    """Just enough of the App for the stage to place tokens and apply them."""
+
+    def __init__(self, folder, names):
+        self.shelf = Shelf(folder, C.INSTRUMENTS)
+        self.composer = Composer()
+        self.engine = type("E", (), {"set_trim": lambda *a: None})()
+        self.tile_mask = np.zeros((72, 72), np.float32)
+        frame = np.zeros((720, 1280, 3), np.uint8)
+        for n in names:
+            self.shelf.add(n, n, 0.9, frame, [500, 200, 700, 400])
+        self.band = set(names)
+
+
+def stage_of(names):
+    app = FakeApp(tempfile.mkdtemp(prefix="deskband_stage_"), names)
+    app.stage = Stage(app, 132, 100, 1124, 584)                          # the App's own plane
+    return app.stage
+
+
+def spread(stage):
+    """-> (positions, the closest two tokens in px)."""
+    pos = {n: stage.app.shelf.entries[n].pos for n in stage.placed()}
+    screen = [stage.to_screen(p) for p in pos.values()]
+    gaps = [np.hypot(a[0] - b[0], a[1] - b[1])
+            for i, a in enumerate(screen) for b in screen[i + 1:]]
+    return pos, min(gaps, default=1e9)
+
+
+def test_new_instruments_spread_out():
+    names = list(C.INSTRUMENTS)[:6]
+    for _ in range(20):                                                  # it is random: run it a few times
+        stage = stage_of(names)
+        stage.settle()
+        pos, closest = spread(stage)
+        assert len(pos) == len(names)
+        assert closest >= stage.size, closest                            # no token lands on another
+        for (x, y) in pos.values():                                      # never against an edge
+            assert 0.1 < x < 0.9 and 0.1 < y < 0.9, (x, y)
+
+
+def test_shuffle():
+    names = list(C.INSTRUMENTS)
+    for _ in range(20):
+        stage = stage_of(names)
+        stage.settle()
+        stage.shuffle()
+        pos, closest = spread(stage)
+        assert closest >= stage.size, closest
+        computed = {n: p for n, p in pos.items() if n in stage.app.composer.computed}
+        loud = [n for n, p in computed.items() if loudness_db(p[1]) > 6]
+        assert len(loud) == 1, loud                                      # exactly one line out front...
+        assert all(p[1] <= 0.62 for n, p in computed.items() if n not in loud)   # ...the rest kept under it
+        drums = [n for n in pos if C.INSTRUMENTS[n]["voice"] == "drums"]
+        for n in drums:                                                  # high, in the middle
+            assert 0.4 <= pos[n][0] <= 0.6 and 0.6 <= pos[n][1] <= 0.78, pos[n]
+
+
 def test_placement_saved():
     folder = tempfile.mkdtemp(prefix="deskband_stage_")
     frame = np.zeros((720, 1280, 3), np.uint8)
@@ -74,5 +132,7 @@ def test_placement_saved():
 if __name__ == "__main__":
     test_loudness()
     test_complexity()
+    test_new_instruments_spread_out()
+    test_shuffle()
     test_placement_saved()
     print("ok")
