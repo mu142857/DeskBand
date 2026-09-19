@@ -39,6 +39,11 @@ class _SnapshotComposer:
                 (event.part, event.voice, event.note, event.velocity,
                  event.duration_steps, event.delay_steps))
 
+    @property
+    def bar_view(self):
+        """The engine marks each bar with it for the stage's rings; nothing reads it here."""
+        return self.backing.bar_view
+
     def step(self, step):
         backing = [event for event in self.backing.step(step) if event[0] == "backing"]
         return backing + self.events.get(step, [])
@@ -59,14 +64,15 @@ def _load_selected(engine, snapshot, progress):
             # Existing takes only. Export must never generate or upload audio.
             km = sampler.load_keymap_dir("vocal", C.VOCAL_DIR, 8.0)
             if km is None or not km.ready:
-                raise RuntimeError("Voice samples are unavailable; deselect headphones or prepare them first")
+                raise RuntimeError("Voice samples are unavailable; deselect that instrument or prepare them first")
             engine.keymaps[kind] = km
         else:
             km = (sampler.load_concert_grand() if kind == "piano" else
-                  sampler.load_kings_cross() if kind == "strings" else None)
-            if km is None:
+                  sampler.load_kings_cross() if kind == "strings" else
+                  sampler.load_bari_sax() if kind == "sax" else None)
+            if km is None and kind in C.SAMPLE_SETS:
                 km = sampler.load_set(kind)
-            if not km.ready:
+            if km is None or not km.ready:
                 raise RuntimeError(f"{C.INSTRUMENTS[name]['label']} samples are unavailable")
             engine.keymaps[kind] = km
 
@@ -101,6 +107,7 @@ def render_loop(snapshot, progress=lambda message: None, *, folder=None):
     engine.parts["backing"].gain = engine.parts["backing"].target
     engine.parts["sfx"].target = engine.parts["sfx"].gain = 0.0
     engine.makeup = C.MAKEUP.get(len(snapshot.selected), 1.0)
+    engine.start_transport()               # the engine's clock waits for it (the app: start_band)
 
     frames = engine.step_len * C.STEPS_PER_BAR * snapshot.bars
     target = os.path.abspath(folder or os.path.join(C.CACHE_DIR, "exports"))

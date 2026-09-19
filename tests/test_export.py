@@ -102,20 +102,21 @@ def test_empty_and_pending_are_rejected():
             raise AssertionError("pending harmony was rendered")
 
 
-def test_missing_voice_samples_report_an_error():
+def test_missing_sax_samples_report_an_error():
+    """The open-mouth instrument's samples come from tools/make_bari_sax.py; without them, no file."""
     with tempfile.TemporaryDirectory() as folder:
-        old_vocal_dir = C.VOCAL_DIR
-        C.VOCAL_DIR = os.path.join(folder, "missing-voice")
+        old_sax_dir = C.BARI_SAX
+        C.BARI_SAX = os.path.join(folder, "missing-sax")
         try:
             try:
-                render_loop(snapshot(folder, ("headphones",)), folder=folder)
+                render_loop(snapshot(folder, ("mouth",)), folder=folder)
             except RuntimeError as exc:
-                assert "Voice samples" in str(exc)
+                assert "samples are unavailable" in str(exc)
             else:
-                raise AssertionError("missing voice samples were accepted")
+                raise AssertionError("missing sax samples were accepted")
             assert not any(name.endswith(".wav") for name in os.listdir(folder))
         finally:
-            C.VOCAL_DIR = old_vocal_dir
+            C.BARI_SAX = old_sax_dir
 
 
 def test_summary_render_and_stale_clip():
@@ -128,6 +129,8 @@ def test_summary_render_and_stale_clip():
             shelf.add("cup", "cup", 0.9, frame, [30, 20, 125, 105])
             shelf.select("cup", True)
             app = App()
+            assert not app.playing and app.engine.parts["cup"].target == 0     # silent while loading...
+            app.start_band()                                                   # ...then run() brings the band in
             assert app.engine.parts["cup"].target == 1
             app.render_worker = lambda score, progress: render_loop(score, progress, folder=folder)
             app.enter_summary()
@@ -196,7 +199,7 @@ if __name__ == "__main__":
     test_math_mode_fresh_cycle()
     test_all_eight_with_existing_vocal_take()
     test_empty_and_pending_are_rejected()
-    test_missing_voice_samples_report_an_error()
+    test_missing_sax_samples_report_an_error()
     test_summary_render_and_stale_clip()
     test_local_preview_uses_separate_output_stream()
     print("ok")

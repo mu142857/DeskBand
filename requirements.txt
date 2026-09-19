@@ -2,6 +2,7 @@
 # Install with .venv/bin/python -m pip install -r requirements.txt.
 # Gemini and ElevenLabs requests use Python's standard-library urllib.
 certifi
+mediapipe==0.10.35      # open-mouth instrument (deskband/face.py); 1.0.x crashes on macOS
 numpy
 opencv-python
 Pillow
