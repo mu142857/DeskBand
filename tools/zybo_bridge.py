@@ -7,9 +7,13 @@ Install pyserial in the Mac virtual environment, then run:
 """
 
 import argparse
+import os
+import sys
 import json
 import socket
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from deskband.fpga_protocol import command_mask, command_tempo, parse_fpga_line
 
