@@ -15,7 +15,7 @@ static inline uint32_t reg_read(uint32_t offset) { return Xil_In32(DB_BASE_ADDRE
 static inline void reg_write(uint32_t offset, uint32_t value) { Xil_Out32(DB_BASE_ADDRESS + offset, value); }
 
 static void report_status(void) {
-    xil_printf("ST run=%lu tick=%lu mask=%02lx fifo=%lu overflow=%lu\r\n",
+    xil_printf("ST run=%u tick=%u mask=%02x fifo=%u overflow=%u\r\n",
         reg_read(DB_CONTROL) & 1u, reg_read(DB_ABSOLUTE_TICK),
         reg_read(DB_APPLIED_MASK) & 0x7fu, reg_read(DB_STATUS) & 0xffu,
         reg_read(DB_STATUS) >> 31);
@@ -25,7 +25,7 @@ static void execute(const db_command *command) {
     uint32_t value;
     switch (command->type) {
     case DB_CMD_PING: xil_printf("PONG DB01\r\n"); break;
-    case DB_CMD_ID: xil_printf("ID %08lx\r\n", reg_read(DB_ID_VERSION)); break;
+    case DB_CMD_ID: xil_printf("ID %08x\r\n", reg_read(DB_ID_VERSION)); break;
     case DB_CMD_START: reg_write(DB_CONTROL, DB_CONTROL_RUN); xil_printf("OK START\r\n"); break;
     case DB_CMD_STOP: reg_write(DB_CONTROL, 0); xil_printf("OK STOP\r\n"); break;
     case DB_CMD_RESET:
@@ -34,15 +34,15 @@ static void execute(const db_command *command) {
     case DB_CMD_STATUS: report_status(); break;
     case DB_CMD_TEMPO:
         value = UINT32_C(1500000000) / command->value;
-        reg_write(DB_CYCLES_PER_STEP, value); xil_printf("OK TEMPO %lu %lu\r\n", command->value, value); break;
+        reg_write(DB_CYCLES_PER_STEP, value); xil_printf("OK TEMPO %u %u\r\n", command->value, value); break;
     case DB_CMD_CYCLES:
-        reg_write(DB_CYCLES_PER_STEP, command->value); xil_printf("OK CYCLES %lu\r\n", command->value); break;
+        reg_write(DB_CYCLES_PER_STEP, command->value); xil_printf("OK CYCLES %u\r\n", command->value); break;
     case DB_CMD_MASK:
         reg_write(DB_MASK_REQUEST, DB_COMMAND_VALID | ((uint32_t)command->quantization << 8) | command->value);
-        xil_printf("OK MASK %02lx %u\r\n", command->value, command->quantization); break;
+        xil_printf("OK MASK %02x %u\r\n", command->value, command->quantization); break;
     case DB_CMD_PATTERN:
         reg_write(DB_PATTERN(command->track), command->value);
-        xil_printf("OK PATTERN %u %04lx\r\n", command->track, command->value); break;
+        xil_printf("OK PATTERN %u %04x\r\n", command->track, command->value); break;
     case DB_CMD_ENVELOPE:
         if (!(reg_read(DB_ENVELOPE_ACTIVE) & DB_ENVELOPE_READY)) { xil_printf("BUSY ENV\r\n"); break; }
         value = ((uint32_t)command->duration << 16) | ((uint32_t)command->target << 8) | command->track;
@@ -53,7 +53,7 @@ static void execute(const db_command *command) {
         value = DB_COMMAND_VALID | (1u << 30) | (1u << 29) |
                 ((uint32_t)command->target << 21) | command->track;
         reg_write(DB_LFO_COMMAND, value);
-        xil_printf("OK LFO %u %06lx %u\r\n", command->track, command->value, command->target); break;
+        xil_printf("OK LFO %u %06x %u\r\n", command->track, command->value, command->target); break;
     case DB_CMD_LFO_OFF:
         reg_write(DB_LFO_COMMAND, DB_COMMAND_VALID | command->track);
         xil_printf("OK LFOOFF %u\r\n", command->track); break;
@@ -65,7 +65,7 @@ static void drain_events(void) {
     uint32_t status, low, high;
     while (((status = reg_read(DB_STATUS)) & 0xffu) != 0) {
         low = reg_read(DB_EVENT_LO); high = reg_read(DB_EVENT_HI);
-        xil_printf("EV %lu %lu %02lx %02lx %lu\r\n", low, high & 0xfu,
+        xil_printf("EV %u %u %02x %02x %u\r\n", low, high & 0xfu,
             (high >> 4) & 0x7fu, (high >> 11) & 0x7fu, (high >> 18) & 1u);
     }
     if (status & DB_FIFO_OVERFLOW) {
@@ -106,11 +106,11 @@ static void report_controls(void) {
                           (64u << 21) | selected);
             }
         }
-        xil_printf("BTN %lx %lx %lx %lx\r\n", buttons & 0xfu, presses,
+        xil_printf("BTN %x %x %x %x\r\n", buttons & 0xfu, presses,
                    (buttons >> 16) & 0xfu, (buttons >> 24) & 0xfu);
         reg_write(DB_BUTTON_STATUS, buttons & 0x000f0f00u);
     } else if ((buttons & 0xfu) != previous_buttons) {
-        xil_printf("BTN %lx 0 0 %lx\r\n", buttons & 0xfu,
+        xil_printf("BTN %x 0 0 %x\r\n", buttons & 0xfu,
                    (buttons >> 24) & 0xfu);
     }
     previous_buttons = buttons & 0xfu;
@@ -132,7 +132,7 @@ static void report_controls(void) {
 int main(void) {
     char line[INPUT_CAPACITY]; unsigned length = 0;
     if (reg_read(DB_ID_VERSION) != DB_ID_EXPECTED) {
-        xil_printf("FATAL PL_ID %08lx\r\n", reg_read(DB_ID_VERSION));
+        xil_printf("FATAL PL_ID %08x\r\n", reg_read(DB_ID_VERSION));
         return 1;
     }
     xil_printf("READY DESKBAND 1.0\r\n");
