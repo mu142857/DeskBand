@@ -335,10 +335,10 @@ class App:
         x0, y0 = int(max(cx - w / 2, 0)), int(max(cy - h / 2, 0))
         x1, y1 = int(min(cx + w / 2, W - 1)), int(min(cy + h / 2, H - 1))
         r = 10
-        if lit:
-            ui.keep_colour(out, frame, x0, y0, x1, y1, r, alpha * (0.85 + 0.15 * glow))
-        ui.outline(out, x0, y0, x1, y1, r, alpha * (0.85 + 0.15 * glow), thickness=2)
         spec = C.INSTRUMENTS[det.name]
+        if lit:
+            ui.keep_colour(out, frame, x0, y0, x1, y1, r, alpha * (0.85 + 0.15 * glow), spec["tint"])
+        ui.outline(out, x0, y0, x1, y1, r, alpha * (0.85 + 0.15 * glow), thickness=2)
         ty = y0 - 26 if y0 > 34 else y1 + 8
         adv = ui.text(out, det.shown, x0 + 2, ty, 17, alpha * 0.95, "Medium")
         ui.text(out, "  ·  " + spec["label"], x0 + 2 + adv, ty, 17, alpha * 0.7, "Light")
@@ -388,10 +388,12 @@ class App:
         if not rows:
             ui.text(out, "nothing yet", x0 + 20, y, 16, 0.5, "Light")
         for name, shown, playing in rows:
+            c = ui.hex_bgr(C.INSTRUMENTS[name]["tint"])
+            c = c + (255 - c) * 0.25                     # its shelf colour, lifted like the stage's rings
             if playing:
-                ui.circle(out, x0 + 26, y + 10, 4, 0.35 + 0.65 * self.glow(name), thickness=-1)
+                ui.circle(out, x0 + 26, y + 10, 4, 0.35 + 0.65 * self.glow(name), thickness=-1, color=c)
             else:
-                ui.circle(out, x0 + 26, y + 10, 4, 0.35, thickness=1)
+                ui.circle(out, x0 + 26, y + 10, 4, 0.35, thickness=1, color=c)
             dim = 1.0 if playing else 0.55
             ui.text(out, shown, x0 + 42, y, 16, 0.9 * dim, "Regular")
             ui.text(out, C.INSTRUMENTS[name]["label"], x1 - 20, y, 16, 0.6 * dim, "Light", align="right")
@@ -440,15 +442,25 @@ class App:
                 13, 0.55, "Light", align="center")
 
     def draw_math_button(self, out):
-        """Left of the shutter: math mode, lit while it is on."""
+        """Left of the shutter: math mode, lit while it is heard. Switched but not
+        heard yet (it starts on the next bar line), it pulses."""
         cx, cy, r = self.math_button
         a = 0.95 if self.over(self.math_button, *self.mouse) else 0.75
         on = self.composer.math
-        ui.circle(out, cx, cy, r, a if on else a - 0.15, thickness=-1 if on else 1)
+        view = self.engine.bar_now()[1]
         mask, _, top = ui.text_mask("φ", 20)
-        ui.text(out, "φ", cx, cy - top - mask.shape[0] / 2, 20, a, color=ui.TONE_DARK if on else ui.WHITE,
-                align="center")
-        ui.text(out, "m  ·  math", cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
+        if view is None or view.math == on:
+            ui.circle(out, cx, cy, r, a if on else a - 0.15, thickness=-1 if on else 1)
+            ui.text(out, "φ", cx, cy - top - mask.shape[0] / 2, 20, a, color=ui.TONE_DARK if on else ui.WHITE,
+                    align="center")
+            hint = "m  ·  math"
+        else:
+            blink = 0.5 + 0.5 * math.cos(4 * math.pi * time.time())
+            ui.circle(out, cx, cy, r, a - 0.15, thickness=1)
+            ui.circle(out, cx, cy, r - 1, 0.08 + 0.37 * blink, thickness=-1)
+            ui.text(out, "φ", cx, cy - top - mask.shape[0] / 2, 20, a, align="center")
+            hint = "m  ·  next bar"
+        ui.text(out, hint, cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
 
     def draw_view_button(self, out):
         """Far left of the row: to the stage (a plot with dots), or back to the camera."""

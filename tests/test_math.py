@@ -57,6 +57,11 @@ def test_math():
     for step in range(C.STEPS_PER_BAR + 5, 2 * C.STEPS_PER_BAR):
         c.step(step)
     assert {n: p.bar for n, p in c.parts.items()} == planned
+    assert c.bar_view.math is False                       # the UI's view of the bar: still patterned...
+    c.step(2 * C.STEPS_PER_BAR)
+    assert c.bar_view.math is True                        # ...until the bar line
+    assert c.bar_view.onsets == {n: tuple(sorted(p.bar)) for n, p in c.parts.items()}
+    assert c.computed == set(MELODIC)                     # the parts that wear math mode's ring
     c.set_math()
     assert c.math is False
 

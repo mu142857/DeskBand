@@ -114,6 +114,15 @@ CHORDS = [Chord(*c) for c in C.CHORDS]
 
 
 @dataclass(frozen=True)
+class BarView:
+    """What one planned bar holds, for the UI: made whole at the bar line by the
+    audio thread and never changed after, so the UI thread can read it freely."""
+
+    math: bool                     # planned in math mode
+    onsets: dict                   # part -> sorted steps with a note (after the stage's complexity)
+
+
+@dataclass(frozen=True)
 class NoteEvent:
     """One audible note or drum hit in a complete chord cycle."""
 
@@ -526,6 +535,9 @@ class Composer:
         self.bar_count = -1
         self.chord_index = 0
         self.math = C.MATH_MODE
+        # the parts math mode computes (the rest keep their pattern either way)
+        self.computed = frozenset(n for n, p in self.parts.items() if type(p).plan_math is not Pattern.plan_math)
+        self.bar_view = BarView(self.math, {})
         # A single immutable publication. Readers never traverse self.chords while
         # the audio callback changes the active style.
         self.active_chords = self._chord_specs()
@@ -566,6 +578,7 @@ class Composer:
     def step(self, step):
         s = step % P
         if s == 0:
+            math = self.math                   # read once: the UI thread may flip it mid-plan
             self._publishing = self.pending is not None
             try:
                 self.bar_count += 1
@@ -576,7 +589,7 @@ class Composer:
                     self.chords, self.pending, self.bar_count = self.pending, None, 0
                     for p in self.parts.values():
                         p.loop_len = len(self.chords)
-                if not self.math and self.bar_count % len(self.chords) == 0:
+                if not math and self.bar_count % len(self.chords) == 0:
                     seeds = self.motif_seeds
                     for name, p in self.parts.items():
                         p.reset_cycle(seeds[name])
@@ -588,8 +601,9 @@ class Composer:
             nxt = self.chords[(self.chord_index + 1) % len(self.chords)]
             self.backing.plan(chord, nxt)
             for p in self.parts.values():
-                (p.plan_math if self.math else p.plan)(chord, nxt)
+                (p.plan_math if math else p.plan)(chord, nxt)
                 p.arrange(chord)
+            self.bar_view = BarView(math, {n: tuple(sorted(p.bar)) for n, p in self.parts.items()})
         events = self.backing.events(s)
         for p in self.parts.values():
             events.extend(p.events(s))

@@ -201,6 +201,7 @@ class Engine:
         self.gain_reduction_db = 0.0
         self.pulse = 0.0
         self.hits = {}               # part -> last trigger time (for the UI)
+        self.bar_marks = ()          # the last few (sample position, Composer.BarView) bar lines (for the UI)
         for name, spec in C.INSTRUMENTS.items():
             self.parts[name] = Part(name, spec["level"], spec["send"])
         self.parts["backing"] = Part("backing", C.BACKING["level"], C.BACKING["send"])
@@ -367,6 +368,20 @@ class Engine:
         self.voices.append(v)
         self.hits[part] = self.pos + block_offset
 
+    def _mark_bar(self, at):
+        """A bar line at sample `at`: keep what the composer just planned for it.
+        The tuple is replaced whole, so the UI thread never sees it half built."""
+        self.bar_marks = self.bar_marks[-2:] + ((at, self.composer.bar_view),)
+
+    def bar_now(self):
+        """-> (seconds into the bar that is audible now, its Composer.BarView),
+        or (0.0, None) before the first bar line has been heard."""
+        heard = self.pos - int(self.latency * SR)
+        for at, view in reversed(self.bar_marks):
+            if at <= heard:
+                return (heard - at) / SR, view
+        return 0.0, None
+
     def _callback(self, out, frames, time_info, status):
         t0 = _time.perf_counter()
         end = self.pos + frames
@@ -394,6 +409,8 @@ class Engine:
                         self._trigger(ev, offset)
                     elif track < 0 and ev[0] in C.INSTRUMENTS:     # no track on the board: clock only
                         self._trigger(ev, offset)
+                if tick % C.STEPS_PER_PHRASE == 0:
+                    self._mark_bar(self.pos + offset)
                 if tick % 2 == 0 and self.pending_sfx:
                     pending, self.pending_sfx = self.pending_sfx, []
                     for buf, gain in pending:
@@ -406,6 +423,8 @@ class Engine:
                 offset = self.next_step_at - self.pos
                 for ev in self.composer.step(self.step):
                     self._trigger(ev, offset)
+                if self.step % C.STEPS_PER_PHRASE == 0:
+                    self._mark_bar(self.next_step_at)
                 if self.step % 2 == 0 and self.pending_sfx:       # 8th-note grid
                     pending, self.pending_sfx = self.pending_sfx, []
                     for buf, gain in pending:

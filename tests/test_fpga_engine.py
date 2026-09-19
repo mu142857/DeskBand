@@ -14,6 +14,7 @@ from deskband.synth import Engine
 class FakeComposer:
     def __init__(self):
         self.steps = []
+        self.bar_view = None
 
     def step(self, step):
         self.steps.append(step)
