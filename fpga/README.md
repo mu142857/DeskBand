@@ -130,7 +130,7 @@ labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 `DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
 
 Current image SHA-256: `ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685`
-(4,213,968 bytes, PL ID `44420101`).
+(4,213,904 bytes, PL ID `44420101`).
 
 Before starting DeskBand, verify the physical board path by itself:
 
