@@ -366,7 +366,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python tests/test_reverb.py && .venv/bin/pyth
 - **Drums（book）**：底鼓第 0、10 步，rim（30% 概率换成 snap）在第 4、12 步，闭镲每个八分音符，25% 概率第 14 步一个开镲。整体很轻。
 - **Strings（glasses）**：低八度根音 + 排列的最低、中间、最高音，整小节长音，时值 19 步（略拖过小节线，和下一个和弦叠一下，因为国王十字的弓弦起音很慢，约 0.4 秒才到一半音量）。
 - **Bells（cell phone）**：每小节 1–2 个高音区和弦音，只落在第 2、6、10、14 步（反拍）。
-- **Vocal（keys，钥匙）**：ElevenLabs 生成的 "ooh" 人声采样（`deskband/vocals.py`）。每小节一到两个长音，落在和弦音上、就近移动，下面再叠一个轻一点的和弦音（两声部）。第一次启动且设了 `ELEVENLABS_API_KEY` 时，用 `config.VOCAL_PROMPTS` 里的每句提示词各生成一条几秒的长音，自动测音高，音高飘的丢掉，稳的微调到最近的半音，存成 `cache/vocal/<midi>.wav + keymap.json`，之后就和其他采样乐器一样按和弦变调播放。想重新生成就删掉 `cache/vocal/`，或运行 `.venv/bin/python -m deskband.vocals`。没有 key 时这件乐器不出声，其他一切照常。
+- **Vocal（mouth，张嘴拍照，`deskband/face.py`）**：ElevenLabs 生成的 "ooh" 人声采样（`deskband/vocals.py`）。每小节一到两个长音，落在和弦音上、就近移动，下面再叠一个轻一点的和弦音（两声部）。第一次启动且设了 `ELEVENLABS_API_KEY` 时，用 `config.VOCAL_PROMPTS` 里的每句提示词各生成一条几秒的长音，自动测音高，音高飘的丢掉，稳的微调到最近的半音，存成 `cache/vocal/<midi>.wav + keymap.json`，之后就和其他采样乐器一样按和弦变调播放。想重新生成就删掉 `cache/vocal/`，或运行 `.venv/bin/python -m deskband.vocals`。没有 key 时这件乐器不出声，其他一切照常。
 - **数学模式**（`m`，`music.Sequence` 和各声部的 `plan_math`）：钢琴旋律、吉他、电钢琴、钟琴、人声不再重复固定的型，每小节现算，永不循环。节奏用欧几里得节奏（k 个音尽量均匀地铺在一小节里再旋转；E(3,8) 就是 3-3-2），k 和旋转量由混沌区的 logistic 映射 x→r·x·(1−x)（r=`config.LOGISTIC_R`）决定。音高朝一条 1/f 走向（Voss 算法，每一行是一个无理数旋转 frac(n·α)，所以永远不会回到同一个值）以级进为主地移动。音仍然只取五声音阶，强拍落在和弦音上，所以不会跑调。从下一小节线开始生效；贝斯、鼓、弦乐不变。
 - **舞台（stage，`tab`，`deskband/stage.py`）**：每件乐器在平面上的位置决定两件事。**纵轴 = 响度**：在声部自己的 `level` 上再乘一个增益，正中间 0 dB，最下 −24 dB，最上 +9 dB（`config.STAGE_DB`，上下两半各自按 dB 线性），引擎里约 50ms 平滑（`Part.trim`），拖的时候立刻听到。**横轴 = 复杂度**（`Pattern.arrange`，每小节在 `plan`/`plan_math` 之后执行，所以从下一小节线生效）：中间一条（`config.STAGE_AS_WRITTEN`，0.4–0.6）原样演奏；往左按拍位强弱（`music.weight`：正拍 4、3-3-2 的另两个重音 3、四分拍 2、八分 1、十六分 0）从弱到强删音，最左只剩第 0 步，但永远不会删空；往右在空着的八分（弦乐和人声是四分）上加经过音，从前一个音朝后一个音级进，连着加就成了音阶跑动，过了一半还会给部分音加十六分倚音；鼓是加十六分闭镲、重音前的轻 rim、第 6 步底鼓。加的音只取五声音阶（吉他、贝斯、弦乐、人声取和弦音），所以不会跑调。加花用每个声部自己的随机数（`Pattern.orn`），所以放在中间时和原来的演奏一模一样。位置存在 `cache/shelf/shelf.json` 的 `pos` 里，重启后还在；拍照或点乐器架加入、但从没放过位置的乐器，会随机落在平面中间一带（`stage.NEW_BOX`，横 0.2–0.8、纵 0.35–0.65）的一个空位上，不会贴边，也不会压在别人身上（`Stage.free_spot` 随机试点，够不开时才往整个平面找）。`r` 或骰子钮（`Stage.shuffle`）重新发牌：受 math 影响的旋律声部里随机挑一个放到最上面一条（+8 dB 往上），其余旋律声部一律留在中线以下，鼓固定在中间偏上，贝斯和弦乐随便落；横轴也一起随机，所以从下一小节线才听全。
 
@@ -490,7 +490,7 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 | `{"cmd":"view","stage":true}` | 切到舞台 / 摄像头画面，等同于 `tab`。不带（或 `null`）= 切换 |
 | `{"cmd":"select","name":"cup","on":true}` | 开关乐器架上一件**已保存**的乐器，等同于点击那个槽。不带 `on`（或 `null`）= 切换。没保存过的会被忽略。**硬件按键选乐器用这个** |
 | `{"cmd":"silence"}` | 乐器架全部关掉，保存的东西不丢（等同于按 `0`） |
-| `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop keys` |
+| `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop mouth` |
 | `{"cmd":"sfx","file":"/绝对路径.wav","gain":0.6}` | 播放一个声音文件。**会等到下一个八分音符才响**（和 Mikutap 一样，所以永远在拍子上），经过混响和限幅器。支持 wav/aiff/flac 等 libsndfile 能读的格式，最长 20 秒，任意采样率。文件必须在**运行 DeskBand 的那台 Mac 上** |
 | `{"cmd":"bpm","value":110}` | 改速度，60–180，立即生效 |
 | `{"cmd":"style","chords":[...],"bpm":120}` | 换和弦循环，**在当前循环走完、回到开头时**生效，所以永远落在强拍上。格式见 10.4 |
@@ -658,7 +658,7 @@ python3 tools/remote_sim.py
 
 ## 12. AI / 音乐 API 线（Richard）
 
-> 已接入 DeskBand 本体：ElevenLabs 人声乐器（keys 钥匙，见 7.2）和 Gemini 照片描述（定格时显示在标题下面，只显示、不影响音乐），key 用环境变量 `ELEVENLABS_API_KEY` / `GEMINI_API_KEY`。下面是最初的分工计划。
+> 已接入 DeskBand 本体：ElevenLabs 人声乐器（mouth 张嘴，见 7.2）和 Gemini 照片描述（定格时显示在标题下面，只显示、不影响音乐），key 用环境变量 `ELEVENLABS_API_KEY` / `GEMINI_API_KEY`。下面是最初的分工计划。
 
 优先级：**ElevenLabs > Gemini > OMNI**，Baseten 可选。所有 API key 放环境变量，脚本放 `tools/` 或新建 `integrations/`，不要碰 `deskband/` 里的音频代码，全部通过第 10 节的 UDP 指令接入。
 

@@ -17,7 +17,7 @@ DeskBand looks at a photo of your desk and turns every object it recognises into
 | glasses | King's Cross (Studio Strings ensemble) | sustained chords |
 | cell phone | Glockenspiel | high sparkle |
 | laptop or tablet | Soft FM electric piano (synthesised) | dotted-8th shimmer an octave up |
-| keys (key, keychain) | Voices: sung "ooh" samples made by ElevenLabs | a slow two-voice line on chord tones |
+| an open mouth (MediaPipe face landmarks, largest face) | Voices: sung "ooh" samples made by ElevenLabs | a slow two-voice line on chord tones |
 
 Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. Each capture gives that category a fresh random seed; its saved seed and selection survive a restart until it is captured again. A play / pause button beside the shutter silences the band without losing the selection. Nothing plays while the camera and the detector load: the restored band comes in at bar one once they are ready, and a photo, a tile or `p` brings it in sooner. Press `0` to clear the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
 
@@ -54,7 +54,9 @@ Camera frames use their original orientation and DeskBand shows the entire frame
 ```bash
 cd ~/Desktop/DeskBand
 /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
-.venv/bin/pip install ultralytics opencv-python sounddevice soundfile numpy scipy certifi pillow
+.venv/bin/pip install ultralytics opencv-python sounddevice soundfile numpy scipy certifi pillow "mediapipe==0.10.35"
+# face model for the open-mouth instrument (mediapipe 1.0.x crashes on macOS: Metal "Service is unavailable")
+mkdir -p weights && curl -L -o weights/face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 ```
 
 Optional API keys, read from the environment only (without one, that feature is off and everything else runs):
@@ -64,7 +66,7 @@ export GEMINI_API_KEY=...        # photo descriptions
 ```
 
 ```bash
-export ELEVENLABS_API_KEY=...    # the Voices instrument (keys)
+export ELEVENLABS_API_KEY=...    # the Voices instrument (open mouth)
 ```
 
 `DeskBand.app` started from Finder does not see shell variables; start it from a terminal, or use `launchctl setenv GEMINI_API_KEY ...` once per login.

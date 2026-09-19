@@ -121,12 +121,16 @@ class App:
     def pick(self, dets):
         """Choose one object, keeping the current target when it is still plausible.
 
-        An unseen shelf class wins first; otherwise confidence decides. A small
+        An open mouth wins outright (nobody holds that pose by accident), then an
+        unseen shelf class; otherwise confidence decides. A small
         confidence margin prevents the outline from jumping between similar
         detections on successive camera inference passes.
         """
         if not dets:
             return []
+        mouth = [d for d in dets if d.name == "mouth"]
+        if mouth:
+            return mouth[:1]
         best = max(dets, key=lambda d: (d.name not in self.shelf.entries, d.conf))
         current = self.preview_box
         if current is not None and time.time() - current.seen < 0.5:
@@ -600,6 +604,7 @@ class App:
             f"display {self.disp_fps:4.1f} fps   camera {v.cam_fps:4.1f} fps   detector {v.model_name} {v.fps:4.1f} fps / {v.infer_ms:3.0f} ms   audio {e.cpu * 100:3.0f}%  xruns {e.xruns}",
             f"chord {self.composer.chord_name}   step {e.step % C.STEPS_PER_PHRASE:2d}   phrase {e.step // C.STEPS_PER_PHRASE}",
             "  ".join(f"{d.alias} {d.conf:.2f}" for d in self.vision.snapshot()[1]) or "no detections",
+            "no face" if v.jaw is None else f"mouth open {v.jaw:.2f} (counts from {C.MOUTH_JAW:.2f})",
             "  ".join(f"{n}:{p.gain:.2f}" for n, p in e.parts.items() if p.gain > 0.01),
             "loaded: " + ", ".join(sorted(e.loaded)),
             f"zybo {self.zybo.status}   {'FPGA clock' if e.fpga_mode else 'Mac clock'}   math {'on' if self.composer.math else 'off'}   gemini {self.describer.status}",
