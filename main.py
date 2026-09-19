@@ -22,7 +22,8 @@ from deskband.music import Composer
 from deskband.remote import Remote
 from deskband.shelf import Shelf
 from deskband.synth import Engine
-from deskband.vision import Vision, merge_duplicates, open_camera
+from deskband.vision import Vision, echoes, merge_duplicates, open_camera
+from deskband.zybo import ZyboLink
 
 WINDOW = "DeskBand"
 W, H = 1280, 720
@@ -66,6 +67,7 @@ class App:
         self.dock_y = 72
         self.tile_mask = ui.rounded_mask(TILE, TILE, TILE_R).astype(np.float32) / 255.0
         self.remote = Remote(self.state_dict)
+        self.zybo = ZyboLink(on_lost=lambda: self.remote.commands.put({"cmd": "fpga_mode", "on": False}))
 
     # ------------------------------------------------------------ actions
     def shoot(self):
@@ -73,9 +75,10 @@ class App:
         if frame is None:
             return
         if self.vision.model is not None:                  # one careful look at the frozen frame
-            dets = merge_duplicates(dets + self.vision.detect(frame, C.SHOOT_IMGSZ))
+            dets = self.vision.careful(frame)
         names = {d.name for d in dets}
-        flicker = [d for n, d in self.vision.recent(0.5).items() if n not in names]   # smooth over dropouts
+        flicker = [d for n, d in self.vision.recent(0.5).items()                      # smooth over dropouts...
+                   if n not in names and d.conf >= C.DETECT_SURE and not echoes(d, dets)]
         dets = merge_duplicates(dets + flicker)       # ...without letting one object in under two names
         self.captured = (frame.copy(), dets)
         self.save_frame(frame, "shot")
@@ -397,6 +400,7 @@ class App:
             "  ".join(f"{d.alias} {d.conf:.2f}" for d in self.vision.snapshot()[1]) or "no detections",
             "  ".join(f"{n}:{p.gain:.2f}" for n, p in e.parts.items() if p.gain > 0.01),
             "loaded: " + ", ".join(sorted(e.loaded)),
+            f"zybo {self.zybo.status}   {'FPGA clock' if e.fpga_mode else 'Mac clock'}",
         ]
         y = 90
         for s in lines:
@@ -407,6 +411,7 @@ class App:
     def run(self):
         self.engine.start()
         self.remote.start()
+        self.zybo.start()                             # the FPGA conductor, whenever it is plugged in
         cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
         cv2.setMouseCallback(WINDOW, self.on_mouse)
         camera_ok, next_try = False, 0.0
@@ -461,6 +466,7 @@ class App:
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break
         finally:
+            self.zybo.stop()
             self.remote.stop()
             self.vision.stop()
             self.engine.stop()

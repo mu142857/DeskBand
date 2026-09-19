@@ -137,7 +137,19 @@ transport stopped and restores track 0 to full level.
 ```bash
 .venv/bin/pip install pyserial
 .venv/bin/python main.py
-.venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
+```
+
+`main.py` (and `dist/DeskBand.app`) finds the board by itself: every two
+seconds it sends `PING` to each `/dev/cu.usbserial-*` UART, skipping the JTAG
+half of the FT2232 pair, and starts `tools/zybo_bridge.py` as a child process
+on the port that answers `PONG`. If the board is unplugged, DeskBand returns to
+its own clock and keeps looking, so the board can be connected at any time. The
+debug panel (`d`) shows the link and which clock is running. Do not also run
+the bridge by hand while DeskBand is open; two readers would split the serial
+stream. Running it by hand is still useful without the app:
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 ```
 
 The bridge mirrors the Mac's vision-selected tracks and BPM into the FPGA,

@@ -63,6 +63,42 @@ def merge_duplicates(dets):
     return kept
 
 
+def area(b):
+    return max(0, b[2] - b[0]) * max(0, b[3] - b[1])
+
+
+def on_edge(box, shape, margin=2):
+    """Does the box run off the picture? Those are cut-off objects, the detector's weakest guesses."""
+    h, w = shape[:2]
+    return box[0] <= margin or box[1] <= margin or box[2] >= w - margin or box[3] >= h - margin
+
+
+def sliver(box, shape):
+    """A thin strip along the frame edge: a sleeve or a chair arm read as glasses or a phone."""
+    return on_edge(box, shape) and min(box[2] - box[0], box[3] - box[1]) < C.SLIVER_PX
+
+
+def confirm(dets, other, shape):
+    """Keep the sure detections; a weak one stays only if the other pass saw the
+    same thing in the same place (it need not have been confident about it)."""
+    kept = []
+    for d in dets:
+        if d.conf < C.DETECT_SURE:
+            need = C.CONFIRM_EDGE if on_edge(d.box, shape) else C.CONFIRM_CONF
+            if not any(o.name == d.name and o.conf >= need and iou(o.box, d.box) > 0.5 for o in other):
+                continue
+        kept.append(d)
+    return kept
+
+
+def echoes(d, current):
+    """Is this remembered detection just an earlier reading of something in `current`?
+    The object may have moved since, so this is looser than same_thing: similar size
+    and mostly overlapping. A pen on a book is far smaller than the book and passes."""
+    return any(inside(d.box, k.box) > 0.5 and min(area(d.box), area(k.box)) > 0.4 * max(area(d.box), area(k.box))
+               for k in current)
+
+
 def open_camera():
     """Open the webcam. Must be called on the main thread: macOS only shows
     the camera permission prompt for a request made from there."""
@@ -123,16 +159,27 @@ class Vision(threading.Thread):
         self.cap.release()
 
     # ---------------------------------------------------------- detection
-    def detect(self, frame, imgsz):
+    def detect(self, frame, imgsz, conf=None, merge=True):
         """Run the model once. Safe to call from any thread."""
         with self.model_lock:
             res = self.model.predict(frame, device="mps", imgsz=imgsz,
-                                     conf=C.DETECT_CONF, verbose=False)[0]
+                                     conf=conf or C.DETECT_CONF, verbose=False)[0]
         dets = []
         for cls, conf, xyxy in zip(res.boxes.cls, res.boxes.conf, res.boxes.xyxy):
             alias = self.model.names[int(cls)]
-            dets.append(Detection(C.ALIASES[alias], float(conf), [int(v) for v in xyxy.tolist()], alias))
-        return merge_duplicates(dets)
+            box = [int(v) for v in xyxy.tolist()]
+            if not sliver(box, frame.shape):
+                dets.append(Detection(C.ALIASES[alias], float(conf), box, alias))
+        return merge_duplicates(dets) if merge else dets
+
+    def careful(self, frame):
+        """The look that decides a photo: two passes at different sizes over the
+        frozen frame. False positives rarely survive a change of scale, real
+        objects do, so weak detections must show up in both."""
+        a = self.detect(frame, C.DETECT_IMGSZ, C.DETECT_FLOOR, merge=False)   # unmerged: a one-pass fluke must
+        b = self.detect(frame, C.SHOOT_IMGSZ, C.DETECT_FLOOR, merge=False)    # not outrank a reading both agree on
+        sure = [d for d in a if d.conf >= C.DETECT_CONF], [d for d in b if d.conf >= C.DETECT_CONF]
+        return merge_duplicates(confirm(sure[0], b, frame.shape) + confirm(sure[1], a, frame.shape))
 
     def run(self):
         try:

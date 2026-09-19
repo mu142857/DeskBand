@@ -144,6 +144,11 @@ REMOTE_STATE_HZ = 20
 # --- vision
 CAMERA_INDEX = 0
 DETECT_CONF = 0.25          # open-vocabulary scores run low; press d to see them
+DETECT_SURE = 0.50          # at or above this a detection stands on its own
+DETECT_FLOOR = 0.10         # photo only: how faint the second pass's agreement may be...
+CONFIRM_CONF = 0.10         # ...for a weak detection (DETECT_CONF..DETECT_SURE) to be kept
+CONFIRM_EDGE = 0.15         # stricter for boxes cut off by the frame edge
+SLIVER_PX = 40              # boxes thinner than this along the frame edge are dropped
 DETECT_MODEL = "yolov8l-worldv2.pt"            # the large model recognises far more reliably
 DETECT_MODEL_FALLBACK = "yolov8s-worldv2.pt"   # used when the large weights are not present
 DETECT_IMGSZ = 960          # live preview: ~115 ms per frame with the large model on an M2 Pro
