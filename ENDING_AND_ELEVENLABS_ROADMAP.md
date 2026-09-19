@@ -1,6 +1,6 @@
 # DeskBand ending screen, loop export, and ElevenLabs song roadmap
 
-Status: Milestone 1 implemented. Milestones 0 and 2–5 remain open.
+Status: Milestones 0–1 complete. Milestones 2–5 remain open.
 
 ## Product flow and decisions
 
@@ -9,6 +9,14 @@ Status: Milestone 1 implemented. Milestones 0 and 2–5 remain open.
 3. The user can adjust which collected entries are included, then choose **Render loop**. DeskBand freezes that selection and the active BPM/chords into a session snapshot, renders one complete chord cycle, and offers playback plus a local WAV file. The default progression has four bars; at 120 BPM its duration is 8 seconds. If a remote `style` command changed the progression length, the UI must show and render the actual cycle length rather than claim it is always four bars.
 4. After rendering, **Make a full song with ElevenLabs** uploads that exact WAV and generates a longer track. The default experience keeps the DeskBand clip unchanged as the intro and asks ElevenLabs Music v2.5 to continue it. The output is saved locally and can be played from the ending screen. This is an explicit, potentially paid network action; no upload starts when the user merely opens the screen.
 5. **Back to collecting** returns to the previous camera state with the shelf intact. Changing the selection, BPM, chord progression, or an item's motif invalidates the old render as the *current* song. The previous WAV remains on disk but cannot be sent as if it represents the new selection.
+
+### Locked screen copy and file contract
+
+- **Collected** counts all saved shelf categories, including those switched off. **In this song** labels each card's selection toggle and counts only selected categories. A collected item can therefore be left out of the mix without being forgotten.
+- **Finish** opens the `SUMMARY` state in the existing OpenCV window. **Back to collecting** returns to the previous preview or frozen-photo state. **Render loop** renders one complete active chord progression from bar one; its button is disabled when the song has no selected parts.
+- **Continue with ElevenLabs** appears only after a current local render exists. Its action explicitly says the WAV will be uploaded and generation may use paid credits; opening the summary never starts an upload. **Render again** replaces the current result after a sound-changing edit.
+- Export exactly one complete progression to a stereo 16-bit PCM WAV at the app's output sample rate. The default is four bars and about eight seconds at 120 BPM; always show the actual bar count and computed duration. The full-song target is roughly 30–45 seconds, with the local loop kept unchanged at the beginning. The exact generated duration is shown from the resulting file.
+- Store loop WAVs under `cache/exports/`, song audio and job metadata under `cache/songs/`, and any service response/debug payloads under `cache/`. Never write API keys to these files. All three locations are ignored by Git. Python packages come from `requirements.txt` installed into `.venv`; the cloud calls use standard-library `urllib` and read `ELEVENLABS_API_KEY` from the process environment.
 
 ### Important current-code facts
 
@@ -30,11 +38,11 @@ Status: Milestone 1 implemented. Milestones 0 and 2–5 remain open.
 
 **Goal:** everyone implements the same meaning of “collected,” “melody,” and “based on my loop.”
 
-- [ ] M0.1 Confirm the ending screen is a new state in the existing OpenCV window, with **Finish** and **Back to collecting** navigation (`main.py`).
-- [ ] M0.2 Define copy for **Collected**, **In this song**, **Render loop**, and **Continue with ElevenLabs** so saved items and selected items are visibly different.
-- [ ] M0.3 Choose the initial output contract: one active chord cycle, stereo WAV, original clip retained as the full-song intro, approximately 30–45 seconds for the complete generated track. Display the actual bar count and duration.
-- [ ] M0.4 Add a direct dependency list or lock file for the Python packages the new integration imports. Keep installation scoped to `.venv`; read `ELEVENLABS_API_KEY` from the process environment.
-- [ ] M0.5 Add ignored directories for generated exports and song results if `cache/` is not sufficient. Confirm `git status` cannot include audio, thumbnails, credentials, or API responses by accident.
+- [x] M0.1 Confirm the ending screen is a new state in the existing OpenCV window, with **Finish** and **Back to collecting** navigation (`main.py`).
+- [x] M0.2 Define copy for **Collected**, **In this song**, **Render loop**, and **Continue with ElevenLabs** so saved items and selected items are visibly different.
+- [x] M0.3 Choose the initial output contract: one active chord cycle, stereo WAV, original clip retained as the full-song intro, approximately 30–45 seconds for the complete generated track. Display the actual bar count and duration.
+- [x] M0.4 Add a direct dependency list or lock file for the Python packages the new integration imports. Keep installation scoped to `.venv`; read `ELEVENLABS_API_KEY` from the process environment.
+- [x] M0.5 Keep generated exports, song results, thumbnails, credentials, and API responses in ignored locations. Verify the ignore rules with `git check-ignore` and inspect `git status`.
 
 **Done when:** the product flow and local file formats are documented with no ambiguous “saved means playing” behavior.
 

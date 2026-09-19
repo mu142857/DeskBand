@@ -1,0 +1,12 @@
+# Direct dependencies for the desktop app, offline WAV rendering, and Zybo bridge.
+# Install with .venv/bin/python -m pip install -r requirements.txt.
+# Gemini and ElevenLabs requests use Python's standard-library urllib.
+certifi
+numpy
+opencv-python
+Pillow
+pyserial
+scipy
+sounddevice
+soundfile
+ultralytics

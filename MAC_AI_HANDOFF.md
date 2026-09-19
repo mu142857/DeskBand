@@ -58,7 +58,7 @@ dependencies:
 
 ```bash
 /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
-.venv/bin/pip install ultralytics opencv-python sounddevice soundfile numpy scipy certifi pillow pyserial
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 The first application run downloads YOLO-World and CLIP weights. Internet is
@@ -230,12 +230,8 @@ the checksum or FPGA/firmware sources change.
 ## Mac preparation
 
 Use the existing project `.venv` if it is already configured. Otherwise follow
-the top-level `README.md`; the full application needs its existing vision/audio
-packages and Apple Logic/GarageBand sample library. Add only `pyserial`:
-
-```bash
-.venv/bin/pip install pyserial
-```
+the top-level `README.md`; `requirements.txt` includes the vision/audio packages
+and `pyserial`. The sample library still comes from Apple Logic/GarageBand.
 
 The repo intentionally does not include model weights, Logic samples or camera
 captures. Missing sample libraries can make individual instruments silent even

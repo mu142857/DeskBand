@@ -188,7 +188,7 @@ cd ~/Desktop/DeskBand && /Library/Frameworks/Python.framework/Versions/3.11/bin/
 ```
 
 ```bash
-.venv/bin/pip install ultralytics opencv-python sounddevice soundfile numpy scipy certifi pillow
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 解包两个音色（各几分钟，只需一次）：
@@ -588,7 +588,7 @@ while True:
         s.sendto(b'{"cmd":"subscribe","hz":20}', ADDR)     # 超时就重新订阅
 ```
 
-**没有网络、只有串口的板子（Zybo 的 UART、USB 串口的胸牌）**：在 Mac 上跑一个十几行的桥接脚本，把串口的每一行转成 UDP 包，把状态包转回串口。需要先 `.venv/bin/pip install pyserial`。
+**没有网络、只有串口的板子（Zybo 的 UART、USB 串口的胸牌）**：在 Mac 上跑一个十几行的桥接脚本，把串口的每一行转成 UDP 包，把状态包转回串口。`pyserial` 已包含在 `requirements.txt` 中。
 
 ```python
 import json, socket, serial                      # tools 目录下自己建一个 serial_bridge.py

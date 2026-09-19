@@ -54,7 +54,7 @@ Camera frames use their original orientation and DeskBand shows the entire frame
 ```bash
 cd ~/Desktop/DeskBand
 /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
-.venv/bin/pip install ultralytics opencv-python sounddevice soundfile numpy scipy certifi pillow
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 Optional API keys, read from the environment only (without one, that feature is off and everything else runs):
@@ -64,10 +64,12 @@ export GEMINI_API_KEY=...        # photo descriptions
 ```
 
 ```bash
-export ELEVENLABS_API_KEY=...    # the Voices instrument (headphones)
+export ELEVENLABS_API_KEY=...    # Voices instrument; future full-song continuation
 ```
 
 `DeskBand.app` started from Finder does not see shell variables; start it from a terminal, or use `launchctl setenv GEMINI_API_KEY ...` once per login.
+
+All Python packages are installed through `.venv/bin/python`; the ElevenLabs and Gemini calls use standard-library HTTPS and need no SDK. Keep API keys in the process environment, never in a committed file. Future loop WAVs, generated songs, and API job files belong under the ignored `cache/` directory.
 
 The first run downloads the YOLO-World weights (`yolov8l-worldv2.pt`, ~90 MB; the 25 MB `yolov8s-worldv2.pt` is used if the large one is missing) and the CLIP text encoder (~340 MB), and macOS asks for camera access.
 
@@ -90,10 +92,9 @@ Optional but recommended, the two sounds the piece is written for (both are unpa
 Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `p` or return play / pause · `m` math mode on / off · `tab` camera / stage · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
 
 With the Zybo's J12 `PROG/UART` port connected using a Micro-USB data cable,
-install `pyserial` and run the bridge in a second terminal:
+run the bridge in a second terminal (`pyserial` is included in `requirements.txt`):
 
 ```bash
-.venv/bin/pip install pyserial
 .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 ```
 
