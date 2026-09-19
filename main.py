@@ -709,7 +709,7 @@ class App:
         x0, y0, x1, y1 = self.finish_button
         hover = contains(self.finish_button, *self.mouse)
         ui.outline(out, x0, y0, x1, y1, 21, 0.92 if hover else 0.65)
-        ui.text(out, "Finish  →", (x0 + x1) // 2, y0 + 10, 18,
+        ui.text(out, "Collections  →", (x0 + x1) // 2, y0 + 10, 18,
                 0.98 if hover else 0.82, "Medium", align="center")
         ui.text(out, "e  ·  collection", (x0 + x1) // 2,
                 self.shutter[1] + self.shutter[2] + 10, 13, 0.55,
