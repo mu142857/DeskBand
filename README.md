@@ -18,7 +18,7 @@ DeskBand looks at a photo of your desk and turns every object it recognises into
 | cell phone | Glockenspiel | high sparkle |
 | laptop or tablet | Soft FM electric piano (synthesised) | dotted-8th shimmer an octave up |
 
-An empty desk is silent: the band is exactly what you photographed, played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
+Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. A play / pause button beside the shutter silences the band without losing the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
 
 The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](INSTRUMENTS.txt).
 
@@ -28,12 +28,12 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 
 ## How it works
 
-- **Vision:** YOLO-World (`ultralytics`) with the object names given as text prompts, so classes that are not in COCO (pen, glasses, tablet) work without training; each instrument accepts several synonyms. The large model runs on Apple Silicon via `mps` in its own thread at 960 px while a separate capture thread keeps the preview smooth, and the frozen photo gets one more pass at full resolution.
+- **Vision:** YOLO-World (`ultralytics`) with the object names given as text prompts, so classes that are not in COCO (pen, glasses, tablet) work without training; each instrument accepts several synonyms, and one object read under two names is counted once. The large model runs on Apple Silicon via `mps` in its own thread at 960 px while a separate capture thread keeps the preview smooth, and the frozen photo gets one more pass at full resolution.
 - **Music:** a fixed loop of four close voicings, one bar each at 120 BPM: `F A C E` → `G B D E` → `E G B D` → `E A B C`. They move by step and keep common tones, which gives the hovering, blurred harmony. The bass always plays the chord root (F, G, E, A). The piano rolls each voicing softly and lets it ring into the next bar, then adds a sparse line on top: one motif per trip round the loop, restated over each chord. Melodic notes come only from the C major pentatonic scale, which fits all four chords, so random choices always sound right. The rhythm skeleton is a 3-3-2 accent pattern (the quantise-everything idea is Mikutap's). Everything lands on a 16th-note grid.
 - **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a long Schroeder hall reverb. The engine runs at the output device's own sample rate, and the master bus uses a gain-riding limiter rather than clipping. The audio callback never blocks on vision; a slow frame only delays the picture.
-- **Remote port:** JSON over UDP (port 9000) so a badge, an FPGA board or another program can take the photo, force parts on and off, change tempo and chords, play a sound in time, and subscribe to the beat. `tools/remote_sim.py` is a dependency-free simulator of it. Protocol in [HANDOFF.md](HANDOFF.md) section 10.
+- **Remote port:** JSON over UDP (port 9000) so a badge, an FPGA board or another program can take the photo, switch saved instruments on and off, change tempo and chords, play a sound in time, and subscribe to the beat. `tools/remote_sim.py` is a dependency-free simulator of it. Protocol in [HANDOFF.md](HANDOFF.md) section 10.
 - **FPGA conductor:** a Zybo Z7-20 owns the master beat clock, seven-track pattern sequencer, beat-quantized controls, envelopes and LFOs. Its Cortex-A9 firmware bridges the programmable logic to the Mac over UART, while the Mac keeps vision and audio synthesis. See [fpga/README.md](fpga/README.md).
-- **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake.
+- **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, the shelf of saved instruments, and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake.
 
 ## Requirements
 
@@ -67,7 +67,7 @@ Optional but recommended, the two sounds the piece is written for (both are unpa
 .venv/bin/python main.py
 ```
 
-Keys: `space` shoot / retake · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
+Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`7` (counting from the top) switch a saved instrument on or off · `p` or return play / pause · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
 
 With the Zybo's J12 `PROG/UART` port connected using a Micro-USB data cable,
 install `pyserial` and run the bridge in a second terminal:
@@ -110,6 +110,7 @@ deskband/sampler.py    sample loading and key maps
 deskband/fx.py         hall reverb
 deskband/ui.py         drawing primitives (duotone, outlines, text, cards)
 deskband/remote.py     UDP/JSON remote-control port
+deskband/shelf.py      saved instruments (thumbnails + selection), kept in cache/shelf/
 deskband/fpga_protocol.py  Zybo UART command/event codec
 fpga/                  RTL, simulations, Zynq firmware, Vivado/Vitis builds
 styles/                example chord loops for the remote "style" command

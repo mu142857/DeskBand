@@ -106,7 +106,8 @@ PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 The bridge should report the serial device at 115200 baud and DeskBand UDP
 port 9000. Press Zybo BTN0, the spacebar or the onscreen shutter once to take a
 photo. The detected instruments must then loop continuously without taking
-more photos. Press BTN0 again to stop and return to preview.
+more photos. Press BTN0 again to return to the camera (the music keeps
+playing) and BTN1, `p` or the on-screen button to pause and resume.
 
 ## Do not change these architectural decisions
 
@@ -119,8 +120,12 @@ more photos. Press BTN0 again to stop and return to preview.
   FPGA architecture change.
 - The Mac bridge's repeated `fpga_mode` keepalive must remain idempotent. It
   must not clear queued hardware events every four seconds.
-- Preview mode stops the FPGA transport. Entering show mode resets/starts it.
-  This keeps BTN0, the spacebar and the onscreen shutter consistent.
+- The transport follows the band, not the photo mode. DeskBand keeps shot
+  instruments on a shelf and the band plays in preview as well, so the bridge
+  resets/starts the transport when the first track starts sounding and stops it
+  when the band is paused (`play` command, BTN1, `p`) or empty. The engine
+  re-anchors its tick-to-sample mapping whenever ticks restart or arrive late,
+  so every restart keeps the scheduling lookahead.
 
 ## Verified implementation
 
@@ -288,8 +293,12 @@ Values 7–15 wrap modulo seven.
 
 Physical controls:
 
-- BTN0: preview → take photo, reset/start transport; show → retake, stop.
-- BTN1: mute/unmute the selected track at the next beat boundary.
+- BTN0: DeskBand shutter. Preview → take photo (its objects join the band);
+  show → back to the camera. The music keeps playing either way.
+- BTN1: DeskBand play / pause, the same master switch as the button beside the
+  on-screen shutter. Paused: mask 0, transport stopped, shelf selection kept.
+  (Until the firmware is rebuilt without its local BTN0/BTN1 actions, the bridge
+  restates transport and mask after each press; see fpga/README.md.)
 - BTN2: fade selected track to/from zero over 400 × 10 ms = 4 seconds.
 - BTN3: toggle the selected track's hardware triangle-LFO modulation.
 - LEDs: switches while stopped; low four bits of the step while running.
@@ -299,15 +308,18 @@ Physical controls:
 Record the result of every item rather than changing several layers at once:
 
 1. Board smoke test prints its exact PASS line.
-2. In preview, music is silent and LEDs mirror the switches.
+2. With an empty shelf (or everything deselected with `0`), music is silent and
+   the LEDs mirror the switches.
 3. BTN0 takes one photo; within the fixed scheduling lookahead, the detected
    instruments begin and the LEDs count continuously through 16 steps.
-4. Music continues looping without taking another photo.
-5. Select an audible track and verify BTN1 changes it on a beat, not midway
-   through an arbitrary step.
+4. BTN0 again returns to the camera and the music keeps looping; a second photo
+   of another object adds it to the band.
+5. BTN1 pauses: silence within about half a second, LEDs mirror the switches,
+   the shelf thumbnails stay selected. BTN1 again resumes from the top of the
+   bar. `p` and the on-screen button do the same.
 6. BTN2 audibly reaches silence/full scale after approximately four seconds.
 7. BTN3 creates/removes periodic amplitude modulation on that track.
-8. BTN0 retakes/stops; spacebar and onscreen shutter also start/stop correctly.
+8. Spacebar and the on-screen shutter behave exactly like BTN0.
 9. Change BPM through the existing remote/UI path and verify board events and
    Mac audio remain aligned after the resynchronization.
 10. Run for at least ten minutes: no `ERR FIFO_OVERFLOW`, no growing drift, no

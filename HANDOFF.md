@@ -16,7 +16,7 @@
 cd ~/Desktop/DeskBand && .venv/bin/python main.py
 ```
 
-或者直接双击 `dist/DeskBand.app`。操作：`空格` 拍照 / 重拍，`s` 存当前画面，`d` 调试面板，`f` 全屏，`q` 退出。
+或者直接双击 `dist/DeskBand.app`。操作：`空格` 拍照 / 重拍，点右侧乐器架上的缩略图（或 `1`–`7`）开关已保存的乐器，`p`（或快门右边的按钮）演奏 / 暂停，`0` 全部取消选择，`s` 存当前画面，`d` 调试面板，`f` 全屏，`q` 退出。
 
 **现在的状态**
 
@@ -51,7 +51,19 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 1. 启动后是实时预览：画面是低饱和的灰调，被认出的物体有一个很淡的细线圆角框，左下角毛玻璃卡片写着 "On the desk" 和当前看到的物体。此时**没有声音**（空桌 = 安静，这是 Aaron 明确要的）。
 2. 按空格（或点屏幕下方的圆形快门）：画面闪白并定格。程序对定格的这一帧再做一次全分辨率精识别。
 3. 定格画面里，每个物体的框内恢复彩色，框旁写着 `物体 · 乐器`，对应乐器开始演奏。某个乐器发声的瞬间，它的框会轻微放大、变亮（"呼吸"）。卡片标题变成 "Band"，右上角显示当前和弦。
-4. 再按空格：回到预览，声部约 2 秒内淡出，重新摆、重新拍。
+4. 再按空格：回到预览，**音乐不停**。再拍下一样东西，它就加入乐队。乐队是一样一样拍出来的，不需要七样东西同时入镜。
+
+**乐器架（画面右侧一列缩略图）**
+
+- 每次拍照，照片里认出的物体会被裁成缩略图存进自己的槽，并且立刻点亮（开始演奏）。同一种物体重拍，新照片覆盖旧的。
+- 乐器架一开始是**空的，什么都不显示**。第一样被认出并拍下的东西排在最上面，之后按拍到的先后往下排（每种乐器最多一格；同一种东西重拍只换图片，位置不变）。
+- **乐队 = 乐器架上点亮的格子**。点一下（或按 `1`–`7`，从上往下数）开关这件乐器，物体不需要还在镜头前。点亮的是彩色的，发声时边框跟着闪；关掉的是灰的。
+- **演奏 / 暂停键**（快门右边的小圆钮，键盘 `p` 或回车）：总开关。暂停 = 全部静音，但乐器架上的选择保留，再按一下原样恢复。
+- **一个物体只算一次**：同一个东西被读成两个名字（杯子同时被认成 cup 和 bottle）或者同类的大框套小框（整个杯子 + 杯把），只保留置信度最高的那个框；笔放在书上这种“在里面但框差很多”的情况两个都保留。逻辑在 `deskband/vision.py` 的 `same_thing()`。
+- `0`：全部静音，但保存的东西都还在（换下一位评委时用）。
+- 右键点槽，或鼠标悬停在槽上按 `x`：删除这个槽。
+- 存在 `cache/shelf/`（每个槽一张 jpg + `shelf.json`），**重启后还在**，启动时全部是关的。这个目录不进 git（缩略图里可能有人脸）。
+- 代码：`deskband/shelf.py`（存取），`main.py` 的 `draw_dock / slot_at / select / forget / silence`。
 
 **物体 → 乐器**（定义在 `deskband/config.py` 的 `INSTRUMENTS`）
 
@@ -208,7 +220,11 @@ tools/build_app.sh
 
 | 按键 | 作用 |
 |---|---|
-| `空格` 或点击快门 | 预览 → 拍照定格并开始演奏；再按 → 回到预览 |
+| `空格` 或点击快门 | 预览 → 拍照定格，照片里的物体存进乐器架并开始演奏；再按 → 回到预览（音乐不停） |
+| 点击乐器架上的缩略图，或 `1`–`7`（从上往下数） | 开关一件已保存的乐器 |
+| `p` / 回车 / 点快门右边的小圆钮 | 演奏 / 暂停（总开关，选择保留） |
+| `0` | 乐器架全部取消选择，保存的东西不丢 |
+| 右键点槽，或悬停在槽上按 `x` | 删除这个槽里保存的乐器 |
 | `s` | 把当前实时画面存到 `cache/shots/frame_时间.jpg`（屏幕轻闪一下）。用于收集"认不出来"的样本 |
 | `d` | 调试面板开关 |
 | `f` | 全屏开关 |
@@ -251,7 +267,8 @@ tools/build_app.sh
                             └→ 识别线程 → detections / last_seen
 按快门 → App.shoot():
     定格帧 + 实时检测结果 + 1280 精识别 + 最近 0.5 秒见过的物体  → 合并去重
-    → photo_parts（照片里的物体集合）→ 再叠加远程强制开关 (manual)
+    → 每个物体裁缩略图存进乐器架 (Shelf.add) 并点亮
+    → 乐队 = 乐器架上点亮的槽 (Shelf.selected) → 再叠加远程强制开关 (manual)
     → engine.set_active(声部, 开/关)     （音量在约 2 秒内平滑过渡）
 
 音频回调每个块：
@@ -455,7 +472,10 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 | `{"cmd":"shoot"}` | 拍照（仅在预览状态有效） |
 | `{"cmd":"retake"}` | 回到预览（仅在定格状态有效） |
 | `{"cmd":"toggle"}` | 等同于按空格 |
-| `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管照片里有没有。`"on": null` = 取消强制，重新听照片的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop` |
+| `{"cmd":"play","on":true}` | 演奏 / 暂停总开关，等同于快门右边的按钮。不带 `on`（或 `null`）= 切换。暂停时所有 `parts[x].on` 都是 false，但 `selected` 不变。**Zybo 的 BTN1 发的就是这个** |
+| `{"cmd":"select","name":"cup","on":true}` | 开关乐器架上一件**已保存**的乐器，等同于点击那个槽。不带 `on`（或 `null`）= 切换。没保存过的会被忽略。**硬件按键选乐器用这个** |
+| `{"cmd":"silence"}` | 乐器架全部关掉，保存的东西不丢（等同于按 `0`） |
+| `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop` |
 | `{"cmd":"sfx","file":"/绝对路径.wav","gain":0.6}` | 播放一个声音文件。**会等到下一个八分音符才响**（和 Mikutap 一样，所以永远在拍子上），经过混响和限幅器。支持 wav/aiff/flac 等 libsndfile 能读的格式，最长 20 秒，任意采样率。文件必须在**运行 DeskBand 的那台 Mac 上** |
 | `{"cmd":"bpm","value":110}` | 改速度，60–180，立即生效 |
 | `{"cmd":"style","chords":[...],"bpm":120}` | 换和弦循环，**在当前循环走完、回到开头时**生效，所以永远落在强拍上。格式见 10.4 |
@@ -468,14 +488,18 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 {"type":"state","mode":"show","bpm":120.0,"bar":12,"step":6,"beat":1,"beat_phase":0.5,
  "chord":"G6","chord_index":1,
  "parts":{"cup":{"on":true,"glow":0.83},"pen":{"on":false,"glow":0.0}, "...":{}},
- "detected":["cup","tablet"]}
+ "detected":["cup","tablet"],
+ "playing":true,"saved":["pen","cup"],"selected":["cup"]}
 ```
 
-- `mode`：`preview`（预览，无声）或 `show`（定格演奏中）
+- `mode`：`preview`（实时预览）或 `show`（照片定格中）。两种状态下乐队都可能在演奏，是否有声看 `parts`
 - `bar`：从启动起的小节数；`step`：小节内第几个十六分音符（0–15）；`beat`：第几拍（0–3）；`beat_phase`：当前这一拍走到哪（0–1）
 - 以上时间量**已经扣掉了输出延迟**，对应"此刻耳朵听到的"
 - `parts[x].on`：这个声部是否在乐队里；`parts[x].glow`：它刚发过声的程度，发声瞬间为 1，之后按约 0.22 秒的时间常数衰减，**直接拿去驱动 LED 亮度就是"跟着音乐闪"**
 - `detected`：当前画面（或定格照片）里认出的东西，用的是屏幕上显示的名字
+- `playing`：演奏 / 暂停总开关的状态
+- `saved`：乐器架上已经保存的乐器，**顺序就是乐器架从上到下的顺序**（先拍到的在前）；`selected`：其中点亮的。两者用的都是 `INSTRUMENTS` 的 key
+- 判断“现在有没有声音”看 `parts[x].on`（= 被选中 **且** 没有暂停），不要看 `mode`：预览状态下乐队也可以在演奏
 
 **做灯光同步的建议**：UDP 有几毫秒到几十毫秒的抖动。要求不高就直接用 `glow` 和 `beat`。要求高（比如 LED 严格卡拍）就在设备端自己跑一个相位累加器：`phase += dt * bpm / 60`，每收到一个状态包用 `beat_phase` 轻轻校正一次，而不是每包硬跳。
 
@@ -529,7 +553,7 @@ while True:
 .venv/bin/python tools/remote_test.py style styles/descending.json
 ```
 
-其它子命令：`ping / shoot / retake / toggle / state / part cup on|off|auto / sfx 文件 [增益] / bpm 110`。连别的机器：`DESKBAND_HOST=192.168.x.x .venv/bin/python tools/remote_test.py ping`。
+其它子命令：`ping / shoot / retake / toggle / silence / state / select cup [on|off] / part cup on|off|auto / sfx 文件 [增益] / bpm 110`。连别的机器：`DESKBAND_HOST=192.168.x.x .venv/bin/python tools/remote_test.py ping`。
 
 **MicroPython（ESP32 一类带 WiFi 的板子）**
 

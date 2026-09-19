@@ -75,6 +75,14 @@ BACKING = dict(level=1.0, send=0.15, vinyl=False, sub=False, perc=False)
 LIB_LOGIC = "/Library/Application Support/Logic/EXS Factory Samples"
 LIB_GB = "/Library/Application Support/GarageBand/Instrument Library/Sampler/Sampler Files"
 LIB_LOOPS = "/Library/Audio/Apple Loops/Apple"
+# The libraries above may live on an external disk. tools/copy_samples.py copies
+# just the files used here into samples/<kind>/ (kept in git), which wins when present.
+LOCAL_SAMPLES = os.path.join(ROOT, "samples")
+
+
+def sample_dir(kind, library_dir):
+    local = os.path.join(LOCAL_SAMPLES, kind)
+    return local if os.path.isdir(local) else library_dir
 
 # pitch: how the MIDI note is read from the file name.
 #   "prefix3"  -> leading 3-digit MIDI number     (060_C3KM56_M.wav)

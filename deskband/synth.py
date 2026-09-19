@@ -360,10 +360,16 @@ class Engine:
         if self.fpga_mode:
             while self.fpga_input:
                 tick, step, event_mask, active_mask = self.fpga_input.popleft()
-                if self.fpga_origin_tick is None:
+                at = None
+                if self.fpga_origin_tick is not None:
+                    at = self.fpga_origin_sample + (tick - self.fpga_origin_tick) * self.step_len
+                # First tick, or the transport was stopped / reset / restarted (pause,
+                # a new photo): the old mapping would put this tick in the past, so
+                # anchor again and keep the lookahead.
+                if at is None or tick <= self.fpga_origin_tick or at < self.pos - self.step_len:
                     self.fpga_origin_tick = tick
                     self.fpga_origin_sample = self.pos + self.fpga_lookahead_steps * self.step_len
-                at = self.fpga_origin_sample + (tick - self.fpga_origin_tick) * self.step_len
+                    at = self.fpga_origin_sample
                 self.fpga_pending.append((at, tick, event_mask, active_mask))
             while self.fpga_pending and self.fpga_pending[0][0] < end:
                 at, tick, event_mask, active_mask = self.fpga_pending.popleft()

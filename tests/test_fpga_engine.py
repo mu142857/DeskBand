@@ -38,6 +38,26 @@ def test_fpga_engine():
 
     assert composer.steps == [10, 11]
     assert triggered == [("cup", 2 * engine.step_len)]
+
+    # Transport reset and restarted (pause/play, a new photo): ticks start again
+    # from 0 and must be scheduled ahead of now again, not in the past.
+    del triggered[:]
+    restart = engine.pos
+    engine.queue_fpga_event(0, 0, 0x01, 0x01)
+    engine.queue_fpga_event(1, 1, 0x01, 0x01)
+    for _ in range(20):
+        engine._callback(np.zeros((C.BLOCK_SIZE, 2), np.float32), C.BLOCK_SIZE, None, None)
+    assert triggered == [("cup", restart + 2 * engine.step_len), ("cup", restart + 3 * engine.step_len)]
+
+    # Stopped and started without a reset: the count carries on after a long gap.
+    del triggered[:]
+    for _ in range(100):                                   # a couple of seconds of silence
+        engine._callback(np.zeros((C.BLOCK_SIZE, 2), np.float32), C.BLOCK_SIZE, None, None)
+    resume = engine.pos
+    engine.queue_fpga_event(2, 2, 0x01, 0x01)
+    for _ in range(20):
+        engine._callback(np.zeros((C.BLOCK_SIZE, 2), np.float32), C.BLOCK_SIZE, None, None)
+    assert triggered == [("cup", resume + 2 * engine.step_len)]
     engine.set_fpga_controls([255] * 7, [0, 1, 2, 3, 4, 5, 6])
     assert engine.fpga_controls[1][-1] == 6
     engine.set_fpga_mode(False)

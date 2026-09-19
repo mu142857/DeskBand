@@ -45,7 +45,7 @@ def main():
     address = (args.host, args.udp_port)
     current_mask = None
     current_bpm = None
-    current_mode = None
+    current_run = None
     last_subscribe = 0.0
 
     def serial_command(command):
@@ -88,8 +88,15 @@ def main():
                               "levels": message.fields[:7], "lfos": message.fields[7:]})
                 elif message and message.kind == "BTN":
                     live, pressed, released, switches = message.fields
-                    if pressed & 1:
+                    if pressed & 1:                      # BTN0: the shutter
                         send_json(udp, address, {"cmd": "toggle"})
+                    if pressed & 2:                      # BTN1: play / pause, like the button beside the shutter
+                        send_json(udp, address, {"cmd": "play"})
+                    if pressed & 3:
+                        # The flashed firmware also acts on these two by itself (BTN0 flips
+                        # the transport, BTN1 flips the selected track's mask bit). DeskBand
+                        # decides both now, so state them again from its next state packet.
+                        current_run = current_mask = None
                     print(f"[zybo] buttons={live:x} pressed={pressed:x} selector={switches:x}")
                 elif message and message.kind in {"ERR", "FATAL"}:
                     print("[zybo]", raw.decode(errors="replace").strip())
@@ -103,23 +110,25 @@ def main():
                     continue
                 if packet.get("type") != "state":
                     continue
-                mode = packet.get("mode")
-                if mode != current_mode:
-                    if mode == "show":
-                        serial_command("RESET"); serial_command("START")
-                    else:
-                        serial_command("STOP")
-                    current_mode = mode
                 bpm = int(round(packet.get("bpm", 120)))
                 if bpm != current_bpm:
                     serial_command(command_tempo(bpm)); current_bpm = bpm
+                # The band lives on DeskBand's shelf and plays in preview too, so the
+                # transport follows "is anything sounding", not the photo mode:
+                # parts[x].on is already false for everything while paused.
                 mask = 0
-                if packet.get("mode") == "show":
-                    for track, name in enumerate(TRACKS):
-                        if packet.get("parts", {}).get(name, {}).get("on"):
-                            mask |= 1 << track
+                for track, name in enumerate(TRACKS):
+                    if packet.get("parts", {}).get(name, {}).get("on"):
+                        mask |= 1 << track
                 if mask != current_mask:
                     serial_command(command_mask(mask, "BEAT")); current_mask = mask
+                run = mask != 0
+                if run != current_run:
+                    if run:
+                        serial_command("RESET"); serial_command("START")
+                    else:
+                        serial_command("STOP")
+                    current_run = run
             time.sleep(0.001)
     except KeyboardInterrupt:
         print("\n[zybo] stopping")

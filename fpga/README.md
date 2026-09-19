@@ -34,10 +34,25 @@ seven):
 
 | Button | Action |
 |---|---|
-| BTN0 | start/stop FPGA transport and toggle DeskBand photo/retake |
-| BTN1 | mute/unmute selected track on the next beat |
+| BTN0 | DeskBand shutter: take the photo / go back to the camera |
+| BTN1 | DeskBand play / pause, the same switch as the button beside the on-screen shutter |
 | BTN2 | fade selected track to/from silence over 400 control updates |
 | BTN3 | enable/disable the selected track's hardware triangle LFO |
+
+BTN0 and BTN1 are decided on the Mac: `tools/zybo_bridge.py` turns the `BTN`
+record into DeskBand's `toggle` and `play` commands, and DeskBand's state then
+sets the transport and the track mask. The band lives on DeskBand's shelf and
+keeps playing in preview, so the transport runs whenever any track is sounding
+and stops when the band is paused or empty; it no longer follows photo mode.
+
+The firmware image flashed today still reacts to these two buttons by itself as
+well (BTN0 flips the transport, BTN1 flips the selected track's mask bit). The
+bridge restates the transport and the mask right after either press, so
+DeskBand wins within one state packet (50 ms); a press in the last few
+milliseconds before a beat can let the board's own mask change through for one
+beat. Removing the `presses & 1u` and `presses & 2u` blocks from
+`report_controls()` in `ps/src/main.c` at the next firmware rebuild closes that
+gap; nothing on the Mac has to change when that happens.
 
 While stopped, the four LEDs mirror the switches. While running, they display
 the low four bits of the 16-step position.

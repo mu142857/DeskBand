@@ -1,9 +1,11 @@
 """The shelf: instruments saved from earlier photos.
 
-One slot per instrument. Shooting a photo files a thumbnail of every object
-it found into that object's slot; from then on the instrument can be switched
-on and off from the shelf without the object being in front of the camera, so
-a band is built one photo at a time. Kept on disk, so it survives a restart."""
+Shooting a photo files a thumbnail of every object it found; from then on the
+instrument can be switched on and off from the shelf without the object being
+in front of the camera, so a band is built one photo at a time. The shelf
+starts empty and fills in the order things were first shot (one place per
+instrument; shooting the same kind of object again replaces its picture but
+keeps its place). Kept on disk, so it survives a restart."""
 
 import json
 import os
@@ -37,9 +39,13 @@ class Entry:
 class Shelf:
     def __init__(self, folder, names):
         self.folder = folder
-        self.names = list(names)     # slot order
+        self.names = list(names)     # what can be saved: the instruments
         self.entries = {}            # name -> Entry
         self.load()
+
+    def order(self):
+        """Saved instruments, first shot first: the shelf from the top down."""
+        return sorted(self.entries, key=lambda n: self.entries[n].saved_at)
 
     # ------------------------------------------------------------- disk
     def _index(self):
@@ -73,13 +79,16 @@ class Shelf:
         """File (or re-file) an object; the newest photo wins. Returns the entry."""
         if name not in self.names:
             return None
-        entry = Entry(name, shown, conf, crop_square(frame, box))
         old = self.entries.get(name)
+        entry = Entry(name, shown, conf, crop_square(frame, box), old.saved_at if old else None)
         entry.selected = old.selected if old else False
         self.entries[name] = entry
-        os.makedirs(self.folder, exist_ok=True)
-        cv2.imwrite(self._image(name), entry.thumb, [cv2.IMWRITE_JPEG_QUALITY, 92])
-        self._write_index()
+        try:                                   # a full disk must not stop the show
+            os.makedirs(self.folder, exist_ok=True)
+            cv2.imwrite(self._image(name), entry.thumb, [cv2.IMWRITE_JPEG_QUALITY, 92])
+            self._write_index()
+        except OSError as e:
+            print("shelf not saved:", repr(e), flush=True)
         return entry
 
     def remove(self, name):
@@ -87,9 +96,9 @@ class Shelf:
             return
         try:
             os.remove(self._image(name))
+            self._write_index()
         except OSError:
             pass
-        self._write_index()
 
     def select(self, name, on=None):
         """on=None toggles. Only a saved instrument can be selected."""

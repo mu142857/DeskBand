@@ -1,7 +1,9 @@
 """Talk to a running DeskBand over its UDP port. Examples:
 
   remote_test.py ping
-  remote_test.py shoot | retake | toggle
+  remote_test.py shoot | retake | toggle | silence
+  remote_test.py play | play on | play off                       the master switch (no word = toggle)
+  remote_test.py select cup on | select cup off | select cup     a saved instrument on the shelf (no word = toggle)
   remote_test.py part cup on | part cup off | part cup auto
   remote_test.py sfx /path/to/sound.wav 0.6
   remote_test.py bpm 110
@@ -30,8 +32,13 @@ def main(argv):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(2.0)
     cmd = argv[0]
-    if cmd in ("ping", "shoot", "retake", "toggle", "state"):
+    if cmd in ("ping", "shoot", "retake", "toggle", "silence", "state"):
         print(ask(sock, {"cmd": cmd}))
+    elif cmd == "play":
+        print(ask(sock, {"cmd": "play", "on": {"on": True, "off": False}.get(argv[1]) if len(argv) > 1 else None}))
+    elif cmd == "select":
+        on = {"on": True, "off": False}.get(argv[2]) if len(argv) > 2 else None
+        print(ask(sock, {"cmd": "select", "name": argv[1], "on": on}))
     elif cmd == "part":
         on = {"on": True, "off": False, "auto": None}[argv[2]]
         print(ask(sock, {"cmd": "part", "name": argv[1], "on": on}))

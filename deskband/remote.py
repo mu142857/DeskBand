@@ -8,7 +8,11 @@ nothing in this thread can disturb audio or drawing.
 
   {"cmd": "ping"}
   {"cmd": "shoot"} | {"cmd": "retake"} | {"cmd": "toggle"}
-  {"cmd": "part", "name": "cup", "on": true}      force a part on/off; "on": null = follow the photo again
+  {"cmd": "play", "on": true}                     the master switch beside the shutter ("on": null or absent toggles);
+                                                  paused = silent, but the selection on the shelf is kept
+  {"cmd": "select", "name": "cup", "on": true}    switch a saved instrument on/off on the shelf, like a click ("on": null toggles)
+  {"cmd": "silence"}                              switch the whole shelf off (nothing is forgotten)
+  {"cmd": "part", "name": "cup", "on": true}      force a part on/off, saved or not; "on": null = follow the shelf again
   {"cmd": "sfx", "file": "/abs/path.wav", "gain": 0.6}   play a sound on the next 8th note, through the reverb
   {"cmd": "bpm", "value": 110}
   {"cmd": "style", "chords": [["Fmaj7", 5, [53, 57, 60, 64]], ...], "bpm": 120}   new chord loop from the next loop start
@@ -18,7 +22,8 @@ nothing in this thread can disturb audio or drawing.
 State packet (what is *audible* now, already compensated for output latency):
   {"type": "state", "mode": "preview"|"show", "bpm": 120, "bar": 12, "step": 6,
    "beat": 1, "beat_phase": 0.5, "chord": "G6", "chord_index": 1,
-   "parts": {"cup": {"on": true, "glow": 0.83}, ...}, "detected": ["cup", "tablet"]}
+   "parts": {"cup": {"on": true, "glow": 0.83}, ...}, "detected": ["cup", "tablet"],
+   "playing": true, "saved": ["cup", "pen"], "selected": ["cup"]}     (saved: top of the shelf first)
 """
 
 import json
@@ -29,7 +34,7 @@ import time
 
 from . import config as C
 
-COMMANDS = {"shoot", "retake", "toggle", "part", "sfx", "bpm", "style",
+COMMANDS = {"shoot", "retake", "toggle", "play", "part", "select", "silence", "sfx", "bpm", "style",
             "fpga_mode", "fpga_event", "fpga_controls"}
 
 

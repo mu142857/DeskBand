@@ -149,6 +149,16 @@ def circle(img, cx, cy, radius, alpha, thickness=2, color=WHITE):
     _blend(img, layer.astype(np.float32) / 255.0, color, alpha, int(cx) - pad, int(cy) - pad)
 
 
+def polygon(img, points, alpha, color=WHITE):
+    """Filled, anti-aliased polygon."""
+    pts = np.array(points, np.int32)
+    x0, y0 = pts.min(axis=0) - 2
+    x1, y1 = pts.max(axis=0) + 3
+    layer = np.zeros((y1 - y0, x1 - x0), np.uint8)
+    cv2.fillPoly(layer, [pts - (x0, y0)], 255, cv2.LINE_AA)
+    _blend(img, layer.astype(np.float32) / 255.0, color, alpha, int(x0), int(y0))
+
+
 # ------------------------------------------------------------ base ----
 
 def _duotone_lut():

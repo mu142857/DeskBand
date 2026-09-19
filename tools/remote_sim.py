@@ -17,6 +17,8 @@ PARTS = ["cup", "pen", "bottle", "book", "glasses", "cell phone", "laptop"]
 chords = ["Fmaj7", "G6", "Em7", "Am(add9)"]
 bpm, mode, t0 = 120.0, "preview", time.time()
 on = {p: False for p in PARTS}
+saved = []                   # the shelf: instruments kept from earlier photos, first shot first
+playing = True               # the master switch beside the shutter
 subs = {}
 
 
@@ -27,8 +29,10 @@ def state():
     return {"type": "state", "mode": mode, "bpm": bpm, "bar": bar, "step": step % 16,
             "beat": int(beats) % 4, "beat_phase": round(beats % 1, 3),
             "chord": chords[bar % len(chords)], "chord_index": bar % len(chords),
-            "parts": {p: {"on": on[p], "glow": round(max(0.0, 1 - (beats % 1) * 2), 3) if on[p] else 0.0} for p in PARTS},
-            "detected": [p for p in PARTS if on[p]]}
+            "parts": {p: {"on": on[p] and playing,
+                          "glow": round(max(0.0, 1 - (beats % 1) * 2), 3) if on[p] and playing else 0.0} for p in PARTS},
+            "detected": [p for p in PARTS if on[p]] if mode == "show" else [],
+            "playing": playing, "saved": saved, "selected": [p for p in saved if on[p]]}
 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -55,8 +59,19 @@ while True:
             reply = {"ok": True, "subscribed_hz": hz, "renew_within_s": 10}
         elif cmd in ("shoot", "retake", "toggle"):
             mode = "show" if (cmd == "shoot" or (cmd == "toggle" and mode == "preview")) else "preview"
-            for p in PARTS:                       # pretend the photo found three things
-                on[p] = mode == "show" and p in ("cup", "bottle", "glasses")
+            if mode == "show":                    # pretend each photo finds the next unsaved thing
+                found = next((p for p in PARTS if p not in saved), PARTS[0])
+                if found not in saved:
+                    saved.append(found)
+                on[found] = True                  # going back to preview leaves the band playing
+        elif cmd == "select" and msg.get("name") in on:
+            name = msg["name"]
+            if name in saved:                     # only a saved instrument can be selected
+                on[name] = (not on[name]) if msg.get("on") is None else bool(msg["on"])
+        elif cmd == "play":
+            playing = (not playing) if msg.get("on") is None else bool(msg["on"])
+        elif cmd == "silence":
+            on = {p: False for p in PARTS}
         elif cmd == "part" and msg.get("name") in on:
             on[msg["name"]] = bool(msg.get("on"))
         elif cmd == "bpm":

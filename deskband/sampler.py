@@ -113,7 +113,8 @@ class KeyMap:
 def load_set(kind):
     spec = C.SAMPLE_SETS[kind]
     km = KeyMap(kind)
-    for path in sorted(glob.glob(os.path.join(spec["dir"], spec["glob"]))):
+    folder = C.sample_dir(kind, spec["dir"])
+    for path in sorted(glob.glob(os.path.join(folder, spec["glob"]))):
         stem = os.path.splitext(os.path.basename(path))[0]
         if spec.get("exclude") and spec["exclude"] in stem:
             continue
@@ -176,8 +177,9 @@ def load_kings_cross():
 
 def load_drums():
     kit = {}
+    folder = C.sample_dir("drums", C.DRUM_DIR)
     for name, fn in C.DRUMS.items():
-        path = os.path.join(C.DRUM_DIR, fn)
+        path = os.path.join(folder, fn)
         if os.path.exists(path):
             kit[name] = read_audio(path, 2.0)
     return kit

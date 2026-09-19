@@ -54,14 +54,16 @@ class App:
         self.fullscreen = False
         self.mouse = (-1, -1)
         self.shutter = (W // 2, H - 64, 26)
+        self.play_button = (W // 2 + 84, H - 64, 19)
+        self.playing = True             # the master switch beside the shutter
         self.t_prev = time.time()
         self.disp_fps = 0.0
         self.manual = {}                # part -> True/False, forced from the remote port
         self.shelf = Shelf(C.SHELF_DIR, C.INSTRUMENTS)   # saved instruments; the selected ones are the band
-        self.on = set()                 # parts playing now
-        self.slots = list(C.INSTRUMENTS)
+        self.band = set()               # parts switched on
+        self.on = set()                 # parts sounding now: the band, unless paused
         self.dock_x = W - 28 - TILE
-        self.dock_y = (H - (len(self.slots) * (TILE + TILE_GAP) - TILE_GAP)) // 2
+        self.dock_y = 72
         self.tile_mask = ui.rounded_mask(TILE, TILE, TILE_R).astype(np.float32) / 255.0
         self.remote = Remote(self.state_dict)
 
@@ -73,10 +75,8 @@ class App:
         if self.vision.model is not None:                  # one careful look at the frozen frame
             dets = merge_duplicates(dets + self.vision.detect(frame, C.SHOOT_IMGSZ))
         names = {d.name for d in dets}
-        for name, d in self.vision.recent(0.5).items():   # smooth over flicker
-            if name not in names:
-                dets.append(d)
-                names.add(name)
+        flicker = [d for n, d in self.vision.recent(0.5).items() if n not in names]   # smooth over dropouts
+        dets = merge_duplicates(dets + flicker)       # ...without letting one object in under two names
         self.captured = (frame.copy(), dets)
         self.save_frame(frame, "shot")
         self.state = SHOW
@@ -89,9 +89,15 @@ class App:
     def apply_parts(self):
         """Band = the instruments selected on the shelf, plus/minus anything forced remotely."""
         selected = self.shelf.selected()
-        self.on = {n for n in C.INSTRUMENTS if self.manual.get(n, n in selected)}
+        self.band = {n for n in C.INSTRUMENTS if self.manual.get(n, n in selected)}
+        self.on = self.band if self.playing else set()
         for name in C.INSTRUMENTS:
             self.engine.set_active(name, name in self.on)
+
+    def play(self, on=None):
+        """The master switch: pausing silences the band but keeps the selection."""
+        self.playing = (not self.playing) if on is None else bool(on)
+        self.apply_parts()
 
     def select(self, name, on=None):
         self.shelf.select(name, on)
@@ -119,8 +125,9 @@ class App:
             "chord": self.composer.chord_name, "chord_index": self.composer.chord_index,
             "parts": {n: {"on": e.parts[n].target > 0, "glow": round(self.glow(n), 3)} for n in C.INSTRUMENTS},
             "detected": sorted({d.shown for d in dets}),
-            "saved": [n for n in self.slots if n in self.shelf.entries],
-            "selected": [n for n in self.slots if n in self.shelf.selected()],
+            "playing": self.playing,
+            "saved": self.shelf.order(),                                    # top of the shelf first
+            "selected": [n for n in self.shelf.order() if self.shelf.entries[n].selected],
         }
 
     def handle_command(self, msg):
@@ -141,6 +148,8 @@ class App:
             self.select(msg["name"], msg.get("on"))
         elif cmd == "silence":
             self.silence()
+        elif cmd == "play":
+            self.play(msg.get("on"))
         elif cmd == "sfx" and os.path.isfile(str(msg.get("file"))):
             self.engine.play_file(msg["file"], msg.get("gain", 0.6))
         elif cmd == "bpm":
@@ -188,14 +197,20 @@ class App:
         if not self.dock_x <= x < self.dock_x + TILE:
             return None
         i, rest = divmod(y - self.dock_y, TILE + TILE_GAP)
-        return self.slots[i] if 0 <= i < len(self.slots) and rest < TILE else None
+        slots = self.shelf.order()
+        return slots[i] if 0 <= i < len(slots) and rest < TILE else None
+
+    def over(self, button, x, y):
+        cx, cy, r = button
+        return (x - cx) ** 2 + (y - cy) ** 2 <= (r + 8) ** 2
 
     def on_mouse(self, event, x, y, flags, param):
         self.mouse = (x, y)
         if event == cv2.EVENT_LBUTTONDOWN:
-            cx, cy, r = self.shutter
-            if (x - cx) ** 2 + (y - cy) ** 2 <= (r + 8) ** 2:
+            if self.over(self.shutter, x, y):
                 self.toggle()
+            elif self.over(self.play_button, x, y):
+                self.play()
             elif self.slot_at(x, y):
                 self.select(self.slot_at(x, y))
         elif event == cv2.EVENT_RBUTTONDOWN and self.slot_at(x, y):
@@ -257,7 +272,7 @@ class App:
         rows = []
         for n in C.INSTRUMENTS:
             entry = self.shelf.entries.get(n)
-            if n in self.on:
+            if n in self.band:
                 rows.append((n, entry.shown if entry else desk.get(n, n), True))
             elif n in desk:
                 rows.append((n, desk[n], False))
@@ -280,21 +295,18 @@ class App:
             y += 30
 
     def draw_dock(self, out):
-        """The shelf: one slot per instrument. Lit = in the band."""
+        """The shelf: what has been shot so far, first at the top. Lit = in the band."""
         x = self.dock_x
+        slots = self.shelf.order()
         hover = self.slot_at(*self.mouse)
-        for i, name in enumerate(self.slots):
+        for i, name in enumerate(slots):
             y = self.dock_y + i * (TILE + TILE_GAP)
-            entry = self.shelf.entries.get(name)
+            entry = self.shelf.entries[name]
             lift = 0.25 if name == hover else 0.0
-            if entry is None:
-                ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, 0.14 + lift)
-                ui.text(out, name, x + TILE // 2, y + TILE // 2 - 8, 12, 0.34 + lift, "Light", align="center")
-                continue
             if entry.tiles is None:
                 small = cv2.resize(entry.thumb, (TILE, TILE), interpolation=cv2.INTER_AREA)
                 entry.tiles = (small.astype(np.float32), ui.duotone(small).astype(np.float32))
-            if name in self.on:
+            if name in self.band:
                 g = self.glow(name)
                 ui.picture(out, entry.tiles[0], self.tile_mask, x, y)
                 ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, min(1.0, 0.45 + 0.55 * g + lift))
@@ -302,19 +314,31 @@ class App:
                 ui.picture(out, entry.tiles[1], self.tile_mask, x, y, 0.5 + lift)
                 ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, 0.2 + lift)
         if hover:
-            entry = self.shelf.entries.get(hover)
-            y = self.dock_y + self.slots.index(hover) * (TILE + TILE_GAP)
-            top = f"{self.slots.index(hover) + 1}  ·  {entry.shown if entry else hover}"
-            sub = C.INSTRUMENTS[hover]["label"] if entry else "shoot one to add it"
+            y = self.dock_y + slots.index(hover) * (TILE + TILE_GAP)
+            top = f"{slots.index(hover) + 1}  ·  {self.shelf.entries[hover].shown}"
+            sub = C.INSTRUMENTS[hover]["label"]
             wide = max(ui.text_mask(top, 15, "Medium")[0].shape[1], ui.text_mask(sub, 13, "Light")[0].shape[1])
             ui.frosted(out, x - 38 - wide, y + 10, x - 12, y + TILE - 10, r=10)
             ui.text(out, top, x - 25, y + 18, 15, 0.95, "Medium", align="right")
             ui.text(out, sub, x - 25, y + 40, 13, 0.6, "Light", align="right")
 
+    def draw_play_button(self, out):
+        """Beside the shutter: pause bars while the band plays, a triangle while it rests."""
+        cx, cy, r = self.play_button
+        hover = self.over(self.play_button, *self.mouse)
+        a = 0.95 if hover else 0.75
+        ui.circle(out, cx, cy, r, a - 0.15, thickness=1)
+        if self.playing:
+            for dx in (-6, 2):
+                ui._blend(out, np.ones((14, 4), np.float32), ui.WHITE, a, cx + dx, cy - 7)
+        else:
+            ui.polygon(out, [(cx - 5, cy - 8), (cx - 5, cy + 8), (cx + 8, cy)], a)
+        ui.text(out, "p  ·  pause" if self.playing else "p  ·  play", cx, cy + self.shutter[2] + 10,
+                13, 0.55, "Light", align="center")
+
     def draw_shutter(self, out):
         cx, cy, r = self.shutter
-        mx, my = self.mouse
-        hover = (mx - cx) ** 2 + (my - cy) ** 2 <= (r + 8) ** 2
+        hover = self.over(self.shutter, *self.mouse)
         ui.circle(out, cx, cy, r, 0.9 if hover else 0.7, thickness=2)
         if self.state == PREVIEW:
             ui.circle(out, cx, cy, r - 6, 0.95 if hover else 0.8, thickness=-1)
@@ -343,7 +367,7 @@ class App:
         out = self.base.render(frame, dim=0.12 if self.state == PREVIEW else 0.0)
         if self.state == SHOW:
             for d in dets:
-                playing = d.name in self.on
+                playing = d.name in self.band
                 self.draw_box(out, frame, d, 1.0 if playing else 0.5, lit=playing,
                               glow=self.glow(d.name) if playing else 0.0)
             desk = {d.name: d.shown for d in sorted(dets, key=lambda d: d.conf)}
@@ -356,6 +380,7 @@ class App:
         self.draw_card(out, desk)
         self.draw_dock(out)
         self.draw_shutter(out)
+        self.draw_play_button(out)
         if self.flash > 0.01:
             f = self.flash * 0.85
             out[:] = np.clip(out * (1 - f) + 255 * f, 0, 255).astype(np.uint8)
@@ -414,8 +439,12 @@ class App:
                     self.toggle()
                 elif k == ord("d"):
                     self.debug = not self.debug
-                elif ord("1") <= k < ord("1") + len(self.slots):      # shelf slots
-                    self.select(self.slots[k - ord("1")])
+                elif k in (ord("p"), 13):                 # p or return
+                    self.play()
+                elif ord("1") <= k <= ord("9"):           # shelf slots, from the top
+                    slots = self.shelf.order()
+                    if k - ord("1") < len(slots):
+                        self.select(slots[k - ord("1")])
                 elif k == ord("0"):
                     self.silence()
                 elif k == ord("x") and self.slot_at(*self.mouse):

@@ -184,6 +184,7 @@ cache/
 weights/
 *.pt
 *.wav
+!samples/**
 *.icns
 vivado*.jou
 .DS_Store

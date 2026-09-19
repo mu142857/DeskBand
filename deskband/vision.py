@@ -34,12 +34,31 @@ def iou(a, b):
     return inter / union if union > 0 else 0.0
 
 
-def merge_duplicates(dets, thresh=0.5):
-    """Two prompts of the same object ("cup" and "mug"), or two passes over the
-    same picture, often fire on the same thing; keep the more confident box."""
+def inside(a, b):
+    """How much of the smaller box lies within the other, 0..1."""
+    x0, y0, x1, y1 = max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])
+    inter = max(0, x1 - x0) * max(0, y1 - y0)
+    small = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return inter / small if small > 0 else 0.0
+
+
+def same_thing(a, b):
+    """Are these two boxes one physical object?
+    Same instrument: overlapping boxes ("cup" and "mug", or two passes over the
+    picture), or one box swallowed by the other (the whole cup and its handle).
+    Different instruments: only when the boxes nearly coincide, i.e. one object
+    read two ways (a cup that is also called a bottle). A pen lying on a book is
+    inside the book's box but nowhere near the same box, so both survive."""
+    if a.name == b.name:
+        return iou(a.box, b.box) > 0.5 or inside(a.box, b.box) > 0.75
+    return iou(a.box, b.box) > 0.6
+
+
+def merge_duplicates(dets):
+    """One object, one box: the most confident reading wins."""
     kept = []
     for d in sorted(dets, key=lambda d: -d.conf):
-        if not any(k.name == d.name and iou(k.box, d.box) > thresh for k in kept):
+        if not any(same_thing(k, d) for k in kept):
             kept.append(d)
     return kept
 

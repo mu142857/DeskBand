@@ -5,6 +5,7 @@ import json
 import os
 import socket
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -14,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from deskband import config as C
 
 C.REMOTE_HOST, C.REMOTE_PORT = "127.0.0.1", 9055          # not the live app's port
+C.SHELF_DIR = tempfile.mkdtemp(prefix="deskband_shelf_")  # nor its saved instruments
 
 import main as M                                           # noqa: E402
 import soundfile as sf                                     # noqa: E402
@@ -42,7 +44,34 @@ def test_remote():
     assert not ask({"cmd": "nonsense"})["ok"]
     assert not ask({"cmd": "style", "chords": [["bad", 99, [1, 2, 3]]]})["ok"]
 
-    # force a part on, then hand it back to the photo
+    # the shelf: only a saved instrument can be selected; selecting it starts it
+    ask({"cmd": "select", "name": "pen", "on": True})
+    assert app.engine.parts["pen"].target == 0.0
+    photo = np.full((720, 1280, 3), 90, np.uint8)
+    app.shelf.add("pen", "pencil", 0.6, photo, [100, 100, 300, 180])
+    ask({"cmd": "select", "name": "pen", "on": True})
+    assert app.engine.parts["pen"].target == 1.0
+    st = ask({"cmd": "state"})
+    assert st["saved"] == ["pen"] and st["selected"] == ["pen"]
+    # the master switch: paused is silent, the selection survives
+    ask({"cmd": "play", "on": False})
+    st = ask({"cmd": "state"})
+    assert app.engine.parts["pen"].target == 0.0 and not st["playing"] and not st["parts"]["pen"]["on"]
+    assert st["selected"] == ["pen"]
+    ask({"cmd": "play"})                                   # no "on": toggle
+    assert app.engine.parts["pen"].target == 1.0 and ask({"cmd": "state"})["playing"]
+    # the shelf fills in the order things were shot, and a re-shot keeps its place
+    app.shelf.add("cup", "mug", 0.7, photo, [400, 300, 600, 500])
+    app.shelf.add("pen", "pen", 0.8, photo, [100, 100, 300, 180])
+    assert ask({"cmd": "state"})["saved"] == ["pen", "cup"]
+    app.shelf.remove("cup")
+    ask({"cmd": "select", "name": "pen"})                  # no "on": toggle
+    assert app.engine.parts["pen"].target == 0.0
+    ask({"cmd": "select", "name": "pen", "on": True})
+    ask({"cmd": "silence"})
+    assert app.engine.parts["pen"].target == 0.0 and "pen" in app.shelf.entries
+
+    # force a part on, then hand it back to the shelf
     assert ask({"cmd": "part", "name": "cup", "on": True})["ok"]
     assert app.engine.parts["cup"].target == 1.0
     ask({"cmd": "part", "name": "cup", "on": None})
