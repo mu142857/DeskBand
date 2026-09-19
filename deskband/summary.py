@@ -121,11 +121,12 @@ class SummaryView:
     @staticmethod
     def _button(out, rect, label, enabled, hovered=False):
         x0, y0, x1, y1 = rect
-        colour = (67, 62, 57) if enabled else (39, 36, 34)
-        cv2.rectangle(out, (x0, y0), (x1 - 1, y1 - 1), colour, -1)
-        ui.outline(out, x0, y0, x1, y1, 11, 0.85 if enabled and hovered else 0.4 if enabled else 0.18)
+        radius = (y1 - y0) // 2 - 1
+        ui.outline(out, x0, y0, x1, y1, radius,
+                   0.92 if enabled and hovered else 0.65 if enabled else 0.2)
         ui.text(out, label, (x0 + x1) // 2, y0 + 15, 16,
-                0.96 if enabled else 0.35, "Medium", align="center")
+                0.98 if hovered and enabled else 0.82 if enabled else 0.35,
+                "Medium", align="center")
 
     def render(self, snapshot, shelf, jobs, mouse=(-1, -1), *, song_jobs=None,
                clip_playing=False, can_render=False, can_play=False, can_reveal=False,
