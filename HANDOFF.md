@@ -637,10 +637,10 @@ python3 tools/remote_sim.py
 - PL 端拥有 100 MHz 主时钟、可编程 BPM/十六分音符时钟、七轨 16-step sequencer、step/beat/bar 量化、事件 FIFO、七路 envelope、七路 triangle LFO，以及 16-bit maximal LFSR + 七路无除法 Euclidean/Bresenham bar generator。发生器每小节自动工作，只会从 Mac 给出的合法事件中选取 1/2、3/4 或全部，保留下拍并固定 bass/strings，因此变化可控且不会生成错误音高。
 - Cortex-A9 bare-metal 固件通过 AXI-Lite 控制 PL，并经 UART1/J12 和 Mac 双向通信。Mac 只保留视觉、作曲和音频合成；音符何时触发由 FPGA 决定。
 - BTN0 控制拍照/重拍；乐队由保存架决定，重拍返回摄像头后音乐继续。SW3=0 是 mixer：SW2:0 选轨，BTN1 下一拍 mute、BTN2 硬件 fade、BTN3 LFO。SW3=1 是 performance：BTN1 下一小节 lock/unlock 该轨生成结果、BTN2 下一小节切换 sparse/normal/full、BTN3 排队一个 full-density fill bar；fill 后自动生成继续。运行时 LED 显示十六步位置。
-- RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过（setup WNS +0.116 ns、hold WHS +0.039 ns、0 unrouted nets），并已生成 4,213,968-byte `fpga/build/BOOT.BIN`。
+- RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过（setup WNS +0.116 ns、hold WHS +0.039 ns、0 unrouted nets），并已生成 4,213,904-byte `fpga/build/BOOT.BIN`。兼容新版 shelf UI 的固件不再在 BTN0/BTN1 上重复修改 transport/mask，因此拍照不会重启音乐小节。
 - **旧版 2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过。旧镜像已写入 QSPI 并回读验证；它不包含本次自动 bar generator。
 - 新版 PL ID 是 `44420101`，`tools/zybo_smoke.py` 会检查 32 个 event：第一小节必须等于 base pattern，第二小节必须逐位等于主机镜像的 LFSR/Euclidean 结果，并继续检查 envelope/LFO。
-- 新版 `BOOT.BIN` SHA-256：`7c45b9c5c9ed8483f13b09867c2b388ea42623f7445737145fd5866e097bd5da`。当前 WSL 没看到 `/dev/bus/usb` 或串口设备，因此尚未覆盖 QSPI。
+- 新版 `BOOT.BIN` SHA-256：`ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685`。当前 WSL 没看到 `/dev/bus/usb` 或串口设备，因此尚未覆盖 QSPI。
 - **剩余工作**：把新版 `BOOT.BIN` 重刷 QSPI并通过新版 smoke test；拿到 Mac 后运行 DeskBand 和 `tools/zybo_bridge.py`，检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot

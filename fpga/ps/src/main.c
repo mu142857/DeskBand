@@ -95,14 +95,9 @@ static void report_controls(void) {
         uint32_t performance_mode = switch_value >> 3;
         uint32_t selected = switch_value & 0x7u;
         if (selected > 6) selected %= 7;
-        if (presses & 1u) {
-            uint32_t running = reg_read(DB_CONTROL) & DB_CONTROL_RUN;
-            reg_write(DB_CONTROL, running ? 0 : (DB_CONTROL_RUN | DB_CONTROL_RESET));
-        }
-        if (!performance_mode && (presses & 2u)) {
-            uint32_t mask = reg_read(DB_APPLIED_MASK) ^ (1u << selected);
-            reg_write(DB_MASK_REQUEST, DB_COMMAND_VALID | (1u << 8) | mask);
-        }
+        /* BTN0 is the Mac shutter. Mixer-mode BTN1 is a persistent mute in
+         * the bridge; performance-mode BTN1 is handled by the PL. Keeping
+         * transport and mask ownership in one layer avoids double actions. */
         if (!performance_mode && (presses & 4u)) {
             uint32_t target = reg_read(DB_LEVEL(selected)) > 127 ? 0 : 255;
             if (reg_read(DB_ENVELOPE_ACTIVE) & DB_ENVELOPE_READY)
