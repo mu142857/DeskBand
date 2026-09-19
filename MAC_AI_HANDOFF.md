@@ -13,14 +13,100 @@ controls, envelopes and LFOs. It sends timestamped events/control values back
 to the Mac, which schedules them at exact audio-sample offsets with two
 sixteenth notes of lookahead.
 
-The source, RTL simulations, full Vivado place-and-route, Vitis firmware build
-and Bootgen packaging have been completed. The remaining task is deliberately
-narrow: prove the real J12 UART link and listen to the complete Mac/Zybo loop,
+The source, RTL simulations, full Vivado place-and-route, Vitis firmware build,
+Bootgen packaging and physical Zybo smoke test have been completed. The board's
+QSPI contains the verified image. The remaining task is deliberately narrow:
+prove one cold boot from QSPI and listen to the complete Mac/Zybo audio loop,
 then make only integration-level corrections if the evidence requires them.
 
-What has **not** yet been run is the physical board smoke test or Mac audio test.
-The development computer did not have the target Mac, its audio dependencies,
-or the board's USB connection.
+The physical test passed bidirectional UART, PL ID, 16 sequential timing
+events and their masks, an envelope endpoint and a moving LFO. The complete
+Mac audio test has not yet run because the development computer did not have
+the target Mac, its audio dependencies or sample library.
+
+## Mac quick start — follow this first
+
+Use the `fpga-conductor` branch, not `main`. Commit `1d86a94` is the minimum
+required version; later commits on that branch include documentation updates.
+
+For a new checkout:
+
+```bash
+git clone --branch fpga-conductor https://github.com/mu142857/DeskBand.git
+cd DeskBand
+```
+
+For an existing checkout:
+
+```bash
+cd /path/to/DeskBand
+git fetch origin
+git switch fpga-conductor
+git pull --ff-only origin fpga-conductor
+git merge-base --is-ancestor 1d86a94 HEAD
+```
+
+The last command must exit successfully. Do not merge this work into `main`
+during bring-up.
+
+The Mac requires Python 3.11, a webcam, and the Logic Pro or GarageBand sound
+library. Create the environment and install both application and UART
+dependencies:
+
+```bash
+/Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
+.venv/bin/pip install ultralytics opencv-python sounddevice soundfile numpy scipy certifi pillow pyserial
+```
+
+The first application run downloads YOLO-World and CLIP weights. Internet is
+needed for that first run, and macOS must be allowed to use the camera and
+audio output.
+
+The current Zybo has already been programmed. With power off, put JP5 on the
+pair labelled `QSPI`; put JP6 on `USB` if J12 supplies power. Connect J12
+`PROG/UART` to the Mac using a data-capable Micro-USB cable, power on and check
+that the blue `DONE` LED lights. No SD card, Ethernet, Vivado, Vitis or external
+TTL-UART adapter is needed on the Mac.
+
+Discover the serial devices:
+
+```bash
+ls /dev/cu.usbserial-*
+```
+
+The UART is normally the FTDI `B` channel. If two ports appear and the suffix
+is not clear, run the smoke test against each; the UART port is the one that
+returns `PONG` and ID `44420100`.
+
+From the repository root, prove the board before starting DeskBand:
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
+```
+
+It must finish with:
+
+```text
+PASS: physical UART, PL ID, 16-step sequencer, envelope, and LFO
+```
+
+Then open two terminals in the repository. Terminal A runs vision and audio:
+
+```bash
+.venv/bin/python main.py
+```
+
+Wait for the camera, sampler, and `[remote] listening on ...:9000` message.
+Terminal B connects the FPGA:
+
+```bash
+PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
+```
+
+The bridge should report the serial device at 115200 baud and DeskBand UDP
+port 9000. Press Zybo BTN0, the spacebar or the onscreen shutter once to take a
+photo. The detected instruments must then loop continuously without taking
+more photos. Press BTN0 again to stop and return to preview.
 
 ## Do not change these architectural decisions
 
@@ -178,7 +264,7 @@ Wait for camera, sampler and `[remote] listening on udp://...:9000` startup.
 Terminal B:
 
 ```bash
-.venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
+PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 ```
 
 The bridge sends `PING`, `RESET`, `STOP`, subscribes to DeskBand state, mirrors

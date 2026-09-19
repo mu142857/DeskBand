@@ -29,7 +29,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 | `.app` 一键启动 + 摄像头权限 | 完成 |
 | 物体识别 | **能用但不稳，是当前最大的未决问题**，见第 2 节和第 9 节 |
 | 外部控制接口（给硬件和 AI 用的 UDP 口） | 完成，有测试、有模拟器，见第 10 节 |
-| Zybo Z7-20 FPGA 实时指挥器（Hank） | **逻辑、固件、Mac 桥、bitstream、BOOT.BIN 和 Zybo 真机 UART/时序/LFO/envelope 已验证，QSPI 已写入并回读通过；只差 QSPI 冷启动 + Mac 音频联调**，见 `fpga/README.md` |
+| Zybo Z7-20 FPGA 实时指挥器（Hank） | **逻辑、固件、Mac 桥、bitstream、BOOT.BIN 和 Zybo 真机 UART/时序/LFO/envelope 已验证，QSPI 已写入并回读通过；只差 QSPI 冷启动 + Mac 音频联调**。Mac 端 AI 必须先读 `MAC_AI_HANDOFF.md`，再按 `fpga/README.md` 操作。 |
 | "拿起来晃动 → 演奏变密变亮"的交互 | **没做**（拍照模式下物体是定格的，这个交互需要重新设计，见第 15 节） |
 
 **分工**
