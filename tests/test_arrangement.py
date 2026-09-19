@@ -1,4 +1,4 @@
-"""Saved motifs and arrangement snapshots remain stable across app sessions."""
+"""Each capture rerolls its motif; saved scores survive app restarts."""
 
 import json
 import os
@@ -37,7 +37,7 @@ def test_shelf_migration_and_restart():
         shelf = Shelf(folder, C.INSTRUMENTS)
         assert shelf.order() == ["cup", "book"]
         assert shelf.entries["cup"].thumb.shape == (144, 144, 3)
-        assert shelf.entries["cup"].motif_seed == default_seed("cup")
+        assert isinstance(shelf.entries["cup"].motif_seed, int)
         assert shelf.entries["cup"].motif_version == MOTIF_VERSION
         assert shelf.entries["cup"].instrument == "cup"
         assert shelf.selected() == set()  # old schema restarted with everything off
@@ -49,10 +49,10 @@ def test_shelf_migration_and_restart():
         assert restored.selected() == {"cup"}
         seed = restored.entries["cup"].motif_seed
         restored.add("cup", "cup", 0.9, photo(), [60, 40, 200, 180])
-        assert restored.entries["cup"].motif_seed == seed
+        assert restored.entries["cup"].motif_seed != seed
         assert restored.entries["cup"].saved_at == 100
         assert restored.entries["cup"].selected
-        assert Shelf(folder, C.INSTRUMENTS).entries["cup"].motif_seed == seed
+        assert Shelf(folder, C.INSTRUMENTS).entries["cup"].motif_seed == restored.entries["cup"].motif_seed
         restored.clear_selection()
         assert Shelf(folder, C.INSTRUMENTS).selected() == set()
 
@@ -169,9 +169,12 @@ def test_snapshot_timelines_style_and_fingerprint():
         composer.set_math(False)
         shelf.place("cup", (0.5, 0.5))
 
-        # A new photo changes the display thumbnail, not the sounding score.
+        # A new photo rerolls this category's melody, including a re-shot.
+        original_seed = shelf.entries["cup"].motif_seed
         shelf.add("cup", "cup", 0.95, photo(), [60, 40, 200, 180])
-        assert build_snapshot(shelf, composer, engine).fingerprint == original.fingerprint
+        assert shelf.entries["cup"].motif_seed != original_seed
+        composer.set_motif_seed("cup", shelf.entries["cup"].motif_seed)
+        assert build_snapshot(shelf, composer, engine).fingerprint != original.fingerprint
         shelf.select("book", True)
         with_book = build_snapshot(shelf, composer, engine)
         assert with_book.fingerprint != original.fingerprint

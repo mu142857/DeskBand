@@ -106,8 +106,8 @@ def open_camera():
     if not cap.isOpened():
         cap.release()
         return None
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    # Keep the device's native frame/aspect ratio. Continuity Camera can crop
+    # when a 16:9 capture mode is requested from its wider camera feed.
     return cap
 
 
@@ -149,7 +149,8 @@ class Vision(threading.Thread):
             if not ok:
                 time.sleep(0.01)
                 continue
-            frame = cv2.flip(frame, 1)       # mirror, like a webcam preview
+            if C.MIRROR_CAMERA:
+                frame = cv2.flip(frame, 1)
             with self.lock:
                 self.frame = frame
                 self.frame_id += 1

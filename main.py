@@ -25,7 +25,7 @@ from deskband.remote import Remote
 from deskband.shelf import Shelf
 from deskband.stage import Stage
 from deskband.synth import Engine
-from deskband.vision import Vision, echoes, merge_duplicates, open_camera
+from deskband.vision import Detection, Vision, echoes, merge_duplicates, open_camera
 from deskband.zybo import ZyboLink
 
 WINDOW = "DeskBand"
@@ -35,8 +35,20 @@ TILE, TILE_GAP, TILE_R = 72, 12, 14            # shelf slots, down the right edg
 CAPTION_W = 520                                 # Gemini's description, top left
 
 
+def fit_camera_frame(frame):
+    """Fit the entire camera image in the window and return its box transform."""
+    raw_h, raw_w = frame.shape[:2]
+    scale = min(W / raw_w, H / raw_h)
+    width, height = round(raw_w * scale), round(raw_h * scale)
+    left, top = (W - width) // 2, (H - height) // 2
+    canvas = np.empty((H, W, 3), np.uint8)
+    canvas[:] = ui.TONE_DARK.astype(np.uint8)
+    canvas[top:top + height, left:left + width] = cv2.resize(frame, (width, height))
+    return canvas, width / raw_w, height / raw_h, left, top
+
+
 class Box:
-    """A smoothed on-screen box for one object class (preview mode)."""
+    """The single smoothed on-screen target in preview mode."""
 
     def __init__(self, det):
         self.xyxy = np.array(det.box, np.float32)
@@ -47,14 +59,14 @@ class Box:
 
 class App:
     def __init__(self):
-        self.shelf = Shelf(C.SHELF_DIR, C.INSTRUMENTS)   # saved slots, including stable motifs
+        self.shelf = Shelf(C.SHELF_DIR, C.INSTRUMENTS)   # saved slots; each capture rerolls its motif
         self.composer = Composer(motif_seeds={n: e.motif_seed for n, e in self.shelf.entries.items()})
         self.engine = Engine(self.composer)
         self.vision = Vision()
         self.base = ui.Base(W, H)
         self.state = PREVIEW
         self.captured = None            # (frame, [Detection]) once shot
-        self.preview_boxes = {}         # class -> Box
+        self.preview_box = None         # one visible target, even while detections change
         self.flash = 0.0
         self.debug = False
         self.fullscreen = False
@@ -105,12 +117,24 @@ class App:
         self.apply_parts()
 
     def pick(self, dets):
-        """One photo, one instrument: the object being shown. Something not yet on
-        the shelf beats something already there (the glasses on your face are in
-        every picture); after that the most confident reading wins."""
-        if not C.ONE_PER_PHOTO or not dets:
-            return dets
-        return [max(dets, key=lambda d: (d.name not in self.shelf.entries, d.conf))]
+        """Choose one object, keeping the current target when it is still plausible.
+
+        An unseen shelf class wins first; otherwise confidence decides. A small
+        confidence margin prevents the outline from jumping between similar
+        detections on successive camera inference passes.
+        """
+        if not dets:
+            return []
+        best = max(dets, key=lambda d: (d.name not in self.shelf.entries, d.conf))
+        current = self.preview_box
+        if current is not None and time.time() - current.seen < 0.5:
+            same = [d for d in dets if d.name == current.det.name]
+            if same and ((current.det.name not in self.shelf.entries) ==
+                         (best.name not in self.shelf.entries)):
+                near = min(same, key=lambda d: np.sum((np.asarray(d.box, np.float32) - current.xyxy) ** 2))
+                if near.conf + 0.12 >= best.conf:
+                    best = near
+        return [best]
 
     def apply_parts(self):
         """Band = the instruments selected on the shelf, plus/minus anything forced remotely."""
@@ -158,7 +182,7 @@ class App:
         heard = max(0, e.pos - int(e.latency * C.SAMPLE_RATE))       # what is audible now
         step_f = heard / e.step_len
         beat_f = step_f / C.STEPS_PER_BEAT
-        dets = self.captured[1] if self.captured else self.vision.snapshot()[1]
+        dets = self.captured[1] if self.captured else self.pick(self.vision.snapshot()[1])
         return {
             "type": "state", "mode": self.state, "bpm": e.bpm,
             "bar": int(step_f // C.STEPS_PER_BAR), "step": int(step_f) % C.STEPS_PER_BAR,
@@ -251,6 +275,7 @@ class App:
         """Back to the camera. The band keeps playing: it lives on the shelf now."""
         self.state = PREVIEW
         self.captured = None
+        self.preview_box = None
         self.describer.clear()
 
     def toggle(self):
@@ -312,35 +337,38 @@ class App:
         r = 10
         if lit:
             ui.keep_colour(out, frame, x0, y0, x1, y1, r, alpha * (0.85 + 0.15 * glow))
-        ui.outline(out, x0, y0, x1, y1, r, alpha * (0.55 + 0.45 * glow))
+        ui.outline(out, x0, y0, x1, y1, r, alpha * (0.85 + 0.15 * glow), thickness=2)
         spec = C.INSTRUMENTS[det.name]
         ty = y0 - 26 if y0 > 34 else y1 + 8
         adv = ui.text(out, det.shown, x0 + 2, ty, 17, alpha * 0.95, "Medium")
         ui.text(out, "  ·  " + spec["label"], x0 + 2 + adv, ty, 17, alpha * 0.7, "Light")
 
-    def draw_preview(self, out, frame, dets, dt):
+    def draw_preview(self, out, frame, dets, dt, scale_x=1.0, scale_y=1.0,
+                     offset_x=0, offset_y=0):
         now = time.time()
-        best = {}
-        for d in dets:
-            if d.name not in best or d.conf > best[d.name].conf:
-                best[d.name] = d
-        for name, d in best.items():
-            b = self.preview_boxes.get(name)
-            if b is None:
-                b = self.preview_boxes[name] = Box(d)
-            b.xyxy = ui.ease(b.xyxy, np.array(d.box, np.float32), dt, 0.12)
+        chosen = self.pick(dets)
+        if chosen:
+            d = chosen[0]
+            if self.preview_box is None or self.preview_box.det.name != d.name:
+                self.preview_box = Box(d)
+            b = self.preview_box
+            b.xyxy = ui.ease(b.xyxy, np.asarray(d.box, np.float32), dt, 0.18)
             b.seen = now
             b.det = d
-        for name in list(self.preview_boxes):
-            b = self.preview_boxes[name]
-            target = 1.0 if now - b.seen < 0.4 else 0.0
-            b.alpha = ui.ease(b.alpha, target, dt, 0.15)
-            if b.alpha < 0.02 and target == 0:
-                del self.preview_boxes[name]
-                continue
-            d = b.det
-            d.box = [int(v) for v in b.xyxy]
-            self.draw_box(out, frame, d, 0.45 * b.alpha, lit=False, glow=0.0)
+        b = self.preview_box
+        if b is None:
+            return {}
+        visible = now - b.seen < 0.4
+        b.alpha = ui.ease(b.alpha, 1.0 if visible else 0.0, dt, 0.15)
+        if b.alpha < 0.02 and not visible:
+            self.preview_box = None
+            return {}
+        box = [int(round(v * (scale_x if i % 2 == 0 else scale_y) +
+                         (offset_x if i % 2 == 0 else offset_y)))
+               for i, v in enumerate(b.xyxy)]
+        visual = Detection(b.det.name, b.det.conf, box, b.det.alias)
+        self.draw_box(out, frame, visual, 0.98 * b.alpha, lit=False, glow=0.0)
+        return {b.det.name: b.det.shown}
 
     def draw_card(self, out, desk):
         """Bottom-left frosted card: the band, then whatever else is in view."""
@@ -487,7 +515,6 @@ class App:
             frame, dets = self.captured
         else:
             frame, dets = self.vision.snapshot()
-            dets = self.pick(dets)                # preview what a photo would take
         if frame is None:
             out = np.zeros((H, W, 3), np.uint8)
             out[:] = ui.TONE_DARK.astype(np.uint8)
@@ -495,18 +522,21 @@ class App:
             ui.text(out, msg, W // 2, H // 2 - 10, 18, 0.7, "Light", align="center")
             ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
             return out
-        if frame.shape[1] != W or frame.shape[0] != H:
-            frame = cv2.resize(frame, (W, H))
+        frame, scale_x, scale_y, offset_x, offset_y = fit_camera_frame(frame)
         out = self.base.render(frame, dim=0.12 if self.state == PREVIEW else 0.0)
         if self.state == SHOW:
             for d in dets:
                 playing = d.name in self.band
-                self.draw_box(out, frame, d, 1.0 if playing else 0.5, lit=playing,
+                box = [int(round(v * (scale_x if i % 2 == 0 else scale_y) +
+                                 (offset_x if i % 2 == 0 else offset_y)))
+                       for i, v in enumerate(d.box)]
+                visual = Detection(d.name, d.conf, box, d.alias)
+                self.draw_box(out, frame, visual, 1.0 if playing else 0.5, lit=playing,
                               glow=self.glow(d.name) if playing else 0.0)
             desk = {d.name: d.shown for d in sorted(dets, key=lambda d: d.conf)}
         else:
-            self.draw_preview(out, frame, dets, dt)
-            desk = {n: b.det.shown for n, b in self.preview_boxes.items()}
+            desk = self.draw_preview(out, frame, dets, dt, scale_x, scale_y,
+                                     offset_x, offset_y)
         ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
         if self.state == PREVIEW:
             ui.text(out, "shoot an object to add it to the band", 28, 52, 15, 0.5, "Light")

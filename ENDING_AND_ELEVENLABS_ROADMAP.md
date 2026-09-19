@@ -13,7 +13,7 @@ Status: Milestone 1 implemented. Milestones 0 and 2–5 remain open.
 ### Important current-code facts
 
 - `deskband/config.py` defines four default chords, one bar each, and 120 BPM. `Composer` can also accept a different progression with 1–16 chords through the remote `style` command.
-- `deskband/shelf.py` now persists thumbnails, selected state, stage position, and a stable motif seed in `cache/shelf/shelf.json`. There is one slot per instrument type, not one slot per physical item.
+- `deskband/shelf.py` now persists thumbnails, selected state, stage position, and the random seed from the latest capture in `cache/shelf/shelf.json`. There is one slot per instrument type, not one slot per physical item.
 - `deskband/music.py` uses the saved seed for a repeating standard-mode motif; math mode intentionally keeps evolving. `deskband/arrangement.py` provides a fresh bar-one score with the active chords, BPM, selected parts, stage positions, and math-mode setting. This is a new cycle, not a recording of the one already sounding.
 - The synced app also has a stage view, Gemini captions for the current photo, and optional ElevenLabs-generated vocal samples. Captions are not stored per shelf item, and those vocal samples are separate from the planned full-song continuation.
 - `tools/render_demo.py` exercises offline rendering, but is a scripted demo with hard-coded entries (including an obsolete `lamp`). It should be refactored or used as a reference, not called unchanged from the ending screen.
@@ -21,7 +21,7 @@ Status: Milestone 1 implemented. Milestones 0 and 2–5 remain open.
 
 ## Proposed data contracts
 
-- **Shelf entry**: existing class key, display name, thumbnail, instrument key/label, stable motif seed or versioned motif parameters, saved time, and selected flag. Preserve the motif when re-photographing the same slot unless the user explicitly regenerates it. Migrate old `shelf.json` entries by deriving a stable seed; keep old thumbnails.
+- **Shelf entry**: existing class key, display name, thumbnail, instrument key/label, random motif seed or versioned motif parameters, saved time, and selected flag. Re-photographing the same slot generates a new seed. Preserve existing saved seeds when loading and migrate older entries without losing thumbnails.
 - **Arrangement snapshot** (immutable): included shelf IDs, each item's instrument and motif, ordered chord list, BPM, sample rate, bar count, creation time, and a content fingerprint. Take it on **Render loop**, after all UI choices are settled. Use the same snapshot to draw note/rhythm previews and to render audio.
 - **Rendered loop**: snapshot fingerprint, absolute WAV path, sample rate, exact frame count/duration, and creation time. Store under ignored `cache/exports/`; expose **Reveal in Finder** or an equivalent visible path so the user can retrieve it.
 - **Song job**: snapshot fingerprint, reference WAV, ElevenLabs upload `song_id`, requested model/structure, status, output path, and a user-readable error. Never persist the API key. If the user changes the band during a job, keep the job's snapshot and label its result accordingly.
@@ -38,15 +38,15 @@ Status: Milestone 1 implemented. Milestones 0 and 2–5 remain open.
 
 **Done when:** the product flow and local file formats are documented with no ambiguous “saved means playing” behavior.
 
-## Milestone 1 — stable item motifs and snapshot
+## Milestone 1 — saved item motifs and snapshot
 
 **Goal:** each card describes the part the user will actually hear in the exported arrangement.
 
-- [x] M1.1 Extend `Shelf.Entry` serialization with a versioned, stable motif identifier/seed and instrument key. Migrate existing shelf entries without losing pictures or order (`deskband/shelf.py`).
+- [x] M1.1 Extend `Shelf.Entry` serialization with a versioned motif seed and instrument key. Migrate existing shelf entries without losing pictures or order (`deskband/shelf.py`).
 - [x] M1.2 Decide whether selection should survive an app restart; for this flow, persist the selected flag and load it before `App.apply_parts()` so a returning user sees the intended band. Provide a clear “select none” action.
-- [x] M1.3 Replace `hash(name)` as the source of musical identity with a stable seed. Keep one motif per shelf slot, and define how it is transposed or harmonized when the chord loop changes (`deskband/music.py`).
+- [x] M1.3 Replace `hash(name)` as the source of musical identity with a fresh random seed on each capture. Keep the latest seed per shelf slot, and define how it is harmonized when the chord loop changes (`deskband/music.py`).
 - [x] M1.4 Make each part expose a four-bar note/hit timeline or a compact motif description. For drums, display a beat grid rather than pretending pitched notes exist. Include note, step, duration, and velocity in the underlying data.
-- [x] M1.5 Ensure live playback and offline rendering consume the same motif definition. Re-photographing an item should update the thumbnail without silently changing the melody.
+- [x] M1.5 Ensure live playback and offline rendering consume the same saved seed. Re-photographing an item updates its thumbnail and requests a new motif from the next full loop.
 - [x] M1.6 Define and implement an immutable `ArrangementSnapshot` factory from the shelf selection, current `Engine.bpm`, and active `Composer.chords`. Resolve any pending `style` command before freezing the snapshot or explicitly show that it is pending.
 - [x] M1.7 Include a fingerprint of all sound-changing inputs, including selected slots, motif versions, BPM, and chord voicings. Use it to detect stale exports after edits.
 - [x] M1.8 Add focused tests for shelf migration, restart stability, re-photograph behavior, chord changes, selected-only timelines, and snapshot fingerprints.
@@ -119,7 +119,7 @@ Implementation note: the score and future WAV export describe a **new complete c
 
 | Risk | Plan |
 |---|---|
-| “Dedicated melody” is not yet visible in an ending screen | Milestone 1 stores stable motifs and exposes real note/hit events; Milestone 2 presents them. |
+| “Dedicated melody” is not yet visible in an ending screen | Milestone 1 stores the latest capture seed and exposes real note/hit events; Milestone 2 presents them. |
 | Multiple physical objects of one class | Existing shelf has one slot per instrument type. Keep that behavior for this feature; per-instance tracking is separate work. |
 | New `style` command changes bar count | Render and label one whole active progression, normally four bars. |
 | API changes, paid access, upload screening, latency | Use documented Music v2.5 upload + inpainting/conditioning path, a mockable client, one real rehearsal, and a cached fallback. |

@@ -189,6 +189,7 @@ API_TIMEOUT_S = 30
 
 # --- vision
 CAMERA_INDEX = 0
+MIRROR_CAMERA = False       # raw orientation for Continuity Camera; True for a selfie-style preview
 DETECT_CONF = 0.25          # open-vocabulary scores run low; press d to see them
 DETECT_SURE = 0.50          # at or above this a detection stands on its own
 DETECT_FLOOR = 0.10         # photo only: how faint the second pass's agreement may be...
@@ -201,5 +202,4 @@ DETECT_IMGSZ = 960          # live preview: ~115 ms per frame with the large mod
 SHOOT_IMGSZ = 1280          # one extra full-resolution pass on the frozen photo (~200 ms)
 SHOTS_DIR = os.path.join(CACHE_DIR, "shots")   # every photo is kept here for tuning the detector
 SHELF_DIR = os.path.join(CACHE_DIR, "shelf")   # saved instruments: one thumbnail per slot + shelf.json
-ONE_PER_PHOTO = True        # a photo files only the one object being shown; False = everything found
 PRESENCE_HOLD = 1.0

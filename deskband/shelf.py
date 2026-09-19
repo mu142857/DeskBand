@@ -1,7 +1,6 @@
 """The shelf: instruments saved from earlier photos.
 
-Shooting a photo files a thumbnail of the object it found (config.ONE_PER_PHOTO;
-every object when that is off); from then on the
+Shooting a photo files a thumbnail of the single object selected; from then on the
 instrument can be switched on and off from the shelf without the object being
 in front of the camera, so a band is built one photo at a time. The shelf
 starts empty and fills in the order things were first shot (one place per
@@ -16,7 +15,7 @@ import time
 
 import cv2
 
-from .motifs import MOTIF_VERSION, default_seed
+from .motifs import MOTIF_VERSION, new_seed
 
 THUMB = 144          # stored thumbnail side, px (drawn at half that)
 
@@ -41,7 +40,7 @@ class Entry:
         self.pos = tuple(pos) if pos else None
         self.instrument = instrument or name
         self.motif_version = motif_version
-        self.motif_seed = default_seed(name, motif_version) if motif_seed is None else motif_seed
+        self.motif_seed = new_seed() if motif_seed is None else motif_seed
         self.selected = selected
         self.tile = None             # drawing cache, owned by the UI
 
@@ -84,7 +83,7 @@ class Shelf:
                     version = MOTIF_VERSION
                 seed = meta.get("motif_seed")
                 if not isinstance(seed, int) or seed < 0:
-                    seed = default_seed(name, version)
+                    seed = new_seed()
                 migrated |= any(k not in meta for k in ("instrument", "motif_version", "motif_seed", "selected"))
                 migrated |= (meta.get("instrument") != name or
                              meta.get("motif_version") != version or meta.get("motif_seed") != seed)
@@ -126,7 +125,7 @@ class Shelf:
         entry = Entry(name, shown, conf, crop_square(frame, box), old.saved_at if old else None,
                       instrument=old.instrument if old else name,
                       motif_version=old.motif_version if old else MOTIF_VERSION,
-                      motif_seed=old.motif_seed if old else None,
+                      motif_seed=new_seed(old.motif_seed if old else None),
                       selected=old.selected if old else False,
                       pos=old.pos if old else None)
         self.entries[name] = entry
