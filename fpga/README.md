@@ -19,6 +19,8 @@ FPGA, and playback enters the audio callback at exact sample offsets.
 
 - programmable master sixteenth-note clock and absolute tick counter;
 - seven parallel 16-step sequencers;
+- automatic per-bar variation from a 16-bit maximal LFSR and seven parallel
+  divider-free Euclidean/Bresenham phase accumulators;
 - track-mask changes quantized to step, beat, or bar boundaries;
 - a 16-entry timestamped event FIFO with sticky overflow detection;
 - four synchronized/debounced buttons and a four-switch track selector;
@@ -29,30 +31,35 @@ FPGA, and playback enters the audio callback at exact sample offsets.
 - bare-metal Cortex-A9 UART command/event firmware; and
 - Mac serial-to-UDP bridge plus sample-accurate engine scheduling.
 
-The switches select a track in binary (`0` through `6`; 7–15 wrap modulo
-seven):
+SW3 chooses the control layer. SW2:SW0 select a track in binary (`0` through
+`6`; `7` wraps to track zero):
 
-| Button | Action |
-|---|---|
-| BTN0 | DeskBand shutter: take the photo / go back to the camera |
-| BTN1 | DeskBand play / pause, the same switch as the button beside the on-screen shutter |
-| BTN2 | fade selected track to/from silence over 400 control updates |
-| BTN3 | enable/disable the selected track's hardware triangle LFO |
+| Button | SW3=0: mixer | SW3=1: generative performance |
+|---|---|---|
+| BTN0 | DeskBand shutter: photo/retake | DeskBand shutter: photo/retake |
+| BTN1 | mute selected track on next beat | lock/unlock its generated rhythm on next bar |
+| BTN2 | four-second hardware fade | next-bar energy: sparse → normal → full |
+| BTN3 | toggle hardware triangle LFO | queue one full-density fill bar |
 
-BTN0 and BTN1 are decided on the Mac: `tools/zybo_bridge.py` turns the `BTN`
-record into DeskBand's `toggle` and `play` commands, and DeskBand's state then
-sets the transport and the track mask. The band lives on DeskBand's shelf and
-keeps playing in preview, so the transport runs whenever any track is sounding
-and stops when the band is paused or empty; it no longer follows photo mode.
+Automatic variation is the default base behavior; no button press is needed.
+The FPGA advances a repeatable 16-bit LFSR once per bar and uses parallel
+modulo-four phase accumulators to keep an evenly spaced half, three quarters,
+or all of each track's valid base hits. It never creates a hit where the Mac's
+pattern has none, always preserves a step-zero downbeat, and leaves bass and
+strings stable. Every performance action commits exactly at a bar edge.
 
-The firmware image flashed today still reacts to these two buttons by itself as
-well (BTN0 flips the transport, BTN1 flips the selected track's mask bit). The
-bridge restates the transport and the mask right after either press, so
-DeskBand wins within one state packet (50 ms); a press in the last few
-milliseconds before a beat can let the board's own mask change through for one
-beat. Removing the `presses & 1u` and `presses & 2u` blocks from
-`report_controls()` in `ps/src/main.c` at the next firmware rebuild closes that
-gap; nothing on the Mac has to change when that happens.
+The bridge sends BTN0 to DeskBand as the shutter. The shelf owns the band, so
+retaking a photo leaves music running in preview. The bridge holds mixer-mode
+BTN1 mutes across later shelf changes; app play/pause stays available through
+`p`, the on-screen button, and the remote `play` command. To use the earlier
+hardware BTN1 play/pause mapping, launch `tools/zybo_bridge.py --btn1-master`
+in mixer mode; performance-mode BTN1 still locks the generated rhythm.
+
+Firmware also acts on BTN0 and mixer BTN1 locally. After those presses the
+bridge reasserts the shelf-controlled transport or the persistent mixer mask.
+It does not restart the transport when merely muting a track. The transport
+runs when an unmuted selected track sounds and stops when the band is paused,
+empty, or fully muted.
 
 While stopped, the four LEDs mirror the switches. While running, they display
 the low four bits of the 16-step position.
@@ -106,8 +113,9 @@ the 115200 8-N-1 serial link (and can also power/program the board).
 
 ### From QSPI (no microSD required)
 
-The image was programmed to the Zybo's 16 MiB Winbond QSPI and read-back
-verified on 2026-09-19. To reproduce the write while JP5 is in `JTAG` mode:
+An earlier conductor image was programmed to the Zybo's 16 MiB Winbond QSPI
+and read-back verified on 2026-09-19. The automatic-bar revision must replace
+it. Program the current `fpga/build/BOOT.BIN` while JP5 is in `JTAG` mode:
 
 ```bash
 source /path/to/Vitis/2025.2/settings64.sh
@@ -121,6 +129,9 @@ After programming completes, turn the board **off**, move JP5 to the pair
 labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 `DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
 
+Current image SHA-256: `7c45b9c5c9ed8483f13b09867c2b388ea42623f7445737145fd5866e097bd5da`
+(4,213,968 bytes, PL ID `44420101`).
+
 Before starting DeskBand, verify the physical board path by itself:
 
 ```bash
@@ -128,8 +139,9 @@ Before starting DeskBand, verify the physical board path by itself:
 PYTHONPATH=. .venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
 ```
 
-It checks the firmware/PL identity, all 16 sequential hardware events and their
-default track masks, an envelope endpoint, and a moving LFO. It leaves the
+It checks the firmware/PL identity, 32 sequential events covering the full
+opening bar and a mathematically generated second bar, an envelope endpoint,
+and a moving LFO. It leaves the
 transport stopped and restores track 0 to full level.
 
 ## Run with the Mac
@@ -153,8 +165,9 @@ PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 ```
 
 The bridge mirrors the Mac's vision-selected tracks and BPM into the FPGA,
-forwards FPGA events/control streams back to DeskBand, and renews hardware
-mode. See [registers.md](docs/registers.md) for the PS/PL contract.
+forwards FPGA events/control streams and `BAR` generation telemetry back to
+DeskBand, and renews hardware mode. See [registers.md](docs/registers.md) for
+the PS/PL contract.
 
 At 100 MHz, `cycles_per_step = 100_000_000 * 60 / (BPM * 4)`. At 120 BPM,
 this is `12_500_000` cycles.

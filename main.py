@@ -74,6 +74,7 @@ class App:
         self.dock_y = 28                # eight slots fit above the bottom margin
         self.tile_mask = ui.rounded_mask(TILE, TILE, TILE_R).astype(np.float32) / 255.0
         self.stage = Stage(self, 132, 100, self.dock_x - 56, H - 136)   # the plane: loudness x complexity
+        self.fpga_bar = None            # live hardware composition telemetry
         self.remote = Remote(self.state_dict)
         self.describer = Describer()    # Gemini's description of the current photo (display only)
         self.caption = (None, [])       # (text, wrapped lines)
@@ -173,6 +174,7 @@ class App:
             "view": "stage" if self.on_stage else "camera",
             "placed": {n: {"complexity": round(e.pos[0], 3), "loudness": round(e.pos[1], 3)}
                        for n, e in self.shelf.entries.items() if e.pos},
+            "fpga": self.fpga_bar,
         }
 
     def handle_command(self, msg):
@@ -212,11 +214,24 @@ class App:
         elif cmd == "fpga_mode":
             if msg.get("bpm"):
                 self.engine.set_bpm(msg["bpm"])
-            self.engine.set_fpga_mode(msg.get("on", True), msg.get("lookahead_steps", 2))
+            enabled = msg.get("on", True)
+            self.engine.set_fpga_mode(enabled, msg.get("lookahead_steps", 2))
+            if not enabled:
+                self.fpga_bar = None
         elif cmd == "fpga_event":
             self.engine.queue_fpga_event(msg["tick"], msg["step"], msg["events"], msg["active"])
         elif cmd == "fpga_controls":
             self.engine.set_fpga_controls(msg["levels"], msg["lfos"])
+        elif cmd == "fpga_bar":
+            self.fpga_bar = {
+                "bar": int(msg.get("bar", 0)),
+                "energy": min(max(int(msg.get("energy", 1)), 0), 2),
+                "locks": int(msg.get("locks", 0)) & 0x7f,
+                "fill": bool(msg.get("fill")),
+                "fill_queued": bool(msg.get("fill_queued")),
+                "enabled": bool(msg.get("enabled", True)),
+                "random": int(msg.get("random", 0)) & 0xffff,
+            }
 
     def process_commands(self):
         while not self.remote.commands.empty():
@@ -521,6 +536,13 @@ class App:
             "loaded: " + ", ".join(sorted(e.loaded)),
             f"zybo {self.zybo.status}   {'FPGA clock' if e.fpga_mode else 'Mac clock'}   math {'on' if self.composer.math else 'off'}   gemini {self.describer.status}",
         ]
+        if self.fpga_bar is not None:
+            f = self.fpga_bar
+            energy = ("sparse", "normal", "full")[f["energy"]]
+            lines.insert(2, f"FPGA bar {f['bar']}   generated {energy}   "
+                            f"locks {f['locks']:02x}   fill "
+                            f"{'active' if f['fill'] else 'queued' if f['fill_queued'] else 'off'}   "
+                            f"LFSR {f['random']:04x}")
         y = 90
         for s in lines:
             ui.text(out, s, 28, y, 13, 0.75, "Regular")

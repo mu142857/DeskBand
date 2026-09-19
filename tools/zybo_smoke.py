@@ -12,11 +12,53 @@ from deskband.fpga_protocol import parse_fpga_line
 
 
 PATTERNS = (0x5551, 0x5555, 0x1041, 0x5555, 0x0001, 0x4444, 0x4924)
+RESET_SEED = 0x1ACE
 
 
-def expected_events(step):
+def next_lfsr(state):
+    feedback = ((state >> 15) ^ (state >> 13) ^
+                (state >> 12) ^ (state >> 10)) & 1
+    value = ((state << 1) & 0xFFFF) | feedback
+    return value or RESET_SEED
+
+
+def euclidean_subset(candidates, numerator, phase):
+    result = 0
+    accumulator = phase
+    for step in range(16):
+        if candidates & (1 << step):
+            if (numerator == 2 and not (accumulator & 1)) or \
+                    (numerator == 3 and (accumulator & 3) != 3) or \
+                    numerator >= 4:
+                result |= 1 << step
+            accumulator = (accumulator + 1) & 7
+    if candidates & 1:
+        result |= 1
+    return result
+
+
+def patterns_for_bar(bar):
+    if bar == 0:
+        return PATTERNS
+    state = RESET_SEED
+    for _ in range(bar):
+        state = next_lfsr(state)
+    generated = []
+    for track, pattern in enumerate(PATTERNS):
+        dense = ((state >> track) ^ (state >> (track + 7))) & 1
+        numerator = 3 + dense
+        if track in (2, 4):
+            numerator = 4
+        generated.append(euclidean_subset(
+            pattern, numerator, (state >> (track * 2)) & 0x3))
+    return tuple(generated)
+
+
+def expected_events(tick):
+    step = tick % 16
+    patterns = patterns_for_bar(tick // 16)
     return sum(((pattern >> step) & 1) << track
-               for track, pattern in enumerate(PATTERNS))
+               for track, pattern in enumerate(patterns))
 
 
 def main():
@@ -60,28 +102,30 @@ def main():
                 identity = message.fields[0].upper()
             if pong and identity is not None:
                 break
-        if not pong or identity != "44420100":
+        if not pong or identity != "44420101":
             raise RuntimeError(f"firmware/PL identity failed: pong={pong}, id={identity}")
 
         send("STOP")
         send("RESET")
         send("TEMPO 240")
+        send("VARIATION ON")
         send("MASK 7F STEP")
         send("START")
         events = []
         for message in messages(3.0):
             if message.kind == "EV":
                 events.append(message.fields)
-                if len(events) == 16:
+                if len(events) == 32:
                     break
-        if len(events) != 16:
-            raise RuntimeError(f"received {len(events)}/16 timing events")
+        if len(events) != 32:
+            raise RuntimeError(f"received {len(events)}/32 timing events")
         for index, (tick, step, event_mask, active_mask, _changed) in enumerate(events):
             expected = expected_events(index)
-            if (tick, step, event_mask, active_mask) != (index, index, expected, 0x7F):
+            wanted = (index, index % 16, expected, 0x7F)
+            if (tick, step, event_mask, active_mask) != wanted:
                 raise RuntimeError(
                     f"event {index}: got {(tick, step, event_mask, active_mask)}, "
-                    f"expected {(index, index, expected, 0x7F)}"
+                    f"expected {wanted}"
                 )
 
         send("LFO 0 400000 255")
@@ -104,7 +148,7 @@ def main():
         if not envelope_reached_zero:
             raise RuntimeError("track-0 envelope did not reach zero")
 
-        print("PASS: physical UART, PL ID, 16-step sequencer, envelope, and LFO")
+        print("PASS: UART, PL ID, generated bars, sequencer, envelope, and LFO")
     finally:
         send("LFOOFF 0")
         send("ENV 0 255 0")

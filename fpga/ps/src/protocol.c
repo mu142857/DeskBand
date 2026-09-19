@@ -59,6 +59,12 @@ int db_parse_command(char *line, db_command *command) {
     if (count == 2 && !strcmp(words[0], "LFOOFF") && parse_u32(words[1], 10, 6, &a)) {
         command->type = DB_CMD_LFO_OFF; command->track = (uint8_t)a; return 1;
     }
+    if (count == 2 && !strcmp(words[0], "VARIATION")) {
+        if (!strcmp(words[1], "ON")) a = 1;
+        else if (!strcmp(words[1], "OFF")) a = 0;
+        else return 0;
+        command->type = DB_CMD_VARIATION; command->value = a; return 1;
+    }
     if (count == 3 && !strcmp(words[0], "MASK") &&
         parse_u32(words[1], 16, 0x7F, &a) && quantization(words[2], &command->quantization)) {
         command->type = DB_CMD_MASK; command->value = a; return 1;

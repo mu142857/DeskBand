@@ -29,6 +29,16 @@ def parse_fpga_line(line):
             return FpgaMessage(kind, values)
         if kind == "BTN" and len(words) == 5:
             return FpgaMessage(kind, tuple(int(value, 16) for value in words[1:]))
+        if kind == "BAR" and len(words) == 8:
+            values = (int(words[1]), int(words[2]), int(words[3], 16),
+                      int(words[4]), int(words[5]), int(words[6]),
+                      int(words[7], 16))
+            if not (values[0] >= 0 and 0 <= values[1] <= 2 and
+                    0 <= values[2] <= 0x7f and
+                    values[3] in (0, 1) and values[4] in (0, 1) and
+                    values[5] in (0, 1) and 0 <= values[6] <= 0xffff):
+                raise ValueError("bar-generation value outside valid range")
+            return FpgaMessage(kind, values)
         if kind in {"OK", "ERR", "PONG", "ID", "ST", "BUSY", "FATAL"}:
             return FpgaMessage(kind, tuple(words[1:]))
     except (ValueError, UnicodeError) as error:
@@ -66,3 +76,7 @@ def command_lfo(track, increment, depth):
     if not 0 <= int(track) < 7 or not 0 <= int(increment) <= 0xffffff or not 0 <= int(depth) <= 255:
         raise ValueError("invalid LFO command")
     return f"LFO {int(track)} {int(increment):06X} {int(depth)}"
+
+
+def command_variation(enabled=True):
+    return f"VARIATION {'ON' if enabled else 'OFF'}"

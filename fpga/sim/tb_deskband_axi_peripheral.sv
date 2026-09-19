@@ -137,10 +137,17 @@ module tb_deskband_axi_peripheral;
         repeat (4) @(negedge clk);
         resetn = 1'b1;
 
-        expect_read(8'h00, 32'h4442_0100);
+        expect_read(8'h00, 32'h4442_0101);
         axi_read(8'h18, value);
         if (value[27:24] != switches) $fatal(1, "switch state not exposed through AXI");
         expect_read(8'h08, 32'd12_500_000);
+        expect_read(8'h1C, 32'd1);
+        expect_read(8'hAC, 32'd1);
+        expect_read(8'hB0, 32'h0000_1ACE);
+        expect_read(8'hB4, 32'd0);
+        axi_write(8'h1C, 32'd0);
+        expect_read(8'h1C, 32'd0);
+        axi_write(8'h1C, 32'd1);
         if (leds !== switches) $fatal(1, "stopped LEDs should mirror switches");
 
         // Byte strobes must update only the selected bytes.

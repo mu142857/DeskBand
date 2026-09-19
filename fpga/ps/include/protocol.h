@@ -17,7 +17,8 @@ typedef enum {
     DB_CMD_PATTERN,
     DB_CMD_ENVELOPE,
     DB_CMD_LFO,
-    DB_CMD_LFO_OFF
+    DB_CMD_LFO_OFF,
+    DB_CMD_VARIATION
 } db_command_type;
 
 typedef struct {

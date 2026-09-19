@@ -71,6 +71,11 @@ def test_app_restores_selection():
             assert app.band == {"cup"}
             assert app.engine.parts["cup"].target == 1.0
             assert app.arrangement_snapshot().selected == ("cup",)
+            app.handle_command({"cmd": "fpga_bar", "bar": 3, "energy": 2,
+                                "locks": 1, "fill": True, "enabled": True})
+            assert app.state_dict()["fpga"]["energy"] == 2
+            app.handle_command({"cmd": "fpga_mode", "on": False})
+            assert app.state_dict()["fpga"] is None
             app.silence()  # existing 0-key/remote action clears persisted selection
             assert Shelf(folder, C.INSTRUMENTS).selected() == set()
         finally:

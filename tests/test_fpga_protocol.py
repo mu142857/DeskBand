@@ -4,7 +4,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from deskband.fpga_protocol import (command_envelope, command_lfo, command_mask,
-                                    command_pattern, command_tempo, parse_fpga_line)
+                                    command_pattern, command_tempo,
+                                    command_variation, parse_fpga_line)
+from deskband.remote import COMMANDS
+from tools.zybo_bridge import button_effects
 
 
 def test_fpga_protocol():
@@ -13,12 +16,23 @@ def test_fpga_protocol():
     controls = parse_fpga_line("CV " + " ".join(str(i) for i in range(14)))
     assert controls.fields[:7] == tuple(range(7)) and controls.fields[7:] == tuple(range(7, 14))
     assert parse_fpga_line("BTN 1 2 4 a").fields == (1, 2, 4, 10)
+    bar = parse_fpga_line("BAR 12 1 09 1 0 1 ace1")
+    assert bar.kind == "BAR" and bar.fields == (12, 1, 9, 1, 0, 1, 0xACE1)
     assert command_tempo(120.2) == "TEMPO 120"
     assert command_mask(0x45, "bar") == "MASK 45 BAR"
     assert command_pattern(6, 0xA55A) == "PATTERN 6 A55A"
     assert command_envelope(3, 127, 250) == "ENV 3 127 250"
     assert command_lfo(2, 0x400000, 200) == "LFO 2 400000 200"
-    for malformed in ("", "EV 1 2", "CV " + " ".join(["256"] * 14), "WHAT 1"):
+    assert command_variation() == "VARIATION ON"
+    assert command_variation(False) == "VARIATION OFF"
+    assert {"play", "math", "place", "view", "select", "silence", "fpga_bar"} <= COMMANDS
+    assert button_effects(1, 0, 0) == ([{"cmd": "toggle"}], 0, True)
+    assert button_effects(2, 0, 0) == ([], 1, True)  # mixer BTN1 mutes cup
+    assert button_effects(2, 7, 0) == ([], 1, True)  # selector 7 wraps to cup
+    assert button_effects(2, 8, 0) == ([], 0, False)  # performance BTN1 stays on FPGA
+    assert button_effects(2, 0, 0, btn1_master=True) == ([{"cmd": "play"}], 0, True)
+    for malformed in ("", "EV 1 2", "CV " + " ".join(["256"] * 14),
+                      "BAR -1 1 01 0 0 1 1234", "WHAT 1"):
         try:
             result = parse_fpga_line(malformed)
             assert result is None and not malformed

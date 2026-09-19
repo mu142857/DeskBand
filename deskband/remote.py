@@ -21,6 +21,7 @@ nothing in this thread can disturb audio or drawing.
   {"cmd": "sfx", "file": "/abs/path.wav", "gain": 0.6}   play a sound on the next 8th note, through the reverb
   {"cmd": "bpm", "value": 110}
   {"cmd": "style", "chords": [["Fmaj7", 5, [53, 57, 60, 64]], ...], "bpm": 120}   new chord loop from the next loop start
+  {"cmd": "fpga_bar", "bar": 12, "energy": 1, "locks": 0, "fill": false}   bridge telemetry from the FPGA bar generator
   {"cmd": "subscribe", "hz": 20}                  stream state packets to the sender for 10 s (send again to renew)
   {"cmd": "state"}                                one state packet
 
@@ -29,7 +30,8 @@ State packet (what is *audible* now, already compensated for output latency):
    "beat": 1, "beat_phase": 0.5, "chord": "G6", "chord_index": 1,
    "parts": {"cup": {"on": true, "glow": 0.83}, ...}, "detected": ["cup", "tablet"],
    "playing": true, "saved": ["cup", "pen"], "selected": ["cup"]}     (saved: top of the shelf first)
-   ... "view": "camera"|"stage", "placed": {"cup": {"complexity": 0.5, "loudness": 0.5}, ...}
+   ... "view": "camera"|"stage", "placed": {"cup": {"complexity": 0.5, "loudness": 0.5}, ...},
+   "fpga": {"bar": 12, "energy": 1, "locks": 0, "fill": false, ...} or null
 """
 
 import json
@@ -41,7 +43,7 @@ import time
 from . import config as C
 
 COMMANDS = {"shoot", "retake", "toggle", "play", "math", "place", "view", "part", "select", "silence", "sfx", "bpm", "style",
-            "fpga_mode", "fpga_event", "fpga_controls"}
+            "fpga_mode", "fpga_event", "fpga_controls", "fpga_bar"}
 
 
 def validate_style(chords):

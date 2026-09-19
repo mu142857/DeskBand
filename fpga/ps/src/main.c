@@ -15,10 +15,12 @@ static inline uint32_t reg_read(uint32_t offset) { return Xil_In32(DB_BASE_ADDRE
 static inline void reg_write(uint32_t offset, uint32_t value) { Xil_Out32(DB_BASE_ADDRESS + offset, value); }
 
 static void report_status(void) {
-    xil_printf("ST run=%u tick=%u mask=%02x fifo=%u overflow=%u\r\n",
+    uint32_t variation = reg_read(DB_VARIATION_STATUS);
+    xil_printf("ST run=%u tick=%u mask=%02x fifo=%u overflow=%u variation=%u energy=%u\r\n",
         reg_read(DB_CONTROL) & 1u, reg_read(DB_ABSOLUTE_TICK),
         reg_read(DB_APPLIED_MASK) & 0x7fu, reg_read(DB_STATUS) & 0xffu,
-        reg_read(DB_STATUS) >> 31);
+        reg_read(DB_STATUS) >> 31, reg_read(DB_VARIATION_CONTROL) & 1u,
+        DB_VARIATION_ENERGY(variation));
 }
 
 static void execute(const db_command *command) {
@@ -57,6 +59,13 @@ static void execute(const db_command *command) {
     case DB_CMD_LFO_OFF:
         reg_write(DB_LFO_COMMAND, DB_COMMAND_VALID | command->track);
         xil_printf("OK LFOOFF %u\r\n", command->track); break;
+    case DB_CMD_VARIATION:
+        reg_write(DB_VARIATION_CONTROL, command->value & DB_VARIATION_ENABLE);
+        if (command->value)
+            xil_printf("OK VARIATION ON\r\n");
+        else
+            xil_printf("OK VARIATION OFF\r\n");
+        break;
     default: xil_printf("ERR INTERNAL\r\n"); break;
     }
 }
@@ -82,22 +91,24 @@ static void report_controls(void) {
     uint32_t buttons = reg_read(DB_BUTTON_STATUS);
     if ((buttons & 0x000f0f00u) != 0) {
         uint32_t presses = (buttons >> 8) & 0xfu;
-        uint32_t selected = (buttons >> 24) & 0xfu;
+        uint32_t switch_value = (buttons >> 24) & 0xfu;
+        uint32_t performance_mode = switch_value >> 3;
+        uint32_t selected = switch_value & 0x7u;
         if (selected > 6) selected %= 7;
         if (presses & 1u) {
             uint32_t running = reg_read(DB_CONTROL) & DB_CONTROL_RUN;
             reg_write(DB_CONTROL, running ? 0 : (DB_CONTROL_RUN | DB_CONTROL_RESET));
         }
-        if (presses & 2u) {
+        if (!performance_mode && (presses & 2u)) {
             uint32_t mask = reg_read(DB_APPLIED_MASK) ^ (1u << selected);
             reg_write(DB_MASK_REQUEST, DB_COMMAND_VALID | (1u << 8) | mask);
         }
-        if (presses & 4u) {
+        if (!performance_mode && (presses & 4u)) {
             uint32_t target = reg_read(DB_LEVEL(selected)) > 127 ? 0 : 255;
             if (reg_read(DB_ENVELOPE_ACTIVE) & DB_ENVELOPE_READY)
                 reg_write(DB_ENVELOPE_COMMAND, (400u << 16) | (target << 8) | selected);
         }
-        if (presses & 8u) {
+        if (!performance_mode && (presses & 8u)) {
             uint32_t enabled = reg_read(DB_LFO_STATUS) & (1u << selected);
             if (enabled) reg_write(DB_LFO_COMMAND, DB_COMMAND_VALID | selected);
             else {
@@ -129,6 +140,22 @@ static void report_controls(void) {
     }
 }
 
+static void report_variation(void) {
+    static uint32_t previous_bar = UINT32_MAX;
+    static uint32_t previous_status = UINT32_MAX;
+    uint32_t bar = reg_read(DB_BAR_INDEX);
+    uint32_t status = reg_read(DB_VARIATION_STATUS);
+    if (bar != previous_bar || status != previous_status) {
+        xil_printf("BAR %u %u %02x %u %u %u %04x\r\n",
+            bar, DB_VARIATION_ENERGY(status), DB_VARIATION_LOCKS(status),
+            DB_VARIATION_FILL_ACTIVE(status), DB_VARIATION_FILL_PENDING(status),
+            reg_read(DB_VARIATION_CONTROL) & 1u,
+            reg_read(DB_VARIATION_RANDOM) & 0xffffu);
+        previous_bar = bar;
+        previous_status = status;
+    }
+}
+
 int main(void) {
     char line[INPUT_CAPACITY]; unsigned length = 0;
     if (reg_read(DB_ID_VERSION) != DB_ID_EXPECTED) {
@@ -151,5 +178,6 @@ int main(void) {
         }
         drain_events();
         report_controls();
+        report_variation();
     }
 }

@@ -26,9 +26,12 @@ int main(void) {
     c = parse_ok("env 3 127 250"); assert(c.track == 3 && c.target == 127 && c.duration == 250);
     c = parse_ok("lfo 2 400000 200"); assert(c.type == DB_CMD_LFO && c.track == 2 && c.value == 0x400000 && c.target == 200);
     c = parse_ok("lfooff 2"); assert(c.type == DB_CMD_LFO_OFF && c.track == 2);
+    c = parse_ok("variation on"); assert(c.type == DB_CMD_VARIATION && c.value == 1);
+    c = parse_ok("VARIATION OFF"); assert(c.type == DB_CMD_VARIATION && c.value == 0);
     parse_bad("TEMPO 0"); parse_bad("TEMPO 401"); parse_bad("MASK ff BAR");
     parse_bad("PATTERN 7 1"); parse_bad("ENV 0 256 1"); parse_bad("START extra");
     parse_bad("LFO 0 1000000 1"); parse_bad("LFOOFF 7");
+    parse_bad("VARIATION MAYBE");
     puts("PASS: UART command protocol parser");
     return 0;
 }

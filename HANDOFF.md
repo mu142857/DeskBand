@@ -29,7 +29,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 | `.app` 一键启动 + 摄像头权限 | 完成 |
 | 物体识别 | **能用但不稳，是当前最大的未决问题**，见第 2 节和第 9 节 |
 | 外部控制接口（给硬件和 AI 用的 UDP 口） | 完成，有测试、有模拟器，见第 10 节 |
-| Zybo Z7-20 FPGA 实时指挥器（Hank） | **逻辑、固件、Mac 桥、bitstream、BOOT.BIN 和 Zybo 真机 UART/时序/LFO/envelope 已验证，QSPI 已写入并回读通过；只差 QSPI 冷启动 + Mac 音频联调**。Mac 端 AI 必须先读 `MAC_AI_HANDOFF.md`，再按 `fpga/README.md` 操作。 |
+| Zybo Z7-20 FPGA 实时指挥器（Hank） | **实时指挥器已扩展为自动生成每小节的硬件作曲引擎：LFSR + 七路 Euclidean/Bresenham 发生器、track lock、energy 和 fill；RTL/协议测试、100 MHz place-and-route、固件和新版 BOOT.BIN 已通过。旧版 UART/时序/LFO/envelope 已在真机通过并写入 QSPI；新版仍需重刷和跑 32-event smoke test，随后做 Mac 音频联调。** Mac 端 AI 必须先读 `MAC_AI_HANDOFF.md`，再按 `fpga/README.md` 操作。 |
 | "拿起来晃动 → 演奏变密变亮"的交互 | **没做**（拍照模式下物体是定格的，这个交互需要重新设计，见第 15 节） |
 
 **分工**
@@ -481,7 +481,7 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 | `{"cmd":"shoot"}` | 拍照（仅在预览状态有效） |
 | `{"cmd":"retake"}` | 回到预览（仅在定格状态有效） |
 | `{"cmd":"toggle"}` | 等同于按空格 |
-| `{"cmd":"play","on":true}` | 演奏 / 暂停总开关，等同于快门右边的按钮。不带 `on`（或 `null`）= 切换。暂停时所有 `parts[x].on` 都是 false，但 `selected` 不变。**Zybo 的 BTN1 发的就是这个** |
+| `{"cmd":"play","on":true}` | 演奏 / 暂停总开关，等同于快门右边的按钮。不带 `on`（或 `null`）= 切换。暂停时所有 `parts[x].on` 都是 false，但 `selected` 不变。Zybo mixer 模式下 BTN1 默认 mute 选中轨；桥接程序加 `--btn1-master` 可恢复旧的总开关映射。 |
 | `{"cmd":"math","on":true}` | 数学旋律模式开 / 关，等同于 `m`。不带 `on`（或 `null`）= 切换。从下一小节生效 |
 | `{"cmd":"place","name":"cup","complexity":0.7,"loudness":0.4}` | 把一件**已保存**的乐器移到舞台上的某个位置，两个值都是 0–1，可以只给一个。响度 0.5 = 声部原音量，复杂度 0.5 = 原样。只移动位置，不开关乐器（开关用 `select`） |
 | `{"cmd":"view","stage":true}` | 切到舞台 / 摄像头画面，等同于 `tab`。不带（或 `null`）= 切换 |
@@ -634,13 +634,14 @@ python3 tools/remote_sim.py
 
 > 2026-09-19 Hank 更新：原来的“PL 只做按键消抖”方案已被完整的 FPGA 实时音乐引擎取代。
 
-- PL 端拥有 100 MHz 主时钟、可编程 BPM/十六分音符时钟、七轨 16-step sequencer、step/beat/bar 量化、事件 FIFO、七路 envelope 和七路 triangle LFO。
+- PL 端拥有 100 MHz 主时钟、可编程 BPM/十六分音符时钟、七轨 16-step sequencer、step/beat/bar 量化、事件 FIFO、七路 envelope、七路 triangle LFO，以及 16-bit maximal LFSR + 七路无除法 Euclidean/Bresenham bar generator。发生器每小节自动工作，只会从 Mac 给出的合法事件中选取 1/2、3/4 或全部，保留下拍并固定 bass/strings，因此变化可控且不会生成错误音高。
 - Cortex-A9 bare-metal 固件通过 AXI-Lite 控制 PL，并经 UART1/J12 和 Mac 双向通信。Mac 只保留视觉、作曲和音频合成；音符何时触发由 FPGA 决定。
-- BTN0 启停并拍照/重拍；四个 switch 二进制选择轨道；BTN1 下一拍 mute；BTN2 做硬件 fade；BTN3 开关硬件 LFO。运行时 LED 显示十六步位置。
-- RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过，并已生成 `fpga/build/BOOT.BIN`。
-- **2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过 `tools/zybo_smoke.py`。修复了 `xil_printf` 的 32/64-bit 格式问题后，`ID` 和 `STATUS` 数值输出正确。
-- `BOOT.BIN` 已写入板载 16 MiB Winbond QSPI，全部 4,213,648 bytes 回读验证成功。SHA-256：`0766d40ce56d8e9b9f1541d9841f4239866dfe1d5491a57e1401d70cfa1e95c9`。
-- **剩余工作**：断电后把 JP5 从 `JTAG` 移到 `QSPI`，完成一次冷启动；拿到 Mac 后运行 DeskBand 和 `tools/zybo_bridge.py`，检查连续音频、按钮量化、fade/LFO 和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
+- BTN0 控制拍照/重拍；乐队由保存架决定，重拍返回摄像头后音乐继续。SW3=0 是 mixer：SW2:0 选轨，BTN1 下一拍 mute、BTN2 硬件 fade、BTN3 LFO。SW3=1 是 performance：BTN1 下一小节 lock/unlock 该轨生成结果、BTN2 下一小节切换 sparse/normal/full、BTN3 排队一个 full-density fill bar；fill 后自动生成继续。运行时 LED 显示十六步位置。
+- RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过（setup WNS +0.116 ns、hold WHS +0.039 ns、0 unrouted nets），并已生成 4,213,968-byte `fpga/build/BOOT.BIN`。
+- **旧版 2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过。旧镜像已写入 QSPI 并回读验证；它不包含本次自动 bar generator。
+- 新版 PL ID 是 `44420101`，`tools/zybo_smoke.py` 会检查 32 个 event：第一小节必须等于 base pattern，第二小节必须逐位等于主机镜像的 LFSR/Euclidean 结果，并继续检查 envelope/LFO。
+- 新版 `BOOT.BIN` SHA-256：`7c45b9c5c9ed8483f13b09867c2b388ea42623f7445737145fd5866e097bd5da`。当前 WSL 没看到 `/dev/bus/usb` 或串口设备，因此尚未覆盖 QSPI。
+- **剩余工作**：把新版 `BOOT.BIN` 重刷 QSPI并通过新版 smoke test；拿到 Mac 后运行 DeskBand 和 `tools/zybo_bridge.py`，检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot
 去展台借硬件：让台灯机器人跟着节奏点头、转向正在发声的物体。画面很出效果。先去问一句能不能借到，借到再决定做不做。

@@ -60,7 +60,7 @@ module deskband_axi_peripheral #(
     output logic [3:0] leds
 );
 
-    localparam logic [31:0] ID_VERSION = 32'h4442_0100;
+    localparam logic [31:0] ID_VERSION = 32'h4442_0101;
     localparam int unsigned FIFO_PTR_WIDTH = $clog2(FIFO_DEPTH);
     localparam int unsigned FIFO_COUNT_WIDTH = $clog2(FIFO_DEPTH + 1);
     localparam logic [FIFO_COUNT_WIDTH-1:0] FIFO_CAPACITY = FIFO_COUNT_WIDTH'(FIFO_DEPTH);
@@ -75,6 +75,7 @@ module deskband_axi_peripheral #(
     localparam logic [7:0] REG_APPLIED_MASK     = 8'h10;
     localparam logic [7:0] REG_MASK_REQUEST     = 8'h14;
     localparam logic [7:0] REG_BUTTON_STATUS    = 8'h18;
+    localparam logic [7:0] REG_VARIATION_CONTROL = 8'h1C;
     localparam logic [7:0] REG_STATUS           = 8'h40;
     localparam logic [7:0] REG_EVENT_LO         = 8'h48;
     localparam logic [7:0] REG_EVENT_HI         = 8'h4C;
@@ -82,6 +83,9 @@ module deskband_axi_peripheral #(
     localparam logic [7:0] REG_ENVELOPE_COMMAND = 8'h5C;
     localparam logic [7:0] REG_LFO_COMMAND      = 8'h80;
     localparam logic [7:0] REG_LFO_INCREMENT    = 8'h84;
+    localparam logic [7:0] REG_VARIATION_STATUS = 8'hAC;
+    localparam logic [7:0] REG_VARIATION_RANDOM = 8'hB0;
+    localparam logic [7:0] REG_BAR_INDEX        = 8'hB4;
 
     logic rst;
     assign rst = !s_axi_aresetn;
@@ -170,8 +174,10 @@ module deskband_axi_peripheral #(
     // -------------------------------------------------------------- configuration
     logic run;
     logic transport_reset;
+    logic variation_enable;
     logic [31:0] cycles_per_step;
     logic [6:0][15:0] patterns;
+    logic [6:0][15:0] generated_patterns;
     logic request_valid;
     logic [6:0] requested_mask;
     logic [1:0] request_quantization;
@@ -185,8 +191,14 @@ module deskband_axi_peripheral #(
     logic lfo_command_enable;
     logic lfo_command_reset_phase;
     logic [7:0] lfo_command_depth;
+    logic [3:0] button_state;
+    logic [3:0] button_pressed;
+    logic [3:0] button_released;
+    logic [3:0] press_sticky;
+    logic [3:0] release_sticky;
 
     logic [3:0] step_index;
+    logic bar_advance_pulse;
     logic [31:0] absolute_tick;
     logic [6:0] applied_mask;
     logic mask_applied_pulse;
@@ -199,6 +211,7 @@ module deskband_axi_peripheral #(
         if (rst) begin
             run                  <= 1'b0;
             transport_reset      <= 1'b0;
+            variation_enable     <= 1'b1;
             cycles_per_step      <= 32'd12_500_000;
             request_valid        <= 1'b0;
             requested_mask       <= 7'd0;
@@ -236,6 +249,10 @@ module deskband_axi_peripheral #(
                     end
                     REG_CYCLES_PER_STEP:
                         cycles_per_step <= merge_wstrb(cycles_per_step, wdata_stored, wstrb_stored);
+                    REG_VARIATION_CONTROL: begin
+                        if (wstrb_stored[0])
+                            variation_enable <= wdata_stored[0];
+                    end
                     REG_MASK_REQUEST: begin
                         if (wdata_stored[31]) begin
                             requested_mask       <= wdata_stored[6:0];
@@ -274,6 +291,39 @@ module deskband_axi_peripheral #(
         end
     end
 
+    // ------------------------------------------------ automatic bar generation
+    logic [1:0] variation_energy;
+    logic variation_energy_pending;
+    logic [6:0] variation_locked_mask;
+    logic [6:0] variation_lock_pending_mask;
+    logic variation_fill_pending;
+    logic variation_fill_active;
+    logic [15:0] variation_random_state;
+    logic [31:0] variation_bar_index;
+
+    bar_variation_engine variation_engine (
+        .clk(s_axi_aclk),
+        .rst(rst),
+        .transport_reset(transport_reset),
+        .bar_advance_pulse(bar_advance_pulse),
+        .enable(variation_enable),
+        .base_patterns(patterns),
+        .performance_mode(switches[3]),
+        .selected_track(switches[2:0]),
+        .lock_button_pulse(button_pressed[1]),
+        .energy_button_pulse(button_pressed[2]),
+        .fill_button_pulse(button_pressed[3]),
+        .generated_patterns(generated_patterns),
+        .energy(variation_energy),
+        .energy_pending(variation_energy_pending),
+        .locked_mask(variation_locked_mask),
+        .lock_pending_mask(variation_lock_pending_mask),
+        .fill_pending(variation_fill_pending),
+        .fill_active(variation_fill_active),
+        .random_state(variation_random_state),
+        .bar_index(variation_bar_index)
+    );
+
     /* verilator lint_off PINCONNECTEMPTY */
     deskband_timing_core timing_core (
         .clk(s_axi_aclk),
@@ -281,11 +331,12 @@ module deskband_axi_peripheral #(
         .run(run),
         .transport_reset(transport_reset),
         .cycles_per_step(cycles_per_step),
-        .patterns(patterns),
+        .patterns(generated_patterns),
         .request_valid(request_valid),
         .requested_mask(requested_mask),
         .request_quantization(request_quantization),
         .tick_pulse(),
+        .bar_advance_pulse(bar_advance_pulse),
         .step_index(step_index),
         .beat_index(),
         .absolute_tick(absolute_tick),
@@ -299,12 +350,6 @@ module deskband_axi_peripheral #(
     /* verilator lint_on PINCONNECTEMPTY */
 
     // ----------------------------------------------------------- physical buttons
-    logic [3:0] button_state;
-    logic [3:0] button_pressed;
-    logic [3:0] button_released;
-    logic [3:0] press_sticky;
-    logic [3:0] release_sticky;
-
     generate
         for (genvar button = 0; button < 4; button++) begin : gen_buttons
             button_debounce #(
@@ -443,6 +488,7 @@ module deskband_axi_peripheral #(
             REG_APPLIED_MASK:    read_register = {25'd0, applied_mask};
             REG_BUTTON_STATUS:   read_register = {4'd0, switches, 4'd0, release_sticky,
                                                    4'd0, press_sticky, 4'd0, button_state};
+            REG_VARIATION_CONTROL: read_register = {31'd0, variation_enable};
             8'h20: read_register = {16'd0, patterns[0]};
             8'h24: read_register = {16'd0, patterns[1]};
             8'h28: read_register = {16'd0, patterns[2]};
@@ -472,6 +518,14 @@ module deskband_axi_peripheral #(
             8'hA0: read_register = {24'd0, lfo_values[4]};
             8'hA4: read_register = {24'd0, lfo_values[5]};
             8'hA8: read_register = {24'd0, lfo_values[6]};
+            REG_VARIATION_STATUS: read_register = {13'd0, variation_fill_active,
+                                                    variation_fill_pending,
+                                                    variation_lock_pending_mask,
+                                                    variation_locked_mask,
+                                                    variation_energy_pending,
+                                                    variation_energy};
+            REG_VARIATION_RANDOM: read_register = {16'd0, variation_random_state};
+            REG_BAR_INDEX:        read_register = variation_bar_index;
             default: read_register = 32'd0;
         endcase
     endfunction

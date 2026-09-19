@@ -15,9 +15,30 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.fpga_protocol import command_mask, command_tempo, parse_fpga_line
+from deskband.fpga_protocol import (command_mask, command_tempo,
+                                    command_variation, parse_fpga_line)
 
 TRACKS = ("cup", "pen", "bottle", "book", "glasses", "cell phone", "laptop")
+
+
+def button_effects(pressed, switches, muted, btn1_master=False):
+    """Route Mac controls and retain mixer mutes across later shelf changes.
+
+    In performance mode BTN1 is owned by FPGA rhythm locking. In mixer mode
+    it mutes a track unless the legacy master-play mapping was requested.
+    """
+    commands = []
+    resync = False
+    if pressed & 1:
+        commands.append({"cmd": "toggle"})
+        resync = True
+    if pressed & 2 and not switches & 8:
+        if btn1_master:
+            commands.append({"cmd": "play"})
+        else:
+            muted ^= 1 << ((switches & 7) % len(TRACKS))
+        resync = True
+    return commands, muted, resync
 
 
 def send_json(sock, address, message):
@@ -31,6 +52,8 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--udp-port", type=int, default=9000)
     parser.add_argument("--lookahead", type=int, default=2, choices=range(1, 9))
+    parser.add_argument("--btn1-master", action="store_true",
+                        help="map mixer-mode BTN1 to app play/pause instead of track mute")
     args = parser.parse_args()
 
     try:
@@ -44,6 +67,7 @@ def main():
     udp.setblocking(False)
     address = (args.host, args.udp_port)
     current_mask = None
+    hardware_mute = 0
     current_bpm = None
     current_run = None
     last_subscribe = 0.0
@@ -56,6 +80,7 @@ def main():
     serial_command("PING")
     serial_command("RESET")
     serial_command("STOP")
+    serial_command(command_variation(True))
     send_json(udp, address, {"cmd": "fpga_mode", "on": True,
                               "lookahead_steps": args.lookahead})
     print(f"[zybo] {args.port} @ {args.baud}; DeskBand udp://{args.host}:{args.udp_port}")
@@ -78,6 +103,7 @@ def main():
                     message = None
                 if message and message.kind == "READY":
                     serial_command("RESET"); serial_command("STOP")
+                    serial_command(command_variation(True))
                 elif message and message.kind == "EV":
                     tick, step, events, active, changed = message.fields
                     send_json(udp, address, {"cmd": "fpga_event", "tick": tick,
@@ -88,16 +114,25 @@ def main():
                               "levels": message.fields[:7], "lfos": message.fields[7:]})
                 elif message and message.kind == "BTN":
                     live, pressed, released, switches = message.fields
-                    if pressed & 1:                      # BTN0: the shutter
-                        send_json(udp, address, {"cmd": "toggle"})
-                    if pressed & 2:                      # BTN1: play / pause, like the button beside the shutter
-                        send_json(udp, address, {"cmd": "play"})
-                    if pressed & 3:
-                        # The flashed firmware also acts on these two by itself (BTN0 flips
-                        # the transport, BTN1 flips the selected track's mask bit). DeskBand
-                        # decides both now, so state them again from its next state packet.
-                        current_run = current_mask = None
+                    commands, hardware_mute, resync = button_effects(
+                        pressed, switches, hardware_mute, args.btn1_master)
+                    for command in commands:
+                        send_json(udp, address, command)
+                    if resync:
+                        # Firmware also handles BTN0 and mixer BTN1 locally. Reassert
+                        # the persistent mixer mask without restarting a running song.
+                        current_mask = None
+                        if commands:
+                            current_run = None
                     print(f"[zybo] buttons={live:x} pressed={pressed:x} selector={switches:x}")
+                elif message and message.kind == "BAR":
+                    bar, energy, locks, fill, queued, enabled, random_state = message.fields
+                    send_json(udp, address, {"cmd": "fpga_bar", "bar": bar,
+                              "energy": energy, "locks": locks, "fill": bool(fill),
+                              "fill_queued": bool(queued), "enabled": bool(enabled),
+                              "random": random_state})
+                    print(f"[zybo] bar={bar} energy={energy} locks={locks:02x} "
+                          f"fill={fill} queued={queued} rng={random_state:04x}")
                 elif message and message.kind in {"ERR", "FATAL"}:
                     print("[zybo]", raw.decode(errors="replace").strip())
 
@@ -120,6 +155,7 @@ def main():
                 for track, name in enumerate(TRACKS):
                     if packet.get("parts", {}).get(name, {}).get("on"):
                         mask |= 1 << track
+                mask &= ~hardware_mute
                 if mask != current_mask:
                     serial_command(command_mask(mask, "BEAT")); current_mask = mask
                 run = mask != 0
