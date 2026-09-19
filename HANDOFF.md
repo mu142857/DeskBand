@@ -638,10 +638,10 @@ python3 tools/remote_sim.py
 - Cortex-A9 bare-metal 固件通过 AXI-Lite 控制 PL，并经 UART1/J12 和 Mac 双向通信。Mac 只保留视觉、作曲和音频合成；音符何时触发由 FPGA 决定。
 - BTN0 控制拍照/重拍；乐队由保存架决定，重拍返回摄像头后音乐继续。SW3=0 是 mixer：SW2:0 选轨，BTN1 下一拍 mute、BTN2 硬件 fade、BTN3 LFO。SW3=1 是 performance：BTN1 下一小节 lock/unlock 该轨生成结果、BTN2 下一小节切换 sparse/normal/full、BTN3 排队一个 full-density fill bar；fill 后自动生成继续。运行时 LED 显示十六步位置。
 - RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过（setup WNS +0.116 ns、hold WHS +0.039 ns、0 unrouted nets），并已生成 4,213,904-byte `fpga/build/BOOT.BIN`。兼容新版 shelf UI 的固件不再在 BTN0/BTN1 上重复修改 transport/mask，因此拍照不会重启音乐小节。
-- **旧版 2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过。旧镜像已写入 QSPI 并回读验证；它不包含本次自动 bar generator。
+- **旧版 2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过。
 - 新版 PL ID 是 `44420101`，`tools/zybo_smoke.py` 会检查 32 个 event：第一小节必须等于 base pattern，第二小节必须逐位等于主机镜像的 LFSR/Euclidean 结果，并继续检查 envelope/LFO。
-- 新版 `BOOT.BIN` SHA-256：`ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685`。当前 WSL 没看到 `/dev/bus/usb` 或串口设备，因此尚未覆盖 QSPI。
-- **剩余工作**：把新版 `BOOT.BIN` 重刷 QSPI并通过新版 smoke test；拿到 Mac 后运行 DeskBand 和 `tools/zybo_bridge.py`，检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
+- 新版 `BOOT.BIN` SHA-256：`ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685`。2026-09-19 已写入 Zybo 的 16 MiB Winbond QSPI，全部 4,213,904 bytes 回读验证成功。
+- **剩余工作**：断电后把 JP5 从 JTAG 移到 QSPI，冷启动并通过新版 smoke test；拿到 Mac 后运行 DeskBand（会自动启动 `tools/zybo_bridge.py`），检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot
 去展台借硬件：让台灯机器人跟着节奏点头、转向正在发声的物体。画面很出效果。先去问一句能不能借到，借到再决定做不做。

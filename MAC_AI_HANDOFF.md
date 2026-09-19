@@ -13,14 +13,14 @@ controls, envelopes and LFOs. It sends timestamped events/control values back
 to the Mac, which schedules them at exact audio-sample offsets with two
 sixteenth notes of lookahead.
 
-The original conductor passed RTL simulation, full place-and-route, firmware
-build, QSPI programming, and a physical Zybo smoke test. The current revision
-adds automatic hardware bar generation and the performance control layer. Its
-software/RTL tests, place-and-route, firmware, and BOOT.BIN build are complete,
-but the new image has not yet been flashed or physically smoke-tested. Do not
-mistake the older image currently in QSPI for this revision.
-The Mac-side task remains to run the board smoke test, then listen to the full
-Mac/Zybo audio loop and make only evidence-driven integration corrections.
+The current revision includes automatic hardware bar generation, the
+performance-control layer, and compatibility with the shelf/stage software.
+Its 22 software tests, RTL tests, place-and-route, firmware build and BOOT.BIN
+build pass. Hank programmed that exact image into the Zybo's QSPI and completed
+full read-back verification on 2026-09-19. It still needs a cold QSPI boot and
+the current 32-event physical smoke test.
+The Mac-side task is to run that smoke test, then listen to the full Mac/Zybo
+audio loop and make only evidence-driven integration corrections.
 
 The earlier physical test passed bidirectional UART, PL ID, 16 sequential timing
 events and their masks, an envelope endpoint and a moving LFO. The complete
@@ -29,13 +29,14 @@ the target Mac, its audio dependencies or sample library.
 
 ## Mac quick start — follow this first
 
-Use the `fpga-conductor` branch, not `main`. Commit `1d86a94` is the minimum
-required version; later commits on that branch include documentation updates.
+Use `main` at commit `790ae22` or later. The FPGA work and its compatibility
+fixes have been merged there. The checked-in boot image must have the SHA-256
+listed below.
 
 For a new checkout:
 
 ```bash
-git clone --branch fpga-conductor https://github.com/mu142857/DeskBand.git
+git clone https://github.com/mu142857/DeskBand.git
 cd DeskBand
 ```
 
@@ -44,13 +45,12 @@ For an existing checkout:
 ```bash
 cd /path/to/DeskBand
 git fetch origin
-git switch fpga-conductor
-git pull --ff-only origin fpga-conductor
-git merge-base --is-ancestor 1d86a94 HEAD
+git switch main
+git pull --ff-only origin main
+git merge-base --is-ancestor 790ae22 HEAD
 ```
 
-The last command must exit successfully. Do not merge this work into `main`
-during bring-up.
+The last command must exit successfully.
 
 The Mac requires Python 3.11, a webcam, and the Logic Pro or GarageBand sound
 library. Create the environment and install both application and UART
@@ -93,21 +93,23 @@ It must finish with:
 PASS: UART, PL ID, generated bars, sequencer, envelope, and LFO
 ```
 
-Then open two terminals in the repository. Terminal A runs vision and audio:
+Start vision and audio:
 
 ```bash
 .venv/bin/python main.py
 ```
 
-Wait for the camera, sampler, and `[remote] listening on ...:9000` message.
-Terminal B connects the FPGA:
+DeskBand automatically scans the FTDI ports, probes for `PONG DB01`, and starts
+the bridge as a child process. Wait for `[remote] listening on ...:9000`, then
+for `[zybo] board found on ...` and `connected` in the debug overlay. Only if
+automatic detection fails, run the bridge manually in a second terminal:
 
 ```bash
 PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 ```
 
-The bridge should report the serial device at 115200 baud and DeskBand UDP
-port 9000. Press Zybo BTN0, the spacebar or the onscreen shutter once to take a
+The bridge reports the serial device at 115200 baud and DeskBand UDP port
+9000. Press Zybo BTN0, the spacebar or the onscreen shutter once to take a
 photo. The detected instruments must then loop continuously without taking
 more photos. Press BTN0 again to return to the camera (the music keeps
 playing). Use `p` or the on-screen button to pause and resume; mixer-mode BTN1
@@ -219,11 +221,11 @@ For SD boot:
 6. On macOS, run `ls /dev/cu.usbserial-*`. If there is no device, first suspect
    a charge-only cable. UART traffic also flashes LD10/LD11.
 
-The board's QSPI was programmed and fully read-back verified with the previous
-image on 2026-09-19. Reprogram the current 4,213,904-byte `BOOT.BIN` before
-testing PL ID `44420101`. With the board powered off, move JP5 to `JTAG` for
-programming, then back to `QSPI` for cold boot. Never move JP5 while powered.
-See `fpga/README.md` for the exact command.
+Hank programmed the current 4,213,904-byte image into the board's 16 MiB
+Winbond QSPI and completed full read-back verification on 2026-09-19. With the
+board powered off, move JP5 from `JTAG` to `QSPI`, then power on for the first
+cold boot. Never move JP5 while powered. Reprogramming is unnecessary unless
+the checksum or FPGA/firmware sources change.
 
 ## Mac preparation
 
@@ -272,15 +274,14 @@ Failure isolation:
 
 ## Phase 2: run the complete demo
 
-Terminal A:
+Normally, run only:
 
 ```bash
 .venv/bin/python main.py
 ```
 
-Wait for camera, sampler and `[remote] listening on udp://...:9000` startup.
-
-Terminal B:
+Wait for camera, sampler, remote port, and automatic Zybo detection. Manual
+fallback only:
 
 ```bash
 PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
@@ -366,9 +367,9 @@ On the fully configured Mac:
 .venv/bin/python tests/test_remote.py
 ```
 
-The FPGA engine test was written and syntax-checked on the development host but
-could not execute there because that host lacked NumPy, SciPy, sounddevice and
-the Mac audio environment. It is therefore a required Mac-side gate.
+All 22 repository software tests passed on the development host using a
+test-only audio-device shim. The Mac must still rerun the listed tests against
+its real NumPy/SciPy/sounddevice environment and audio hardware.
 
 ## UART protocol quick reference
 
@@ -407,7 +408,8 @@ Keep the failure localized:
   callback offsets before touching RTL.
 - If audio timing is correct but a control sounds weak/strong, tune only the
   envelope/LFO mapping after recording the received `CV` values.
-- Preserve `main` and continue work only on the feature branch.
+- If a code change is required, create a new feature branch from `main`; do not
+  make emergency edits directly on `main` during bring-up.
 
 When all ten acceptance checks pass, update this file and `HANDOFF.md` with the
 actual Mac model, serial-device name, audio device, observed latency/lookahead,

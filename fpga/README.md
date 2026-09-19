@@ -113,9 +113,9 @@ the 115200 8-N-1 serial link (and can also power/program the board).
 
 ### From QSPI (no microSD required)
 
-An earlier conductor image was programmed to the Zybo's 16 MiB Winbond QSPI
-and read-back verified on 2026-09-19. The automatic-bar revision must replace
-it. Program the current `fpga/build/BOOT.BIN` while JP5 is in `JTAG` mode:
+The current automatic-bar image was programmed to the Zybo's 16 MiB Winbond
+QSPI and fully read-back verified on 2026-09-19. Reprogram it only when the
+image changes, with JP5 in `JTAG` mode:
 
 ```bash
 source /path/to/Vitis/2025.2/settings64.sh
