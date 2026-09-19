@@ -1,6 +1,7 @@
 """The shelf: instruments saved from earlier photos.
 
-Shooting a photo files a thumbnail of every object it found; from then on the
+Shooting a photo files a thumbnail of the object it found (config.ONE_PER_PHOTO;
+every object when that is off); from then on the
 instrument can be switched on and off from the shelf without the object being
 in front of the camera, so a band is built one photo at a time. The shelf
 starts empty and fills in the order things were first shot (one place per

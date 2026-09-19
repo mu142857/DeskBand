@@ -80,6 +80,7 @@ class App:
         flicker = [d for n, d in self.vision.recent(0.5).items()                      # smooth over dropouts...
                    if n not in names and d.conf >= C.DETECT_SURE and not echoes(d, dets)]
         dets = merge_duplicates(dets + flicker)       # ...without letting one object in under two names
+        dets = self.pick(dets)
         self.captured = (frame.copy(), dets)
         self.save_frame(frame, "shot")
         self.state = SHOW
@@ -88,6 +89,14 @@ class App:
             if self.shelf.add(d.name, d.shown, d.conf, frame, d.box):
                 self.shelf.select(d.name, True)
         self.apply_parts()
+
+    def pick(self, dets):
+        """One photo, one instrument: the object being shown. Something not yet on
+        the shelf beats something already there (the glasses on your face are in
+        every picture); after that the most confident reading wins."""
+        if not C.ONE_PER_PHOTO or not dets:
+            return dets
+        return [max(dets, key=lambda d: (d.name not in self.shelf.entries, d.conf))]
 
     def apply_parts(self):
         """Band = the instruments selected on the shelf, plus/minus anything forced remotely."""
@@ -358,6 +367,7 @@ class App:
             frame, dets = self.captured
         else:
             frame, dets = self.vision.snapshot()
+            dets = self.pick(dets)                # preview what a photo would take
         if frame is None:
             out = np.zeros((H, W, 3), np.uint8)
             out[:] = ui.TONE_DARK.astype(np.uint8)

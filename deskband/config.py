@@ -155,4 +155,5 @@ DETECT_IMGSZ = 960          # live preview: ~115 ms per frame with the large mod
 SHOOT_IMGSZ = 1280          # one extra full-resolution pass on the frozen photo (~200 ms)
 SHOTS_DIR = os.path.join(CACHE_DIR, "shots")   # every photo is kept here for tuning the detector
 SHELF_DIR = os.path.join(CACHE_DIR, "shelf")   # saved instruments: one thumbnail per slot + shelf.json
+ONE_PER_PHOTO = True        # a photo files only the one object being shown; False = everything found
 PRESENCE_HOLD = 1.0
