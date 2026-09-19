@@ -11,7 +11,8 @@ from deskband import config as C
 
 LOGIC = "/Library/Application Support/Logic"
 OBJECT_CN = {"cup": "杯子", "pen": "笔", "bottle": "瓶子", "book": "书",
-             "glasses": "眼镜", "cell phone": "手机", "laptop": "笔记本电脑 / 平板"}
+             "glasses": "眼镜", "cell phone": "手机", "laptop": "笔记本电脑 / 平板",
+             "headphones": "耳机"}
 NOTE = "C C# D D# E F F# G G# A A# B".split()
 
 
@@ -69,6 +70,10 @@ def info(voice):
     if voice == "keys":
         return dict(name="柔和电钢琴（程序合成，不用采样）", logic="无，代码在 deskband/synth.py 里的 keys 音色",
                     source="—", used="—")
+    if voice == "vocal":
+        return dict(name="人声 Voices（ElevenLabs 生成的 \"ooh\" 长音）", logic="无，不来自 Logic",
+                    source="ElevenLabs 音效生成接口，提示词在 deskband/config.py 的 VOCAL_PROMPTS",
+                    used=f"{C.VOCAL_DIR}/   （第一次启动时生成，测音高后微调到半音；现在{exists(os.path.join(C.VOCAL_DIR, 'keymap.json'))}生成好的）")
     return dict(name=voice, logic="", source="", used="")
 
 

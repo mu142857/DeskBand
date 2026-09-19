@@ -61,7 +61,12 @@ def estimate_midi(buf, lo_hz=25.0, hi_hz=4500.0):
     """Rough f0 by autocorrelation over the loudest 0.4 s. For sanity checks."""
     x = buf.mean(axis=1)
     peak = int(np.argmax(np.abs(x)))
-    seg = x[peak: peak + int(0.4 * SR)]
+    return segment_midi(x[peak: peak + int(0.4 * SR)], lo_hz, hi_hz)
+
+
+def segment_midi(seg, lo_hz=25.0, hi_hz=4500.0):
+    """f0 of a mono segment (at least 0.1 s) by autocorrelation -> fractional
+    MIDI, or None when it is silent or too short."""
     seg = seg - seg.mean()
     if len(seg) < SR // 10 or np.abs(seg).max() < 1e-4:
         return None

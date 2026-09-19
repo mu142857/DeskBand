@@ -41,6 +41,13 @@ CHORDS = [
 ]
 PENTATONIC = [0, 2, 4, 7, 9]     # C D E G A: fits every chord above
 
+# Math mode (key m): the melodic parts stop restating patterns and are computed
+# instead: Euclidean rhythms, a 1/f contour made of irrational rotations and a
+# chaotic logistic map (music.Sequence). Never repeats, still only pentatonic
+# notes, and chord tones on the accents. Takes effect on the next bar line.
+MATH_MODE = False
+LOGISTIC_R = 3.97                # the logistic map is chaotic for r above ~3.57
+
 # --- detected object -> part
 #   voice:   which sampler / synth renders it (see synth.py)
 #   lo/hi:   MIDI register (Logic convention, C3 = 60)
@@ -62,7 +69,13 @@ INSTRUMENTS = {
                        detect=["cell phone"], tint="#4FBFA8"),
     "laptop":     dict(label="Soft Keys",        voice="keys",    lo=64, hi=88, level=0.30, send=0.55,
                        detect=["laptop", "tablet", "ipad"], tint="#A3C26A"),
+    # Sung "ooh" samples made once by ElevenLabs (deskband/vocals.py); silent until they exist.
+    "headphones": dict(label="Voices",           voice="vocal",   lo=57, hi=74, level=0.16, send=0.60,
+                       detect=["headphones", "earphones", "earbuds"], tint="#D8BE5A"),
 }
+# The Zybo sequencer has seven tracks, in this order (tools/zybo_bridge.py). A part
+# not listed here follows the board's clock in FPGA mode but is not gated by it.
+FPGA_TRACKS = ("cup", "pen", "bottle", "book", "glasses", "cell phone", "laptop")
 # Text prompts given to YOLO-World, and which part each one belongs to.
 ALIASES = {alias: name for name, spec in INSTRUMENTS.items() for alias in spec["detect"]}
 DETECT_CLASSES = list(ALIASES)
@@ -111,6 +124,19 @@ PIANO_LOWPASS_HZ = 3000          # 0 = off
 # King's Cross (Studio Strings "String Ensemble") unpacked by tools/make_kings_cross.py;
 # replaces the EXS Strings 2 set when present.
 KINGS_CROSS = os.path.join(CACHE_DIR, "kings_cross")
+# Voices (headphones): sung takes generated once by ElevenLabs' sound-effects model,
+# pitch-detected, tuned to the nearest semitone and kept here as <midi>.wav +
+# keymap.json. Delete the folder to make new ones. Needs ELEVENLABS_API_KEY.
+VOCAL_DIR = os.path.join(CACHE_DIR, "vocal")
+VOCAL_PROMPTS = [                # one take each; whatever pitch it lands on becomes a key zone
+    "a solo female alto voice singing one long sustained 'ooh' on a single low steady note, "
+    "no vibrato, dry close-mic studio recording, no reverb, no music, no other sounds",
+    "a solo female voice singing one long sustained 'ooh' on a single steady note, "
+    "no vibrato, dry close-mic studio recording, no reverb, no music, no other sounds",
+    "a solo soprano voice singing one long sustained 'aah' on a single high steady note, "
+    "no vibrato, dry close-mic studio recording, no reverb, no music, no other sounds",
+]
+VOCAL_SECONDS = 4.0
 
 DRUM_DIR = f"{LIB_LOGIC}/03 Drums & Percussion/02 Electronic Drum Kits/Trap Heat"
 DRUMS = {
@@ -137,10 +163,29 @@ MAKEUP = {0: 1.5, 1: 1.5, 2: 1.3, 3: 1.15}     # active parts -> gain, else 1.0
 CEILING = 0.89
 LIMITER_RELEASE_S = 0.5
 
+# --- space view (tab): the band placed by hand on a plane (deskband/space.py).
+# Up is loudness: the part's own level in the middle, SPACE_DB at the bottom
+# and top edges. Across is complexity: the middle band (SPACE_AS_WRITTEN) plays
+# the part as written, left of it notes drop away from the weakest beats first,
+# right of it passing notes and graces fill in (music.Pattern.arrange).
+SPACE_DB = (-24.0, 9.0)
+SPACE_AS_WRITTEN = (0.4, 0.6)
+
 # --- remote control (deskband/remote.py): JSON over UDP for hardware and other programs
 REMOTE_HOST = "0.0.0.0"        # "127.0.0.1" to accept commands from this Mac only
 REMOTE_PORT = 9000
 REMOTE_STATE_HZ = 20
+
+# --- cloud APIs. Keys come from the environment only (never from this file);
+# without one the feature is simply off and everything else runs as before.
+GEMINI_KEY_ENV = "GEMINI_API_KEY"
+GEMINI_MODEL = "gemini-3.5-flash"
+GEMINI_PROMPT = ("This photo was taken by DeskBand, an app that turns the things on a desk into "
+                 "instruments. In one or two short sentences (30 words at most), describe the main "
+                 "object being shown to the camera: what it is, its colour and material, and anything "
+                 "distinctive about it. Plain text, no markdown.")
+ELEVENLABS_KEY_ENV = "ELEVENLABS_API_KEY"
+API_TIMEOUT_S = 30
 
 # --- vision
 CAMERA_INDEX = 0

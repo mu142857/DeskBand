@@ -12,7 +12,7 @@ import sounddevice as sd
 from scipy.signal import lfilter
 
 from . import config as C
-from . import sampler
+from . import sampler, vocals
 from .fx import Reverb
 
 SR = C.SAMPLE_RATE
@@ -156,7 +156,7 @@ class SampleVoice(Voice):
         return out
 
 
-RELEASE = {"piano": 1.6, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2}
+RELEASE = {"piano": 1.6, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2, "vocal": 0.5}
 
 
 # ---------------------------------------------------------------- engine ----
@@ -170,6 +170,7 @@ class Part:
         self.send = send
         self.target = 0.0
         self.gain = 0.0
+        self.trim = self.trim_to = 1.0     # loudness placed in the space view, glides ~50 ms
 
     @property
     def audible(self):
@@ -215,7 +216,7 @@ class Engine:
         self.fpga_origin_tick = None
         self.fpga_origin_sample = None
         self.fpga_controls = (tuple([255] * 7), tuple([0] * 7))
-        self.fpga_track_names = tuple(C.INSTRUMENTS)
+        self.fpga_track_names = tuple(C.FPGA_TRACKS)
         self.fpga_track_index = {name: track for track, name in enumerate(self.fpga_track_names)}
 
     # -- loading (background thread; parts become audible as they land)
@@ -252,6 +253,14 @@ class Engine:
         except Exception as e:
             log(f"[sampler] vinyl loop unavailable: {e}")
         log(f"[sampler] all loaded in {_time.time() - t0:.1f}s")
+        try:                                # last: the first time, this waits on ElevenLabs
+            km = vocals.load(log)
+            if km is not None:
+                self.keymaps["vocal"] = km
+                self.loaded.add("vocal")
+                log(f"[sampler] vocal: {len(km.keys)} notes")
+        except Exception as e:
+            log(f"[vocal] unavailable: {e!r}")
 
     def set_bpm(self, bpm):
         old_step_len = self.step_len
@@ -277,6 +286,10 @@ class Engine:
 
     def set_active(self, name, active):
         self.parts[name].target = 1.0 if active else 0.0
+
+    def set_trim(self, name, gain):
+        """Loudness from the space view, on top of the part's level."""
+        self.parts[name].trim_to = float(gain)
 
     def set_fpga_mode(self, enabled, lookahead_steps=2):
         """Select the external hardware conductor. A small fixed playback
@@ -379,6 +392,8 @@ class Engine:
                     track = self.fpga_track_index.get(ev[0], -1)
                     if track >= 0 and (allowed & (1 << track)):
                         self._trigger(ev, offset)
+                    elif track < 0 and ev[0] in C.INSTRUMENTS:     # no track on the board: clock only
+                        self._trigger(ev, offset)
                 if tick % 2 == 0 and self.pending_sfx:
                     pending, self.pending_sfx = self.pending_sfx, []
                     for buf, gain in pending:
@@ -407,6 +422,9 @@ class Engine:
             g0 = p.gain
             g1 = g0 + (p.target - g0) * min(1.0, frames / (0.5 * SR))
             p.gain = g1
+            t0 = p.trim
+            p.trim = t1 = t0 + (p.trim_to - t0) * min(1.0, frames / (0.05 * SR))
+            g0, g1 = g0 * t0, g1 * t1
             control_gain = 1.0
             track = self.fpga_track_index.get(p.name)
             if self.fpga_mode and track is not None:

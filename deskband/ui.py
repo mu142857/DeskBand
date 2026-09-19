@@ -54,6 +54,20 @@ def text_mask(s, size, weight="Regular"):
     return m
 
 
+def wrap(s, size, width, weight="Regular"):
+    """Greedy word wrap to `width` px -> list of lines."""
+    f = _font(size, weight)
+    lines, line = [], ""
+    for word in s.split():
+        trial = f"{line} {word}" if line else word
+        if line and f.getlength(trial) > width:
+            lines.append(line)
+            line = word
+        else:
+            line = trial
+    return lines + [line] if line else lines
+
+
 def text(img, s, x, y, size, alpha=1.0, weight="Regular", color=WHITE, align="left"):
     """Draw s with its top-left at (x, y). Returns the advance width."""
     if not s:

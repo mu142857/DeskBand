@@ -52,6 +52,12 @@ DeskBand 乐器对照表
     原始音色库：—
     程序实际读：—
 
+【耳机 headphones】 → 人声 Voices（ElevenLabs 生成的 "ooh" 长音）
+    摄像头认这些词：headphones / earphones / earbuds
+    在 Logic 里：无，不来自 Logic
+    原始音色库：ElevenLabs 音效生成接口，提示词在 deskband/config.py 的 VOCAL_PROMPTS
+    程序实际读：/Users/jiamulin/Desktop/DeskBand/cache/vocal/   （第一次启动时生成，测音高后微调到半音；现在没有生成好的）
+
 二、想换音色，库里还有这些
 ------------------------------------------------------------
 钢琴（都在 Logic 音色库 → 钢琴 里）：

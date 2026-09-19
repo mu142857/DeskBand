@@ -10,6 +10,7 @@ nothing in this thread can disturb audio or drawing.
   {"cmd": "shoot"} | {"cmd": "retake"} | {"cmd": "toggle"}
   {"cmd": "play", "on": true}                     the master switch beside the shutter ("on": null or absent toggles);
                                                   paused = silent, but the selection on the shelf is kept
+  {"cmd": "math", "on": true}                     math mode: melodies computed, never repeating (null toggles; from the next bar)
   {"cmd": "select", "name": "cup", "on": true}    switch a saved instrument on/off on the shelf, like a click ("on": null toggles)
   {"cmd": "silence"}                              switch the whole shelf off (nothing is forgotten)
   {"cmd": "part", "name": "cup", "on": true}      force a part on/off, saved or not; "on": null = follow the shelf again
@@ -34,7 +35,7 @@ import time
 
 from . import config as C
 
-COMMANDS = {"shoot", "retake", "toggle", "play", "part", "select", "silence", "sfx", "bpm", "style",
+COMMANDS = {"shoot", "retake", "toggle", "play", "math", "part", "select", "silence", "sfx", "bpm", "style",
             "fpga_mode", "fpga_event", "fpga_controls"}
 
 

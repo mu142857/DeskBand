@@ -18,6 +18,7 @@ import numpy as np
 
 from deskband import config as C
 from deskband import ui
+from deskband.cloud import Describer
 from deskband.music import Composer
 from deskband.remote import Remote
 from deskband.shelf import Shelf
@@ -29,6 +30,7 @@ WINDOW = "DeskBand"
 W, H = 1280, 720
 PREVIEW, SHOW = "preview", "show"
 TILE, TILE_GAP, TILE_R = 72, 12, 14            # shelf slots, down the right edge
+CAPTION_W = 520                                 # Gemini's description, top left
 
 
 class Box:
@@ -56,6 +58,7 @@ class App:
         self.mouse = (-1, -1)
         self.shutter = (W // 2, H - 64, 26)
         self.play_button = (W // 2 + 84, H - 64, 19)
+        self.math_button = (W // 2 - 84, H - 64, 19)
         self.playing = True             # the master switch beside the shutter
         self.t_prev = time.time()
         self.disp_fps = 0.0
@@ -64,9 +67,11 @@ class App:
         self.band = set()               # parts switched on
         self.on = set()                 # parts sounding now: the band, unless paused
         self.dock_x = W - 28 - TILE
-        self.dock_y = 72
+        self.dock_y = 28                # eight slots fit above the bottom margin
         self.tile_mask = ui.rounded_mask(TILE, TILE, TILE_R).astype(np.float32) / 255.0
         self.remote = Remote(self.state_dict)
+        self.describer = Describer()    # Gemini's description of the current photo (display only)
+        self.caption = (None, [])       # (text, wrapped lines)
         self.zybo = ZyboLink(on_lost=lambda: self.remote.commands.put({"cmd": "fpga_mode", "on": False}))
 
     # ------------------------------------------------------------ actions
@@ -83,6 +88,7 @@ class App:
         dets = self.pick(dets)
         self.captured = (frame.copy(), dets)
         self.save_frame(frame, "shot")
+        self.describer.request(frame)
         self.state = SHOW
         self.flash = 1.0
         for d in sorted(dets, key=lambda d: d.conf):       # best box of each object last, so it wins
@@ -111,6 +117,10 @@ class App:
         self.playing = (not self.playing) if on is None else bool(on)
         self.apply_parts()
 
+    def math_mode(self, on=None):
+        """Math mode for the melodic parts (music.Sequence); heard from the next bar."""
+        self.composer.set_math(on)
+
     def select(self, name, on=None):
         self.shelf.select(name, on)
         self.apply_parts()
@@ -138,6 +148,8 @@ class App:
             "parts": {n: {"on": e.parts[n].target > 0, "glow": round(self.glow(n), 3)} for n in C.INSTRUMENTS},
             "detected": sorted({d.shown for d in dets}),
             "playing": self.playing,
+            "math": self.composer.math,
+            "description": self.describer.text if self.describer.status == "done" else None,
             "saved": self.shelf.order(),                                    # top of the shelf first
             "selected": [n for n in self.shelf.order() if self.shelf.entries[n].selected],
         }
@@ -162,6 +174,8 @@ class App:
             self.silence()
         elif cmd == "play":
             self.play(msg.get("on"))
+        elif cmd == "math":
+            self.math_mode(msg.get("on"))
         elif cmd == "sfx" and os.path.isfile(str(msg.get("file"))):
             self.engine.play_file(msg["file"], msg.get("gain", 0.6))
         elif cmd == "bpm":
@@ -197,6 +211,7 @@ class App:
         """Back to the camera. The band keeps playing: it lives on the shelf now."""
         self.state = PREVIEW
         self.captured = None
+        self.describer.clear()
 
     def toggle(self):
         if self.state == PREVIEW:
@@ -223,6 +238,8 @@ class App:
                 self.toggle()
             elif self.over(self.play_button, x, y):
                 self.play()
+            elif self.over(self.math_button, x, y):
+                self.math_mode()
             elif self.slot_at(x, y):
                 self.select(self.slot_at(x, y))
         elif event == cv2.EVENT_RBUTTONDOWN and self.slot_at(x, y):
@@ -348,6 +365,39 @@ class App:
         ui.text(out, "p  ·  pause" if self.playing else "p  ·  play", cx, cy + self.shutter[2] + 10,
                 13, 0.55, "Light", align="center")
 
+    def draw_math_button(self, out):
+        """Left of the shutter: math mode, lit while it is on."""
+        cx, cy, r = self.math_button
+        a = 0.95 if self.over(self.math_button, *self.mouse) else 0.75
+        on = self.composer.math
+        ui.circle(out, cx, cy, r, a if on else a - 0.15, thickness=-1 if on else 1)
+        mask, _, top = ui.text_mask("φ", 20)
+        ui.text(out, "φ", cx, cy - top - mask.shape[0] / 2, 20, a, color=ui.TONE_DARK if on else ui.WHITE,
+                align="center")
+        ui.text(out, "m  ·  math", cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
+
+    def draw_caption(self, out):
+        """Top left, under the title: what Gemini sees in the photo."""
+        d = self.describer
+        if d.status == "done":
+            text, alpha = d.text, 0.92
+        elif d.status == "looking":
+            text, alpha = "Gemini is looking…", 0.55
+        elif d.status == "error":
+            text, alpha = "Gemini: " + d.text[:120], 0.5
+        elif d.status == "off":
+            text, alpha = "set GEMINI_API_KEY to have each photo described", 0.45
+        else:
+            return
+        if self.caption[0] != text:
+            self.caption = (text, ui.wrap(text, 15, CAPTION_W - 40)[:4])
+        lines = self.caption[1]
+        x0, y0 = 28, 58
+        wide = max(ui.text_mask(line, 15)[0].shape[1] for line in lines)
+        ui.frosted(out, x0, y0, x0 + wide + 40, y0 + 24 + 22 * len(lines))
+        for i, line in enumerate(lines):
+            ui.text(out, line, x0 + 20, y0 + 12 + 22 * i, 15, alpha, "Regular")
+
     def draw_shutter(self, out):
         cx, cy, r = self.shutter
         hover = self.over(self.shutter, *self.mouse)
@@ -394,6 +444,9 @@ class App:
         self.draw_dock(out)
         self.draw_shutter(out)
         self.draw_play_button(out)
+        self.draw_math_button(out)
+        if self.state == SHOW:
+            self.draw_caption(out)
         if self.flash > 0.01:
             f = self.flash * 0.85
             out[:] = np.clip(out * (1 - f) + 255 * f, 0, 255).astype(np.uint8)
@@ -410,7 +463,7 @@ class App:
             "  ".join(f"{d.alias} {d.conf:.2f}" for d in self.vision.snapshot()[1]) or "no detections",
             "  ".join(f"{n}:{p.gain:.2f}" for n, p in e.parts.items() if p.gain > 0.01),
             "loaded: " + ", ".join(sorted(e.loaded)),
-            f"zybo {self.zybo.status}   {'FPGA clock' if e.fpga_mode else 'Mac clock'}",
+            f"zybo {self.zybo.status}   {'FPGA clock' if e.fpga_mode else 'Mac clock'}   math {'on' if self.composer.math else 'off'}   gemini {self.describer.status}",
         ]
         y = 90
         for s in lines:
@@ -456,6 +509,8 @@ class App:
                     self.debug = not self.debug
                 elif k in (ord("p"), 13):                 # p or return
                     self.play()
+                elif k == ord("m"):
+                    self.math_mode()
                 elif ord("1") <= k <= ord("9"):           # shelf slots, from the top
                     slots = self.shelf.order()
                     if k - ord("1") < len(slots):

@@ -6,7 +6,8 @@ instrument can be switched on and off from the shelf without the object being
 in front of the camera, so a band is built one photo at a time. The shelf
 starts empty and fills in the order things were first shot (one place per
 instrument; shooting the same kind of object again replaces its picture but
-keeps its place). Kept on disk, so it survives a restart."""
+keeps its place). Kept on disk, so it survives a restart, along with where
+each instrument was put in the space view (Entry.pos)."""
 
 import json
 import os
@@ -30,9 +31,10 @@ def crop_square(frame, box, margin=1.15):
 
 
 class Entry:
-    def __init__(self, name, shown, conf, thumb, saved_at=None):
+    def __init__(self, name, shown, conf, thumb, saved_at=None, pos=None):
         self.name, self.shown, self.conf, self.thumb = name, shown, conf, thumb
         self.saved_at = saved_at or time.time()
+        self.pos = tuple(pos) if pos else None      # (complexity, loudness) in the space, 0..1
         self.selected = False
         self.tile = None             # drawing cache, owned by the UI
 
@@ -66,11 +68,12 @@ class Shelf:
             if name in self.names and thumb is not None:
                 thumb = cv2.resize(thumb, (THUMB, THUMB))
                 self.entries[name] = Entry(name, meta.get("shown", name), meta.get("conf", 0.0),
-                                           thumb, meta.get("saved_at"))
+                                           thumb, meta.get("saved_at"), meta.get("pos"))
 
     def _write_index(self):
         os.makedirs(self.folder, exist_ok=True)
-        index = {n: dict(shown=e.shown, conf=round(e.conf, 3), saved_at=e.saved_at)
+        index = {n: dict(shown=e.shown, conf=round(e.conf, 3), saved_at=e.saved_at,
+                         pos=[round(v, 4) for v in e.pos] if e.pos else None)
                  for n, e in self.entries.items()}
         with open(self._index(), "w") as f:
             json.dump(index, f, indent=1)
@@ -81,7 +84,8 @@ class Shelf:
         if name not in self.names:
             return None
         old = self.entries.get(name)
-        entry = Entry(name, shown, conf, crop_square(frame, box), old.saved_at if old else None)
+        entry = Entry(name, shown, conf, crop_square(frame, box),
+                      old.saved_at if old else None, old.pos if old else None)
         entry.selected = old.selected if old else False
         self.entries[name] = entry
         try:                                   # a full disk must not stop the show
@@ -100,6 +104,19 @@ class Shelf:
             self._write_index()
         except OSError:
             pass
+
+    def place(self, name, pos, save=True):
+        """Put a saved instrument at (complexity, loudness) in the space, both
+        0..1. save=False while it is being dragged; the drop writes it down."""
+        entry = self.entries.get(name)
+        if entry is None:
+            return
+        entry.pos = tuple(min(max(float(v), 0.0), 1.0) for v in pos)
+        if save:
+            try:
+                self._write_index()
+            except OSError as e:
+                print("shelf not saved:", repr(e), flush=True)
 
     def select(self, name, on=None):
         """on=None toggles. Only a saved instrument can be selected."""

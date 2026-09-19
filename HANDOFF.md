@@ -16,7 +16,7 @@
 cd ~/Desktop/DeskBand && .venv/bin/python main.py
 ```
 
-或者直接双击 `dist/DeskBand.app`。操作：`空格` 拍照 / 重拍，点右侧乐器架上的缩略图（或 `1`–`7`）开关已保存的乐器，`p`（或快门右边的按钮）演奏 / 暂停，`0` 全部取消选择，`s` 存当前画面，`d` 调试面板，`f` 全屏，`q` 退出。
+或者直接双击 `dist/DeskBand.app`。操作：`空格` 拍照 / 重拍，点右侧乐器架上的缩略图（或 `1`–`8`）开关已保存的乐器，`p`（或快门右边的按钮）演奏 / 暂停，`m`（或快门左边的 φ 钮）数学旋律模式，`0` 全部取消选择，`s` 存当前画面，`d` 调试面板，`f` 全屏，`q` 退出。
 
 **现在的状态**
 
@@ -57,7 +57,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 
 - 每次拍照，照片里认出的物体会被裁成缩略图存进自己的槽，并且立刻点亮（开始演奏）。同一种物体重拍，新照片覆盖旧的。
 - 乐器架一开始是**空的，什么都不显示**。第一样被认出并拍下的东西排在最上面，之后按拍到的先后往下排（每种乐器最多一格；同一种东西重拍只换图片，位置不变）。
-- **乐队 = 乐器架上点亮的格子**。点一下（或按 `1`–`7`，从上往下数）开关这件乐器，物体不需要还在镜头前。每件乐器的缩略图叠着自己颜色的半透明滤镜（颜色在 `deskband/config.py` 的 `INSTRUMENTS[...]["tint"]`，滤镜在 `ui.tint()`）。点亮的是实的，发声时边框跟着闪；关掉的变成半透明。
+- **乐队 = 乐器架上点亮的格子**。点一下（或按 `1`–`8`，从上往下数）开关这件乐器，物体不需要还在镜头前。每件乐器的缩略图叠着自己颜色的半透明滤镜（颜色在 `deskband/config.py` 的 `INSTRUMENTS[...]["tint"]`，滤镜在 `ui.tint()`）。点亮的是实的，发声时边框跟着闪；关掉的变成半透明。
 - **演奏 / 暂停键**（快门右边的小圆钮，键盘 `p` 或回车）：总开关。暂停 = 全部静音，但乐器架上的选择保留，再按一下原样恢复。
 - **一个物体只算一次**：同一个东西被读成两个名字（杯子同时被认成 cup 和 bottle）或者同类的大框套小框（整个杯子 + 杯把），只保留置信度最高的那个框；笔放在书上这种“在里面但框差很多”的情况两个都保留。逻辑在 `deskband/vision.py` 的 `same_thing()`。
 - `0`：全部静音，但保存的东西都还在（换下一位评委时用）。
@@ -221,8 +221,9 @@ tools/build_app.sh
 | 按键 | 作用 |
 |---|---|
 | `空格` 或点击快门 | 预览 → 拍照定格，照片里的物体存进乐器架并开始演奏；再按 → 回到预览（音乐不停） |
-| 点击乐器架上的缩略图，或 `1`–`7`（从上往下数） | 开关一件已保存的乐器 |
+| 点击乐器架上的缩略图，或 `1`–`8`（从上往下数） | 开关一件已保存的乐器 |
 | `p` / 回车 / 点快门右边的小圆钮 | 演奏 / 暂停（总开关，选择保留） |
+| `m` / 点快门左边的 φ 钮 | 数学旋律模式开 / 关（点亮 = 开），从下一小节生效，见 7.2 |
 | `0` | 乐器架全部取消选择，保存的东西不丢 |
 | 右键点槽，或悬停在槽上按 `x` | 删除这个槽里保存的乐器 |
 | `s` | 把当前实时画面存到 `cache/shots/frame_时间.jpg`（屏幕轻闪一下）。用于收集"认不出来"的样本 |
@@ -291,6 +292,8 @@ tools/build_app.sh
 | `deskband/fx.py` | ~100 | 大厅混响（Freeverb 结构，按 256 采样的子块向量化） |
 | `deskband/ui.py` | ~200 | 绘图原语：双色调底图、保留彩色区域、细线圆角框、SF Pro 文字、毛玻璃卡片、乐器架的颜色滤镜 |
 | `deskband/remote.py` | ~110 | UDP/JSON 远程端口 |
+| `deskband/cloud.py` | ~120 | Gemini 看照片写描述（后台线程，只显示）、ElevenLabs 生成音效；只用 urllib，key 只从环境变量读 |
+| `deskband/vocals.py` | ~110 | 人声采样：ElevenLabs 生成 → 测音高 → 微调到半音 → keymap |
 | `tools/exs_extract.py` | ~770 | 把 Logic 的"打包"采样器乐器（.exs + consolidated .caf）解成一个音一个 wav |
 | `tools/make_kings_cross.py` | | 国王十字：五个弦乐声部叠成合奏 |
 | `tools/render_demo.py` | | **离线把乐队渲染成 wav**，不需要摄像头，调音乐时最常用 |
@@ -359,6 +362,8 @@ cd ~/Desktop/DeskBand && .venv/bin/python tests/test_reverb.py && .venv/bin/pyth
 - **Drums（book）**：底鼓第 0、10 步，rim（30% 概率换成 snap）在第 4、12 步，闭镲每个八分音符，25% 概率第 14 步一个开镲。整体很轻。
 - **Strings（glasses）**：低八度根音 + 排列的最低、中间、最高音，整小节长音，时值 19 步（略拖过小节线，和下一个和弦叠一下，因为国王十字的弓弦起音很慢，约 0.4 秒才到一半音量）。
 - **Bells（cell phone）**：每小节 1–2 个高音区和弦音，只落在第 2、6、10、14 步（反拍）。
+- **Vocal（headphones）**：ElevenLabs 生成的 "ooh" 人声采样（`deskband/vocals.py`）。每小节一到两个长音，落在和弦音上、就近移动，下面再叠一个轻一点的和弦音（两声部）。第一次启动且设了 `ELEVENLABS_API_KEY` 时，用 `config.VOCAL_PROMPTS` 里的每句提示词各生成一条几秒的长音，自动测音高，音高飘的丢掉，稳的微调到最近的半音，存成 `cache/vocal/<midi>.wav + keymap.json`，之后就和其他采样乐器一样按和弦变调播放。想重新生成就删掉 `cache/vocal/`，或运行 `.venv/bin/python -m deskband.vocals`。没有 key 时这件乐器不出声，其他一切照常。
+- **数学模式**（`m`，`music.Sequence` 和各声部的 `plan_math`）：钢琴旋律、吉他、电钢琴、钟琴、人声不再重复固定的型，每小节现算，永不循环。节奏用欧几里得节奏（k 个音尽量均匀地铺在一小节里再旋转；E(3,8) 就是 3-3-2），k 和旋转量由混沌区的 logistic 映射 x→r·x·(1−x)（r=`config.LOGISTIC_R`）决定。音高朝一条 1/f 走向（Voss 算法，每一行是一个无理数旋转 frac(n·α)，所以永远不会回到同一个值）以级进为主地移动。音仍然只取五声音阶，强拍落在和弦音上，所以不会跑调。从下一小节线开始生效；贝斯、鼓、弦乐不变。
 - **Backing**：可选的背景层（黑胶噪声、沙锤、低音铺底），**默认全关**，因为 Aaron 觉得它"诡异"。开关在 `config.BACKING`。
 
 ### 7.3 电平与总线（踩过坑，别乱动）
@@ -473,9 +478,10 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 | `{"cmd":"retake"}` | 回到预览（仅在定格状态有效） |
 | `{"cmd":"toggle"}` | 等同于按空格 |
 | `{"cmd":"play","on":true}` | 演奏 / 暂停总开关，等同于快门右边的按钮。不带 `on`（或 `null`）= 切换。暂停时所有 `parts[x].on` 都是 false，但 `selected` 不变。**Zybo 的 BTN1 发的就是这个** |
+| `{"cmd":"math","on":true}` | 数学旋律模式开 / 关，等同于 `m`。不带 `on`（或 `null`）= 切换。从下一小节生效 |
 | `{"cmd":"select","name":"cup","on":true}` | 开关乐器架上一件**已保存**的乐器，等同于点击那个槽。不带 `on`（或 `null`）= 切换。没保存过的会被忽略。**硬件按键选乐器用这个** |
 | `{"cmd":"silence"}` | 乐器架全部关掉，保存的东西不丢（等同于按 `0`） |
-| `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop` |
+| `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop headphones` |
 | `{"cmd":"sfx","file":"/绝对路径.wav","gain":0.6}` | 播放一个声音文件。**会等到下一个八分音符才响**（和 Mikutap 一样，所以永远在拍子上），经过混响和限幅器。支持 wav/aiff/flac 等 libsndfile 能读的格式，最长 20 秒，任意采样率。文件必须在**运行 DeskBand 的那台 Mac 上** |
 | `{"cmd":"bpm","value":110}` | 改速度，60–180，立即生效 |
 | `{"cmd":"style","chords":[...],"bpm":120}` | 换和弦循环，**在当前循环走完、回到开头时**生效，所以永远落在强拍上。格式见 10.4 |
@@ -489,7 +495,8 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
  "chord":"G6","chord_index":1,
  "parts":{"cup":{"on":true,"glow":0.83},"pen":{"on":false,"glow":0.0}, "...":{}},
  "detected":["cup","tablet"],
- "playing":true,"saved":["pen","cup"],"selected":["cup"]}
+ "playing":true,"math":false,"description":"A white ceramic mug with a chipped rim.",
+ "saved":["pen","cup"],"selected":["cup"]}
 ```
 
 - `mode`：`preview`（实时预览）或 `show`（照片定格中）。两种状态下乐队都可能在演奏，是否有声看 `parts`
@@ -498,6 +505,8 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 - `parts[x].on`：这个声部是否在乐队里；`parts[x].glow`：它刚发过声的程度，发声瞬间为 1，之后按约 0.22 秒的时间常数衰减，**直接拿去驱动 LED 亮度就是"跟着音乐闪"**
 - `detected`：当前画面（或定格照片）里认出的东西，用的是屏幕上显示的名字
 - `playing`：演奏 / 暂停总开关的状态
+- `math`：数学旋律模式是否打开
+- `description`：Gemini 对当前定格照片的描述；还没回来、出错、没设 `GEMINI_API_KEY` 或已回到预览时为 `null`
 - `saved`：乐器架上已经保存的乐器，**顺序就是乐器架从上到下的顺序**（先拍到的在前）；`selected`：其中点亮的。两者用的都是 `INSTRUMENTS` 的 key
 - 判断“现在有没有声音”看 `parts[x].on`（= 被选中 **且** 没有暂停），不要看 `mode`：预览状态下乐队也可以在演奏
 
@@ -636,6 +645,8 @@ python3 tools/remote_sim.py
 ---
 
 ## 12. AI / 音乐 API 线（Richard）
+
+> 已接入 DeskBand 本体：ElevenLabs 人声乐器（headphones，见 7.2）和 Gemini 照片描述（定格时显示在标题下面，只显示、不影响音乐），key 用环境变量 `ELEVENLABS_API_KEY` / `GEMINI_API_KEY`。下面是最初的分工计划。
 
 优先级：**ElevenLabs > Gemini > OMNI**，Baseten 可选。所有 API key 放环境变量，脚本放 `tools/` 或新建 `integrations/`，不要碰 `deskband/` 里的音频代码，全部通过第 10 节的 UDP 指令接入。
 
