@@ -76,7 +76,7 @@ class App:
         self.play_button = (W // 2 + 84, H - 64, 19)
         self.math_button = (W // 2 - 84, H - 64, 19)
         self.view_button = (W // 2 - 168, H - 64, 19)   # camera <-> stage
-        self.finish_button = (930, 626, 1126, 680)
+        self.finish_button = (930, 634, 1126, 678)
         self.on_stage = False
         self.summary_return_state = PREVIEW
         self.summary_view = SummaryView()
@@ -594,11 +594,12 @@ class App:
 
     def draw_finish_button(self, out):
         x0, y0, x1, y1 = self.finish_button
-        hover = x0 <= self.mouse[0] < x1 and y0 <= self.mouse[1] < y1
-        cv2.rectangle(out, (x0, y0), (x1 - 1, y1 - 1), (67, 62, 57) if hover else (48, 44, 41), -1)
-        ui.outline(out, x0, y0, x1, y1, 12, 0.92 if hover else 0.55)
-        ui.text(out, "Finish  →", (x0 + x1) // 2, y0 + 13, 19, 0.96, "Medium", align="center")
-        ui.text(out, "e  ·  collection", (x0 + x1) // 2, y1 + 5, 12, 0.56,
+        hover = contains(self.finish_button, *self.mouse)
+        ui.outline(out, x0, y0, x1, y1, 21, 0.92 if hover else 0.65)
+        ui.text(out, "Finish  →", (x0 + x1) // 2, y0 + 10, 18,
+                0.98 if hover else 0.82, "Medium", align="center")
+        ui.text(out, "e  ·  collection", (x0 + x1) // 2,
+                self.shutter[1] + self.shutter[2] + 10, 13, 0.55,
                 "Light", align="center")
 
     def render(self, dt):
