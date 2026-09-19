@@ -1,4 +1,4 @@
-"""Voices: sung samples for the headphones part, made once by ElevenLabs.
+"""Voices: sung samples for the keys part (the object, a bunch of keys), made once by ElevenLabs.
 
 Each prompt in config.VOCAL_PROMPTS asks the sound-effects model for one long
 sung note. It comes back at whatever pitch the model chose, so the take is

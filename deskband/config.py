@@ -70,8 +70,8 @@ INSTRUMENTS = {
     "laptop":     dict(label="Soft Keys",        voice="keys",    lo=64, hi=88, level=0.30, send=0.55,
                        detect=["laptop", "tablet", "ipad"], tint="#A3C26A"),
     # Sung "ooh" samples made once by ElevenLabs (deskband/vocals.py); silent until they exist.
-    "headphones": dict(label="Voices",           voice="vocal",   lo=57, hi=74, level=0.16, send=0.60,
-                       detect=["headphones", "earphones", "earbuds"], tint="#D8BE5A"),
+    "keys":       dict(label="Voices",           voice="vocal",   lo=57, hi=74, level=0.16, send=0.60,
+                       detect=["keys", "key", "keychain", "bunch of keys"], tint="#D8BE5A"),
 }
 # The Zybo sequencer has seven tracks, in this order (tools/zybo_bridge.py). A part
 # not listed here follows the board's clock in FPGA mode but is not gated by it.
@@ -80,7 +80,8 @@ FPGA_TRACKS = ("cup", "pen", "bottle", "book", "glasses", "cell phone", "laptop"
 ALIASES = {alias: name for name, spec in INSTRUMENTS.items() for alias in spec["detect"]}
 DETECT_CLASSES = list(ALIASES)
 # On-screen name when it differs from the prompt that fired.
-SHOW_AS = {"ipad": "tablet", "eyeglasses": "glasses", "water bottle": "bottle", "earphones": "headphones"}
+SHOW_AS = {"ipad": "tablet", "eyeglasses": "glasses", "water bottle": "bottle",
+           "key": "keys", "keychain": "keys", "bunch of keys": "keys"}
 # Backing layer under the objects. All off: an empty desk is silent and the
 # band is only what was photographed. Flip these on to bring the bed back.
 BACKING = dict(level=1.0, send=0.15, vinyl=False, sub=False, perc=False)
@@ -124,7 +125,7 @@ PIANO_LOWPASS_HZ = 3000          # 0 = off
 # King's Cross (Studio Strings "String Ensemble") unpacked by tools/make_kings_cross.py;
 # replaces the EXS Strings 2 set when present.
 KINGS_CROSS = os.path.join(CACHE_DIR, "kings_cross")
-# Voices (headphones): sung takes generated once by ElevenLabs' sound-effects model,
+# Voices (keys): sung takes generated once by ElevenLabs' sound-effects model,
 # pitch-detected, tuned to the nearest semitone and kept here as <midi>.wav +
 # keymap.json. Delete the folder to make new ones. Needs ELEVENLABS_API_KEY.
 VOCAL_DIR = os.path.join(CACHE_DIR, "vocal")

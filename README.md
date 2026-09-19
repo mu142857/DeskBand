@@ -17,7 +17,7 @@ DeskBand looks at a photo of your desk and turns every object it recognises into
 | glasses | King's Cross (Studio Strings ensemble) | sustained chords |
 | cell phone | Glockenspiel | high sparkle |
 | laptop or tablet | Soft FM electric piano (synthesised) | dotted-8th shimmer an octave up |
-| headphones (earphones, earbuds) | Voices: sung "ooh" samples made by ElevenLabs | a slow two-voice line on chord tones |
+| keys (key, keychain) | Voices: sung "ooh" samples made by ElevenLabs | a slow two-voice line on chord tones |
 
 Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. Each capture gives that category a fresh random seed; its saved seed and selection survive a restart until it is captured again. A play / pause button beside the shutter silences the band without losing the selection. Nothing plays while the camera and the detector load: the restored band comes in at bar one once they are ready, and a photo, a tile or `p` brings it in sooner. Press `0` to clear the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
 
@@ -64,7 +64,7 @@ export GEMINI_API_KEY=...        # photo descriptions
 ```
 
 ```bash
-export ELEVENLABS_API_KEY=...    # the Voices instrument (headphones)
+export ELEVENLABS_API_KEY=...    # the Voices instrument (keys)
 ```
 
 `DeskBand.app` started from Finder does not see shell variables; start it from a terminal, or use `launchctl setenv GEMINI_API_KEY ...` once per login.

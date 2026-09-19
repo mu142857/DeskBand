@@ -12,7 +12,7 @@ from deskband import config as C
 LOGIC = "/Library/Application Support/Logic"
 OBJECT_CN = {"cup": "杯子", "pen": "笔", "bottle": "瓶子", "book": "书",
              "glasses": "眼镜", "cell phone": "手机", "laptop": "笔记本电脑 / 平板",
-             "headphones": "耳机"}
+             "keys": "钥匙"}
 NOTE = "C C# D D# E F F# G G# A A# B".split()
 
 
