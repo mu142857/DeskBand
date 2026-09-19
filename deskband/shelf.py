@@ -11,9 +11,12 @@ each instrument was put on the stage (Entry.pos)."""
 
 import json
 import os
+import tempfile
 import time
 
 import cv2
+
+from .motifs import MOTIF_VERSION, default_seed
 
 THUMB = 144          # stored thumbnail side, px (drawn at half that)
 
@@ -31,11 +34,15 @@ def crop_square(frame, box, margin=1.15):
 
 
 class Entry:
-    def __init__(self, name, shown, conf, thumb, saved_at=None, pos=None):
+    def __init__(self, name, shown, conf, thumb, saved_at=None, *, instrument=None,
+                 motif_version=MOTIF_VERSION, motif_seed=None, selected=False, pos=None):
         self.name, self.shown, self.conf, self.thumb = name, shown, conf, thumb
-        self.saved_at = saved_at or time.time()
-        self.pos = tuple(pos) if pos else None      # (complexity, loudness) on the stage, 0..1
-        self.selected = False
+        self.saved_at = time.time() if saved_at is None else saved_at
+        self.pos = tuple(pos) if pos else None
+        self.instrument = instrument or name
+        self.motif_version = motif_version
+        self.motif_seed = default_seed(name, motif_version) if motif_seed is None else motif_seed
+        self.selected = selected
         self.tile = None             # drawing cache, owned by the UI
 
 
@@ -63,20 +70,52 @@ class Shelf:
                 index = json.load(f)
         except (OSError, ValueError):
             return
+        if not isinstance(index, dict):
+            return
+        migrated = False
         for name, meta in index.items():
+            if name not in self.names or not isinstance(meta, dict):
+                continue
             thumb = cv2.imread(self._image(name))
-            if name in self.names and thumb is not None:
+            if thumb is not None:
                 thumb = cv2.resize(thumb, (THUMB, THUMB))
+                version = meta.get("motif_version", MOTIF_VERSION)
+                if not isinstance(version, int) or version < 1:
+                    version = MOTIF_VERSION
+                seed = meta.get("motif_seed")
+                if not isinstance(seed, int) or seed < 0:
+                    seed = default_seed(name, version)
+                migrated |= any(k not in meta for k in ("instrument", "motif_version", "motif_seed", "selected"))
+                migrated |= (meta.get("instrument") != name or
+                             meta.get("motif_version") != version or meta.get("motif_seed") != seed)
                 self.entries[name] = Entry(name, meta.get("shown", name), meta.get("conf", 0.0),
-                                           thumb, meta.get("saved_at"), meta.get("pos"))
+                                           thumb, meta.get("saved_at"), instrument=name,
+                                           motif_version=version, motif_seed=seed,
+                                           selected=bool(meta.get("selected", False)), pos=meta.get("pos"))
+        if migrated:
+            self._save_index()
 
     def _write_index(self):
         os.makedirs(self.folder, exist_ok=True)
         index = {n: dict(shown=e.shown, conf=round(e.conf, 3), saved_at=e.saved_at,
+                         instrument=e.instrument, motif_version=e.motif_version,
+                         motif_seed=e.motif_seed, selected=e.selected,
                          pos=[round(v, 4) for v in e.pos] if e.pos else None)
                  for n, e in self.entries.items()}
-        with open(self._index(), "w") as f:
-            json.dump(index, f, indent=1)
+        fd, pending = tempfile.mkstemp(prefix=".shelf-", suffix=".json", dir=self.folder)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(index, f, indent=1)
+            os.replace(pending, self._index())
+        finally:
+            if os.path.exists(pending):
+                os.remove(pending)
+
+    def _save_index(self):
+        try:
+            self._write_index()
+        except OSError as e:                # a full disk must not stop the show
+            print("shelf not saved:", repr(e), flush=True)
 
     # ---------------------------------------------------------- changes
     def add(self, name, shown, conf, frame, box):
@@ -84,14 +123,17 @@ class Shelf:
         if name not in self.names:
             return None
         old = self.entries.get(name)
-        entry = Entry(name, shown, conf, crop_square(frame, box),
-                      old.saved_at if old else None, old.pos if old else None)
-        entry.selected = old.selected if old else False
+        entry = Entry(name, shown, conf, crop_square(frame, box), old.saved_at if old else None,
+                      instrument=old.instrument if old else name,
+                      motif_version=old.motif_version if old else MOTIF_VERSION,
+                      motif_seed=old.motif_seed if old else None,
+                      selected=old.selected if old else False,
+                      pos=old.pos if old else None)
         self.entries[name] = entry
         try:                                   # a full disk must not stop the show
             os.makedirs(self.folder, exist_ok=True)
             cv2.imwrite(self._image(name), entry.thumb, [cv2.IMWRITE_JPEG_QUALITY, 92])
-            self._write_index()
+            self._save_index()
         except OSError as e:
             print("shelf not saved:", repr(e), flush=True)
         return entry
@@ -101,9 +143,9 @@ class Shelf:
             return
         try:
             os.remove(self._image(name))
-            self._write_index()
         except OSError:
             pass
+        self._save_index()
 
     def place(self, name, pos, save=True):
         """Put a saved instrument at (complexity, loudness) on the stage, both
@@ -122,11 +164,18 @@ class Shelf:
         """on=None toggles. Only a saved instrument can be selected."""
         entry = self.entries.get(name)
         if entry is not None:
-            entry.selected = (not entry.selected) if on is None else bool(on)
+            selected = (not entry.selected) if on is None else bool(on)
+            if selected != entry.selected:
+                entry.selected = selected
+                self._save_index()
 
     def clear_selection(self):
+        changed = False
         for entry in self.entries.values():
+            changed |= entry.selected
             entry.selected = False
+        if changed:
+            self._save_index()
 
     def selected(self):
         return {n for n, e in self.entries.items() if e.selected}

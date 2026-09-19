@@ -62,7 +62,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 - **一个物体只算一次**：同一个东西被读成两个名字（杯子同时被认成 cup 和 bottle）或者同类的大框套小框（整个杯子 + 杯把），只保留置信度最高的那个框；笔放在书上这种“在里面但框差很多”的情况两个都保留。逻辑在 `deskband/vision.py` 的 `same_thing()`。
 - `0`：全部静音，但保存的东西都还在（换下一位评委时用）。
 - 右键点槽，或鼠标悬停在槽上按 `x`：删除这个槽。
-- 存在 `cache/shelf/`（每个槽一张 jpg + `shelf.json`），**重启后还在**，启动时全部是关的。这个目录不进 git（缩略图里可能有人脸）。
+- 存在 `cache/shelf/`（每个槽一张 jpg + `shelf.json`），**重启后还在，选择状态也会恢复**。按 `0` 可清空当前选择。这个目录不进 git（缩略图里可能有人脸）。
 - 代码：`deskband/shelf.py`（存取），`main.py` 的 `draw_dock / slot_at / select / forget / silence`。
 
 **物体 → 乐器**（定义在 `deskband/config.py` 的 `INSTRUMENTS`）

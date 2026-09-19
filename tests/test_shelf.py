@@ -36,7 +36,7 @@ def test_shelf():
     shelf.select("cup")
     assert shelf.selected() == set()
 
-    again = Shelf(folder, NAMES)                  # a restart finds the same shelf, all switched off
+    again = Shelf(folder, NAMES)                  # cup was deselected above; restart preserves that
     assert set(again.entries) == {"cup", "cell phone"} and again.selected() == set()
     assert again.entries["cup"].thumb.shape == (THUMB, THUMB, 3)
     assert again.entries["cup"].thumb[THUMB // 2, THUMB // 2, 2] > 150             # the orange patch

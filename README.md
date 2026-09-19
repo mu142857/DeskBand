@@ -19,7 +19,7 @@ DeskBand looks at a photo of your desk and turns every object it recognises into
 | laptop or tablet | Soft FM electric piano (synthesised) | dotted-8th shimmer an octave up |
 | headphones (earphones, earbuds) | Voices: sung "ooh" samples made by ElevenLabs | a slow two-voice line on chord tones |
 
-Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. A play / pause button beside the shutter silences the band without losing the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
+Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. The selection and each instrument's repeating motif survive a restart. A play / pause button beside the shutter silences the band without losing the selection. Press `0` to clear the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
 
 The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](INSTRUMENTS.txt).
 
@@ -34,6 +34,7 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 - **Math mode** (`m`, or the φ button left of the shutter): the melodic parts (piano line, guitar, keys, glockenspiel, voices) stop restating patterns and are computed bar by bar, so the music never comes round again. Rhythms are Euclidean (k onsets spread evenly over the bar, turned; E(3,8) is the 3-3-2 above), and how many onsets and how far they turn comes from the logistic map in its chaotic range. Pitches walk, mostly by step, towards a 1/f contour built by Voss's method from irrational rotations (Weyl sequences), so no value ever recurs. Notes are still pentatonic with chord tones on the accents, so it stays in tune. It switches on the next bar line; bass, drums and strings keep their patterns.
 - **Voices (ElevenLabs):** the first start with `ELEVENLABS_API_KEY` set asks ElevenLabs' sound-effects model for a few sustained sung notes, pitch-tracks each take, drops any that wander, retunes the rest to the nearest semitone and files them in `cache/vocal/` as an ordinary sample keymap. From then on they are played like any other sampler instrument, following the chords. Delete `cache/vocal/` to make new ones, or run `.venv/bin/python -m deskband.vocals`.
 - **Photo description (Gemini):** with `GEMINI_API_KEY` set, every photo is sent to Gemini (`GEMINI_MODEL` in `deskband/config.py`) in the background, and its one- or two-sentence description of the object appears under the title while the photo is shown. It is display only and changes nothing in the music.
+- **Saved motifs:** a shelf slot has a stable motif seed and its selected state is saved. In standard mode, the motif repeats on every full chord cycle; math mode intentionally keeps evolving. If a style changes the chords, the same seed produces notes harmonized to the new progression. `App.arrangement_snapshot()` freezes the saved items, selected parts, current BPM, and the active chord progression into an immutable score for a **new complete cycle beginning at bar one**. A pending style is marked in the snapshot. Pitched parts have note timelines; drums have hit steps for a beat grid.
 - **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a long Schroeder hall reverb. The engine runs at the output device's own sample rate, and the master bus uses a gain-riding limiter rather than clipping. The audio callback never blocks on vision; a slow frame only delays the picture.
 - **Remote port:** JSON over UDP (port 9000) so a badge, an FPGA board or another program can take the photo, switch saved instruments on and off, change tempo and chords, play a sound in time, and subscribe to the beat. `tools/remote_sim.py` is a dependency-free simulator of it. Protocol in [HANDOFF.md](HANDOFF.md) section 10.
 - **FPGA conductor:** a Zybo Z7-20 owns the master beat clock, seven-track pattern sequencer, beat-quantized controls, envelopes and LFOs. Its Cortex-A9 firmware bridges the programmable logic to the Mac over UART, while the Mac keeps vision and audio synthesis. See [fpga/README.md](fpga/README.md).
@@ -122,12 +123,15 @@ main.py                app, states (preview / show), drawing
 deskband/config.py     tempo, chords, instrument table, sample paths
 deskband/vision.py     camera + YOLO-World thread
 deskband/music.py      composer: patterns per instrument
+deskband/motifs.py     stable seeds for saved instrument slots
+deskband/arrangement.py immutable next-cycle score and fingerprint
+deskband/score_view.py compact note strips and drum grids
 deskband/synth.py      audio engine, voices, sequencer
 deskband/sampler.py    sample loading and key maps
 deskband/fx.py         hall reverb
 deskband/ui.py         drawing primitives (duotone, outlines, text, cards)
 deskband/remote.py     UDP/JSON remote-control port
-deskband/shelf.py      saved instruments (thumbnails + selection + stage spots), kept in cache/shelf/
+deskband/shelf.py      saved instruments (thumbnails + motifs + selection + stage spots), kept in cache/shelf/
 deskband/stage.py      the stage: the band placed on a loudness x complexity plane
 deskband/fpga_protocol.py  Zybo UART command/event codec
 fpga/                  RTL, simulations, Zynq firmware, Vivado/Vitis builds

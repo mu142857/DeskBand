@@ -16,8 +16,11 @@ delay_steps is a fraction of a 16th, used to roll chords.
 import math
 import random
 import zlib
+from collections import deque
+from dataclasses import dataclass
 
 from . import config as C
+from .motifs import default_seed
 
 P = C.STEPS_PER_PHRASE
 ACC = set(C.ACCENTS)
@@ -110,22 +113,43 @@ class Chord:
 CHORDS = [Chord(*c) for c in C.CHORDS]
 
 
+@dataclass(frozen=True)
+class NoteEvent:
+    """One audible note or drum hit in a complete chord cycle."""
+
+    part: str
+    voice: str
+    note: int | str
+    step: int
+    duration_steps: int
+    velocity: float
+    delay_steps: float = 0.0
+
+
 class Pattern:
     """Base: plans one bar (dict step -> list of (midi, vel, dur, delay)) at a time."""
     GRID = 2              # embellishments fall on 8ths; slow parts use quarters
     FILL_CHORD = False    # embellishments use chord tones rather than the pentatonic
 
-    def __init__(self, name, spec):
+    def __init__(self, name, spec, seed=None):
         self.name = name
         self.voice = spec["voice"]
         self.lo, self.hi = spec["lo"], spec["hi"]
-        self.rng = random.Random(hash(name) & 0xFFFF)
-        self.orn = random.Random(zlib.crc32(name.encode()))   # its own, so "as written" stays as written
-        self.complexity = 0.5                                  # the stage's x axis, 0..1
+        self.seed = default_seed(name) if seed is None else seed
+        self.rng = random.Random(self.seed)
+        self.orn = random.Random(zlib.crc32(name.encode()))
+        self.complexity = 0.5
         self.seq = Sequence(name)
         self.prev = (self.lo + self.hi) // 2
         self.bar = {}
         self.loop_len = len(CHORDS)       # bars in the chord loop (the composer keeps it current)
+
+    def reset_cycle(self, seed):
+        """Replay this item's motif from the same starting state each loop."""
+        self.seed = seed
+        self.rng.seed(seed)
+        self.orn.seed(zlib.crc32(self.name.encode()))
+        self.prev = (self.lo + self.hi) // 2
 
     def put(self, step, midi, vel, dur, delay=0.0):
         self.bar.setdefault(step, []).append((midi, vel, dur, delay))
@@ -222,6 +246,11 @@ class Piano(Pattern):
             contour.append(contour[-1] + rng.choice([-2, -1, -1, 1, 1]))
         return steps, contour
 
+    def reset_cycle(self, seed):
+        super().reset_cycle(seed)
+        self.motif = None
+        self.bars_left = 0
+
     def roll(self, chord):
         """The chord: bottom to top, ~27 ms apart, top note a touch louder."""
         rng = self.rng
@@ -279,6 +308,10 @@ class Keys(Pattern):
 
     def __init__(self, name, spec):
         super().__init__(name, spec)
+        self.j = 0
+
+    def reset_cycle(self, seed):
+        super().reset_cycle(seed)
         self.j = 0
 
     def plan(self, chord, nxt):
@@ -477,15 +510,40 @@ class Backing(Pattern):
 
 
 class Composer:
-    def __init__(self):
+    def __init__(self, chords=None, motif_seeds=None):
+        self.motif_seeds = {name: default_seed(name) for name in C.INSTRUMENTS}
+        if motif_seeds:
+            self.motif_seeds.update(motif_seeds)
         self.parts = {name: PATTERNS[spec["voice"]](name, spec)
                       for name, spec in C.INSTRUMENTS.items()}
         self.backing = Backing()
-        self.chords = list(CHORDS)
+        self.chords = [Chord(c.name, c.root, list(c.voicing)) for c in CHORDS] if chords is None else [Chord(*c) for c in chords]
+        for part in self.parts.values():
+            part.loop_len = len(self.chords)
         self.pending = None            # a new chord loop waiting for the next loop start
+        self._style_requests = deque() # main thread appends; audio thread drains at bar boundaries
+        self._publishing = False
         self.bar_count = -1
         self.chord_index = 0
         self.math = C.MATH_MODE
+        # A single immutable publication. Readers never traverse self.chords while
+        # the audio callback changes the active style.
+        self.active_chords = self._chord_specs()
+
+    def _chord_specs(self):
+        return tuple((c.name, c.root, tuple(c.voicing)) for c in self.chords)
+
+    @property
+    def style_pending(self):
+        return self._publishing or self.pending is not None or bool(self._style_requests)
+
+    def set_motif_seed(self, name, seed):
+        """A replacement motif takes effect on the next complete loop."""
+        if name not in self.parts:
+            raise KeyError(name)
+        updated = self.motif_seeds.copy()
+        updated[name] = int(seed)
+        self.motif_seeds = updated
 
     @property
     def chord_name(self):
@@ -503,18 +561,28 @@ class Composer:
     def request_style(self, chords):
         """chords: [(name, root_pc, [midi...]), ...]. Takes effect when the
         current loop comes round, so the change always lands on a downbeat."""
-        self.pending = [Chord(*c) for c in chords]
+        self._style_requests.append(tuple((name, root, tuple(voicing)) for name, root, voicing in chords))
 
     def step(self, step):
         s = step % P
         if s == 0:
-            self.bar_count += 1
-            if self.pending is not None and self.bar_count % len(self.chords) == 0:
-                self.chords, self.pending, self.bar_count = self.pending, None, 0
-                for p in self.parts.values():
-                    p.loop_len = len(self.chords)
-                    if hasattr(p, "bars_left"):
-                        p.bars_left = 0                  # new harmony, new motif
+            self._publishing = self.pending is not None
+            try:
+                self.bar_count += 1
+                while self._style_requests:
+                    self._publishing = True
+                    self.pending = [Chord(*c) for c in self._style_requests.popleft()]
+                if self.pending is not None and self.bar_count % len(self.chords) == 0:
+                    self.chords, self.pending, self.bar_count = self.pending, None, 0
+                    for p in self.parts.values():
+                        p.loop_len = len(self.chords)
+                if not self.math and self.bar_count % len(self.chords) == 0:
+                    seeds = self.motif_seeds
+                    for name, p in self.parts.items():
+                        p.reset_cycle(seeds[name])
+                self.active_chords = self._chord_specs()
+            finally:
+                self._publishing = False
             self.chord_index = self.bar_count % len(self.chords)
             chord = self.chords[self.chord_index]
             nxt = self.chords[(self.chord_index + 1) % len(self.chords)]
@@ -526,3 +594,22 @@ class Composer:
         for p in self.parts.values():
             events.extend(p.events(s))
         return events
+
+
+def score_cycle(chords, names, motif_seeds=None, *, math_mode=False, complexities=None):
+    """The exact note/hit score a fresh local Composer plays for one cycle.
+
+    `chords` is a tuple of (name, root, MIDI voicing) specs. Both a future
+    exporter and the ending screen can consume these immutable events.
+    """
+    chosen = set(names)
+    composer = Composer(chords=chords, motif_seeds=motif_seeds)
+    composer.set_math(math_mode)
+    for name, value in (complexities or {}).items():
+        composer.set_complexity(name, value)
+    events = []
+    for step in range(P * len(chords)):
+        for part, voice, note, velocity, duration, delay in composer.step(step):
+            if part in chosen:
+                events.append(NoteEvent(part, voice, note, step, duration, velocity, delay))
+    return tuple(events)

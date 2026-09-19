@@ -19,6 +19,7 @@ import numpy as np
 from deskband import config as C
 from deskband import ui
 from deskband.cloud import Describer
+from deskband.arrangement import build_snapshot
 from deskband.music import Composer
 from deskband.remote import Remote
 from deskband.shelf import Shelf
@@ -46,7 +47,8 @@ class Box:
 
 class App:
     def __init__(self):
-        self.composer = Composer()
+        self.shelf = Shelf(C.SHELF_DIR, C.INSTRUMENTS)   # saved slots, including stable motifs
+        self.composer = Composer(motif_seeds={n: e.motif_seed for n, e in self.shelf.entries.items()})
         self.engine = Engine(self.composer)
         self.vision = Vision()
         self.base = ui.Base(W, H)
@@ -66,7 +68,6 @@ class App:
         self.t_prev = time.time()
         self.disp_fps = 0.0
         self.manual = {}                # part -> True/False, forced from the remote port
-        self.shelf = Shelf(C.SHELF_DIR, C.INSTRUMENTS)   # saved instruments; the selected ones are the band
         self.band = set()               # parts switched on
         self.on = set()                 # parts sounding now: the band, unless paused
         self.dock_x = W - 28 - TILE
@@ -77,6 +78,7 @@ class App:
         self.describer = Describer()    # Gemini's description of the current photo (display only)
         self.caption = (None, [])       # (text, wrapped lines)
         self.zybo = ZyboLink(on_lost=lambda: self.remote.commands.put({"cmd": "fpga_mode", "on": False}))
+        self.apply_parts()              # restore the saved selection before audio starts
 
     # ------------------------------------------------------------ actions
     def shoot(self):
@@ -96,7 +98,8 @@ class App:
         self.state = SHOW
         self.flash = 1.0
         for d in sorted(dets, key=lambda d: d.conf):       # best box of each object last, so it wins
-            if self.shelf.add(d.name, d.shown, d.conf, frame, d.box):
+            if entry := self.shelf.add(d.name, d.shown, d.conf, frame, d.box):
+                self.composer.set_motif_seed(d.name, entry.motif_seed)
                 self.shelf.select(d.name, True)
         self.apply_parts()
 
@@ -143,6 +146,10 @@ class App:
     def silence(self):
         self.shelf.clear_selection()
         self.apply_parts()
+
+    def arrangement_snapshot(self):
+        """A complete next-cycle score for the ending screen and exporter."""
+        return build_snapshot(self.shelf, self.composer, self.engine)
 
     # ------------------------------------------------------------ remote port
     def state_dict(self):
