@@ -1,6 +1,6 @@
 # DeskBand ending screen, loop export, and ElevenLabs song roadmap
 
-Status: Milestones 0–1 complete. Milestones 2–5 remain open.
+Status: Milestones 0–2 complete. Milestones 3–5 remain open.
 
 ## Product flow and decisions
 
@@ -68,14 +68,16 @@ Implementation note: the score and future WAV export describe a **new complete c
 
 **Goal:** a complete local experience before any cloud integration.
 
-- [ ] M2.1 Add `SUMMARY` to the app state machine. Remember whether the user came from preview or frozen-photo mode; Back restores that state without discarding the shelf (`main.py`).
-- [ ] M2.2 Add a visible **Finish** button and a keyboard shortcut that do not collide with shutter, play/pause, shelf slots, or fullscreen. Route mouse and keyboard input by state so camera controls do not fire under the summary.
-- [ ] M2.3 Draw the ending screen with all saved entries in shelf order; support 0–8 entries at 1280×720 without clipping. Use saved thumbnails and labels from the shelf; no live camera frame is required for the screen to render.
-- [ ] M2.4 Show instrument name and motif/rhythm strip for each entry, plus a clear **In this song** toggle. Toggling updates the shelf selection and the proposed snapshot, but does not silently overwrite an existing WAV.
-- [ ] M2.5 Show title, BPM, chord names, bar count, estimated duration, and number of included instruments. Offer an empty-state explanation and disable Render/ElevenLabs when nothing is selected.
-- [ ] M2.6 Add **Render loop**, local playback controls, **Reveal file**, **Continue with ElevenLabs**, and **Back** states. Disable conflicting actions and show progress while a worker is busy.
-- [ ] M2.7 Keep the main OpenCV loop responsive: UI reads job status from a thread-safe queue; no sample loading, file writing, upload, or generation occurs in `render()` or the audio callback.
-- [ ] M2.8 Add UI tests for state transitions and hitboxes, plus a manual visual check with 0, 1, 4, and 7 collected items and long labels.
+- [x] M2.1 Add `SUMMARY` to the app state machine. Remember whether the user came from preview or frozen-photo mode; Back restores that state without discarding the shelf (`main.py`).
+- [x] M2.2 Add a visible **Finish** button and a keyboard shortcut that do not collide with shutter, play/pause, shelf slots, or fullscreen. Route mouse and keyboard input by state so camera controls do not fire under the summary.
+- [x] M2.3 Draw the ending screen with all saved entries in shelf order; support 0–8 entries at 1280×720 without clipping. Use saved thumbnails and labels from the shelf; no live camera frame is required for the screen to render.
+- [x] M2.4 Show instrument name and motif/rhythm strip for each entry, plus a clear **In this song** toggle. Toggling updates the shelf selection and the proposed snapshot, but does not silently overwrite an existing WAV.
+- [x] M2.5 Show title, BPM, chord names, bar count, estimated duration, and number of included instruments. Offer an empty-state explanation and disable Render/ElevenLabs when nothing is selected.
+- [x] M2.6 Add **Render loop**, local playback controls, **Reveal file**, **Continue with ElevenLabs**, and **Back** states. Disable conflicting actions and show progress while a worker is busy. Render, playback, file reveal, and ElevenLabs actions remain disabled until Milestones 3–4 provide their backends.
+- [x] M2.7 Keep the main OpenCV loop responsive: UI reads job status from a thread-safe queue; no sample loading, file writing, upload, or generation occurs in `render()` or the audio callback.
+- [x] M2.8 Add UI tests for state transitions and hitboxes, plus a manual visual check with 0, 1, 4, and 7 collected items and long labels.
+
+Implementation note: `deskband/summary.py` draws the collection and caches its score strips. `App.current_summary()` rebuilds a snapshot only after the shelf, selection, BPM, chords, stage positions, or math mode changes. `SummaryJobs` receives progress and results from worker threads through a queue. Visual checks covered 0, 1, 4, 7, and 8 items, including a long item name. The disabled action buttons explain that loop rendering arrives in Milestone 3; ElevenLabs follows in Milestone 4.
 
 **Done when:** the user can inspect the collection, choose the band, and return to the camera even with no network or API key.
 

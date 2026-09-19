@@ -38,7 +38,7 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 - **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a long Schroeder hall reverb. The engine runs at the output device's own sample rate, and the master bus uses a gain-riding limiter rather than clipping. The audio callback never blocks on vision; a slow frame only delays the picture.
 - **Remote port:** JSON over UDP (port 9000) so a badge, an FPGA board or another program can take the photo, switch saved instruments on and off, change tempo and chords, play a sound in time, receive FPGA bar telemetry, and subscribe to the beat. `tools/remote_sim.py` is a dependency-free simulator of it. Protocol in [HANDOFF.md](HANDOFF.md) section 10.
 - **FPGA conductor:** a Zybo Z7-20 owns the master beat clock, seven-track sequencer, automatic LFSR/Euclidean bar variation, quantized performance controls, envelopes and LFOs. Its Cortex-A9 firmware bridges the programmable logic to the Mac over UART, while the Mac keeps vision and audio synthesis. Mixer-mode BTN1 mutes the selected track; `--btn1-master` restores its earlier app play/pause mapping. See [fpga/README.md](fpga/README.md).
-- **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, the shelf of saved instruments (each thumbnail under its instrument's own colour filter, `tint` in `INSTRUMENTS`), and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake.
+- **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, the shelf of saved instruments (each thumbnail under its instrument's own colour filter, `tint` in `INSTRUMENTS`), and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake. Press `e` or click **Finish** to inspect the saved collection, view each part's actual note/rhythm strip, and choose the items in this song. The summary works without a camera; loop rendering and ElevenLabs controls remain disabled until their later milestones are implemented.
 - **Stage:** `tab` (or the button at the left of the row) swaps the camera for a plane on which the band is laid out by hand. Drag a thumbnail from the shelf onto it to bring that instrument in, drag its token off (or right-click it) to take it out. Up is loudness (the part's own level in the middle, −24 dB at the bottom, +9 dB at the top), across is complexity: the middle band plays the part as written, to the left notes drop away from the weakest beats first down to the downbeat alone, to the right passing notes and 16th grace notes fill in. Loudness follows the hand at once, complexity from the next bar line. Where each instrument stands is kept on the shelf, so it comes back to the same spot.
 
 ## Requirements
@@ -89,7 +89,7 @@ Optional but recommended, the two sounds the piece is written for (both are unpa
 .venv/bin/python main.py
 ```
 
-Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `p` or return play / pause · `m` math mode on / off · `tab` camera / stage · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
+Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `e` open the summary; `b`, `e`, or Escape returns (on the summary, `1`–`8` toggle its cards) · `p` or return play / pause · `m` math mode on / off · `tab` camera / stage · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
 
 With the Zybo's J12 `PROG/UART` port connected using a Micro-USB data cable,
 run the bridge in a second terminal (`pyserial` is included in `requirements.txt`):
@@ -122,13 +122,14 @@ which writes `dist/DeskBand.app`: a small native launcher (`tools/launcher.c`) t
 ## Project layout
 
 ```
-main.py                app, states (preview / show), drawing
+main.py                app, states (preview / show / summary), drawing
 deskband/config.py     tempo, chords, instrument table, sample paths
 deskband/vision.py     camera + YOLO-World thread
 deskband/music.py      composer: patterns per instrument
 deskband/motifs.py     random capture seeds and deterministic offline fallbacks
 deskband/arrangement.py immutable next-cycle score and fingerprint
 deskband/score_view.py compact note strips and drum grids
+deskband/summary.py   collection screen layout, hitboxes, and worker status queue
 deskband/synth.py      audio engine, voices, sequencer
 deskband/sampler.py    sample loading and key maps
 deskband/fx.py         hall reverb

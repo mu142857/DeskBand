@@ -24,13 +24,14 @@ from deskband.music import Composer
 from deskband.remote import Remote
 from deskband.shelf import Shelf
 from deskband.stage import Stage
+from deskband.summary import SummaryJobs, SummaryView, contains
 from deskband.synth import Engine
 from deskband.vision import Detection, Vision, echoes, merge_duplicates, open_camera
 from deskband.zybo import ZyboLink
 
 WINDOW = "DeskBand"
 W, H = 1280, 720
-PREVIEW, SHOW = "preview", "show"
+PREVIEW, SHOW, SUMMARY = "preview", "show", "summary"
 TILE, TILE_GAP, TILE_R = 72, 12, 14            # shelf slots, down the right edge
 CAPTION_W = 520                                 # Gemini's description, top left
 
@@ -75,7 +76,19 @@ class App:
         self.play_button = (W // 2 + 84, H - 64, 19)
         self.math_button = (W // 2 - 84, H - 64, 19)
         self.view_button = (W // 2 - 168, H - 64, 19)   # camera <-> stage
+        self.finish_button = (930, 626, 1126, 680)
         self.on_stage = False
+        self.summary_return_state = PREVIEW
+        self.summary_view = SummaryView()
+        self.summary_jobs = SummaryJobs()
+        self.song_jobs = SummaryJobs()
+        self.summary_snapshot = None
+        self.summary_signature = None
+        self.render_worker = None      # connected by Milestone 3
+        self.extend_worker = None      # connected by Milestone 4
+        self.clip_player = None        # connected by Milestone 3
+        self.clip_revealer = None      # connected by Milestone 3
+        self.clip_playing = False
         self.playing = True             # the master switch beside the shutter
         self.t_prev = time.time()
         self.disp_fps = 0.0
@@ -157,6 +170,8 @@ class App:
 
     def show_stage(self, on=None):
         """Camera view <-> the stage (None flips). The band plays on either way."""
+        if self.state == SUMMARY:
+            return
         self.on_stage = (not self.on_stage) if on is None else bool(on)
         self.stage.drag = None
 
@@ -175,6 +190,70 @@ class App:
     def arrangement_snapshot(self):
         """A complete next-cycle score for the ending screen and exporter."""
         return build_snapshot(self.shelf, self.composer, self.engine)
+
+    def enter_summary(self):
+        if self.state == SUMMARY:
+            return
+        self.summary_return_state = self.state
+        self.state = SUMMARY
+        self.stage.drag = None
+        self.summary_signature = None
+
+    def leave_summary(self):
+        if self.state == SUMMARY:
+            self.stop_clip()
+            self.state = self.summary_return_state
+
+    def stop_clip(self):
+        if self.clip_playing and self.clip_player is not None:
+            self.clip_player(self.summary_jobs.result, False)
+        self.clip_playing = False
+
+    def current_summary(self):
+        """Only rebuild scores when a sound or displayed card actually changes."""
+        entries = tuple((name, e.shown, e.motif_seed, e.selected, e.pos)
+                        for name in self.shelf.order() for e in (self.shelf.entries[name],))
+        signature = (entries, self.composer.active_chords, float(self.engine.bpm),
+                     self.composer.math, self.composer.style_pending)
+        if signature != self.summary_signature:
+            try:
+                self.summary_snapshot = self.arrangement_snapshot()
+            except RuntimeError:
+                if self.summary_snapshot is None:
+                    raise
+            else:
+                self.summary_signature = signature
+        return self.summary_snapshot
+
+    def summary_action(self, action, name=None):
+        if action == "back":
+            self.leave_summary()
+        elif action == "toggle" and name in self.shelf.entries:
+            self.stop_clip()
+            self.select(name)
+        elif action == "render":
+            snapshot = self.current_summary()
+            if (self.render_worker is not None and snapshot.selected
+                    and not snapshot.style_pending and not self.song_jobs.busy):
+                self.stop_clip()
+                self.summary_jobs.start("render", snapshot, self.render_worker)
+        elif (action == "play" and self.clip_player is not None and self.current_clip_ready()
+              and not self.song_jobs.busy):
+            self.clip_playing = not self.clip_playing
+            self.clip_player(self.summary_jobs.result, self.clip_playing)
+        elif (action == "reveal" and self.clip_revealer is not None and self.current_clip_ready()
+              and not self.song_jobs.busy):
+            self.clip_revealer(self.summary_jobs.result)
+        elif action == "extend" and self.extend_worker is not None:
+            snapshot = self.current_summary()
+            if self.current_clip_ready() and not self.song_jobs.busy:
+                clip = self.summary_jobs.result
+                self.song_jobs.start("extend", snapshot,
+                                     lambda snap, progress: self.extend_worker(snap, clip, progress))
+
+    def current_clip_ready(self):
+        return (self.summary_jobs.status == "done" and self.summary_jobs.result is not None
+                and self.summary_jobs.fingerprint == self.current_summary().fingerprint)
 
     # ------------------------------------------------------------ remote port
     def state_dict(self):
@@ -195,7 +274,7 @@ class App:
             "description": self.describer.text if self.describer.status == "done" else None,
             "saved": self.shelf.order(),                                    # top of the shelf first
             "selected": [n for n in self.shelf.order() if self.shelf.entries[n].selected],
-            "view": "stage" if self.on_stage else "camera",
+            "view": "summary" if self.state == SUMMARY else "stage" if self.on_stage else "camera",
             "placed": {n: {"complexity": round(e.pos[0], 3), "loudness": round(e.pos[1], 3)}
                        for n, e in self.shelf.entries.items() if e.pos},
             "fpga": self.fpga_bar,
@@ -279,6 +358,8 @@ class App:
         self.describer.clear()
 
     def toggle(self):
+        if self.state == SUMMARY:
+            return
         if self.on_stage:                       # space bar on the stage: back to the camera
             self.show_stage(False)
         elif self.state == PREVIEW:
@@ -300,6 +381,14 @@ class App:
 
     def on_mouse(self, event, x, y, flags, param):
         self.mouse = (x, y)
+        if self.state == SUMMARY:
+            if event == cv2.EVENT_LBUTTONDOWN:
+                action, name = self.summary_view.hit(x, y, self.current_summary())
+                self.summary_action(action, name)
+            return
+        if event == cv2.EVENT_LBUTTONDOWN and contains(self.finish_button, x, y):
+            self.enter_summary()
+            return
         if event == cv2.EVENT_LBUTTONDOWN and self.over(self.view_button, x, y):
             self.show_stage()
         elif self.on_stage and self.stage.on_mouse(event, x, y):
@@ -503,10 +592,31 @@ class App:
             hint = "space  ·  retake"
         ui.text(out, hint, cx, cy + r + 10, 13, 0.55, "Light", align="center")
 
+    def draw_finish_button(self, out):
+        x0, y0, x1, y1 = self.finish_button
+        hover = x0 <= self.mouse[0] < x1 and y0 <= self.mouse[1] < y1
+        cv2.rectangle(out, (x0, y0), (x1 - 1, y1 - 1), (67, 62, 57) if hover else (48, 44, 41), -1)
+        ui.outline(out, x0, y0, x1, y1, 12, 0.92 if hover else 0.55)
+        ui.text(out, "Finish  →", (x0 + x1) // 2, y0 + 13, 19, 0.96, "Medium", align="center")
+        ui.text(out, "e  ·  collection", (x0 + x1) // 2, y1 + 5, 12, 0.56,
+                "Light", align="center")
+
     def render(self, dt):
+        if self.state == SUMMARY:
+            self.summary_jobs.poll()
+            self.song_jobs.poll()
+            return self.summary_view.render(
+                self.current_summary(), self.shelf, self.summary_jobs, self.mouse,
+                song_jobs=self.song_jobs,
+                clip_playing=self.clip_playing,
+                can_render=self.render_worker is not None,
+                can_play=self.clip_player is not None,
+                can_reveal=self.clip_revealer is not None,
+                can_extend=self.extend_worker is not None)
         if self.on_stage:
             out = self.stage.render()
             self.draw_math_button(out)
+            self.draw_finish_button(out)
             self.flash = 0.0                    # a photo taken from the remote port: no flash here
             if self.debug:
                 self.draw_debug(out)
@@ -521,6 +631,7 @@ class App:
             msg = self.vision.error or "starting camera and model…"
             ui.text(out, msg, W // 2, H // 2 - 10, 18, 0.7, "Light", align="center")
             ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+            self.draw_finish_button(out)
             return out
         frame, scale_x, scale_y, offset_x, offset_y = fit_camera_frame(frame)
         out = self.base.render(frame, dim=0.12 if self.state == PREVIEW else 0.0)
@@ -546,6 +657,7 @@ class App:
         self.draw_play_button(out)
         self.draw_math_button(out)
         self.draw_view_button(out)
+        self.draw_finish_button(out)
         if self.state == SHOW:
             self.draw_caption(out)
         if self.flash > 0.01:
@@ -578,6 +690,57 @@ class App:
             ui.text(out, s, 28, y, 13, 0.75, "Regular")
             y += 20
 
+    def handle_key(self, k):
+        """Return True to quit. Summary keys never trigger camera/stage controls."""
+        if k == ord("q"):
+            return True
+        if self.state == SUMMARY:
+            if k in (27, ord("b"), ord("e")):
+                self.leave_summary()
+            elif ord("1") <= k <= ord("8"):
+                items = self.current_summary().items
+                index = k - ord("1")
+                if index < len(items):
+                    self.summary_action("toggle", items[index].name)
+            elif k == ord("f"):
+                self.set_fullscreen()
+            return False
+        if k == 27:
+            return True
+        if k == ord("e"):
+            self.enter_summary()
+        elif k == ord(" "):
+            self.toggle()
+        elif k == ord("d"):
+            self.debug = not self.debug
+        elif k in (ord("p"), 13):
+            self.play()
+        elif k == ord("m"):
+            self.math_mode()
+        elif k == 9:
+            self.show_stage()
+        elif ord("1") <= k <= ord("9"):
+            slots = self.shelf.order()
+            if k - ord("1") < len(slots):
+                self.select(slots[k - ord("1")])
+        elif k == ord("0"):
+            self.silence()
+        elif k == ord("x") and self.slot_at(*self.mouse):
+            self.forget(self.slot_at(*self.mouse))
+        elif k == ord("s"):
+            frame, _ = self.vision.snapshot()
+            if frame is not None:
+                self.save_frame(frame, "frame")
+                self.flash = 0.25
+        elif k == ord("f"):
+            self.set_fullscreen()
+        return False
+
+    def set_fullscreen(self):
+        self.fullscreen = not self.fullscreen
+        cv2.setWindowProperty(WINDOW, cv2.WND_PROP_FULLSCREEN,
+                              cv2.WINDOW_FULLSCREEN if self.fullscreen else cv2.WINDOW_NORMAL)
+
     # -------------------------------------------------------------- loop
     def run(self):
         self.engine.start()
@@ -609,35 +772,8 @@ class App:
                 cv2.imshow(WINDOW, self.render(dt))
                 wait = max(1, int(33 - (time.time() - t0) * 1000))
                 k = cv2.waitKey(wait) & 0xFF
-                if k in (ord("q"), 27):
+                if self.handle_key(k):
                     break
-                elif k == ord(" "):
-                    self.toggle()
-                elif k == ord("d"):
-                    self.debug = not self.debug
-                elif k in (ord("p"), 13):                 # p or return
-                    self.play()
-                elif k == ord("m"):
-                    self.math_mode()
-                elif k == 9:                              # tab
-                    self.show_stage()
-                elif ord("1") <= k <= ord("9"):           # shelf slots, from the top
-                    slots = self.shelf.order()
-                    if k - ord("1") < len(slots):
-                        self.select(slots[k - ord("1")])
-                elif k == ord("0"):
-                    self.silence()
-                elif k == ord("x") and self.slot_at(*self.mouse):
-                    self.forget(self.slot_at(*self.mouse))
-                elif k == ord("s"):                       # save the live frame without shooting
-                    frame, _ = self.vision.snapshot()
-                    if frame is not None:
-                        self.save_frame(frame, "frame")
-                        self.flash = 0.25
-                elif k == ord("f"):
-                    self.fullscreen = not self.fullscreen
-                    cv2.setWindowProperty(WINDOW, cv2.WND_PROP_FULLSCREEN,
-                                          cv2.WINDOW_FULLSCREEN if self.fullscreen else cv2.WINDOW_NORMAL)
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break
         finally:

@@ -26,11 +26,11 @@ nothing in this thread can disturb audio or drawing.
   {"cmd": "state"}                                one state packet
 
 State packet (what is *audible* now, already compensated for output latency):
-  {"type": "state", "mode": "preview"|"show", "bpm": 120, "bar": 12, "step": 6,
+  {"type": "state", "mode": "preview"|"show"|"summary", "bpm": 120, "bar": 12, "step": 6,
    "beat": 1, "beat_phase": 0.5, "chord": "G6", "chord_index": 1,
    "parts": {"cup": {"on": true, "glow": 0.83}, ...}, "detected": ["cup", "tablet"],
    "playing": true, "saved": ["cup", "pen"], "selected": ["cup"]}     (saved: top of the shelf first)
-   ... "view": "camera"|"stage", "placed": {"cup": {"complexity": 0.5, "loudness": 0.5}, ...},
+   ... "view": "camera"|"stage"|"summary", "placed": {"cup": {"complexity": 0.5, "loudness": 0.5}, ...},
    "fpga": {"bar": 12, "energy": 1, "locks": 0, "fill": false, ...} or null
 """
 
