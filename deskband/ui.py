@@ -231,19 +231,17 @@ class Base:
         return cv2.multiply(out, self.vignette, scale=(1 - dim) / 255.0)
 
 
-def keep_colour(out, frame, x0, y0, x1, y1, r, alpha):
-    """Restore the original colour inside a rounded box (the object 'lit up')."""
+def keep_colour(out, frame, x0, y0, x1, y1, r, alpha, color):
+    """Colour back inside a rounded box (the object 'lit up'), under the same
+    filter as its shelf thumbnail (tint with `color`)."""
     w, h = x1 - x0, y1 - y0
     if w < 4 or h < 4:
         return
     m = cv2.GaussianBlur(rounded_mask(w, h, r), (0, 0), 1.0).astype(np.float32) / 255.0
     a = m[:, :, None] * alpha
     roi = out[y0:y1, x0:x1]
-    src = frame[y0:y1, x0:x1].astype(np.float32)
-    # slightly lifted, slightly desaturated colour reads as "lit" rather than raw webcam
-    g = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)[:, :, None].astype(np.float32)
-    src = src * 0.8 + g * 0.2
-    roi[:] = np.clip(src * 1.05 * a + roi * (1 - a), 0, 255).astype(np.uint8)
+    src = tint(frame[y0:y1, x0:x1], color)
+    roi[:] = (src * a + roi * (1 - a)).astype(np.uint8)
 
 
 def ease(cur, target, dt, tau):

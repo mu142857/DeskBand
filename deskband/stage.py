@@ -12,6 +12,7 @@ bar line where math mode is first heard.
 Drawing only; the App owns the shelf, the band and the buttons."""
 
 import math
+import random
 import time
 
 import cv2
@@ -22,10 +23,19 @@ from . import ui
 
 DRAG_PX = 5                  # a press that moves less than this is a click
 # Where an instrument lands when it joins without being dragged in (a photo, a
-# click on the shelf, a number key): along the middle line, as-written first.
-HOME_X = (0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82)
+# click on the shelf, a number key): somewhere about the middle of the plane,
+# clear of the others, never against an edge.
+NEW_BOX = ((0.20, 0.80), (0.35, 0.65))
+# What the random button deals (see shuffle): the part it puts out front, the
+# other computed parts, the drums, and everyone else.
+LEAD_BOX = ((0.10, 0.90), (0.88, 1.00))
+SIDE_BOX = ((0.10, 0.90), (0.15, 0.62))
+DRUM_BOX = ((0.40, 0.60), (0.60, 0.78))
+FREE_BOX = ((0.08, 0.92), (0.08, 0.92))
+TOKEN_GAP = 16               # px kept between tokens when a spot is picked at random
 RING_GAP = 10                # math mode's ring of 16ths sits this far outside a token
 FIELD_GAP = 10               # spacing of the golden-angle field (px per sqrt(seed))
+FIELD_ARMS = 21              # its spiral arms, every other one dimmed
 
 
 def loudness_db(y):
@@ -83,15 +93,60 @@ class Stage:
         return None
 
     # ------------------------------------------------------------ the mix
+    def free_spot(self, boxes, taken, tries=120):
+        """A spot picked at random that no token already standing on `taken`
+        (screen points) overlaps. Each box ((x0, x1), (y0, y1) in plane
+        coordinates) is tried in turn, so the caller can name where it would
+        rather be first and where it will settle for; if every box is crowded,
+        the roomiest spot of all the tries."""
+        want = self.size + TOKEN_GAP
+        best, best_room = None, -1.0
+        for (xlo, xhi), (ylo, yhi) in boxes:
+            for _ in range(tries):
+                pos = (random.uniform(xlo, xhi), random.uniform(ylo, yhi))
+                sx, sy = self.to_screen(pos)
+                room = min((math.hypot(sx - x, sy - y) for x, y in taken), default=1e9)
+                if room >= want:
+                    return pos
+                if room > best_room:
+                    best, best_room = pos, room
+        return best
+
     def settle(self):
         """Give every instrument in the band that has never been placed a spot."""
         shelf = self.app.shelf
         for name in shelf.order():
             if name in self.app.band and shelf.entries[name].pos is None:
-                taken = [shelf.entries[n].pos for n in self.placed()]
-                x = next((x for x in HOME_X if all(abs(x - p[0]) > 0.06 or abs(p[1] - 0.5) > 0.1
-                                                   for p in taken)), 0.5)
-                shelf.place(name, (x, 0.5))
+                taken = [self.to_screen(shelf.entries[n].pos) for n in self.placed()]
+                shelf.place(name, self.free_spot((NEW_BOX, FREE_BOX), taken))   # further out once the middle fills
+
+    def shuffle(self):
+        """The random button: deal the band a new arrangement, loudness and
+        complexity both. One of the parts math mode computes is put out front at
+        the top of the plane and the others are kept below the middle, so there
+        is always one line to follow; the drums stand high in the middle; bass,
+        strings and anything else fall where they like. Complexity comes with the
+        spot, so it is heard from the next bar line."""
+        placed = self.placed()
+        computed = [n for n in placed if n in self.app.composer.computed]
+        lead = random.choice(computed) if computed else None
+        rest = [n for n in placed if n != lead]
+        random.shuffle(rest)
+        order = ([lead] if lead else []) + rest
+        taken = []
+        for i, name in enumerate(order):
+            if name == lead:
+                box = LEAD_BOX
+            elif name in computed:
+                box = SIDE_BOX
+            elif C.INSTRUMENTS[name]["voice"] == "drums":
+                box = DRUM_BOX
+            else:
+                box = FREE_BOX
+            pos = self.free_spot((box,), taken)          # its box is a rule, not a preference
+            self.app.shelf.place(name, pos, save=i == len(order) - 1)   # one write, at the end
+            taken.append(self.to_screen(pos))
+        self.apply(placed)
 
     def apply(self, names=None):
         """Placements -> the engine's loudness trims and the composer's complexity."""
@@ -160,18 +215,22 @@ class Stage:
     def field(self):
         """Golden-angle dots over the plane, packed as a sunflower packs its seeds
         (seed i at radius sqrt(i), turned 2π/φ² from the last): math mode's
-        backdrop. -> float mask the size of the plane."""
+        backdrop. Seeds i apart by FIELD_ARMS (a Fibonacci number) lie on one
+        spiral arm; every other arm is dimmed so the spirals read.
+        -> float mask the size of the plane."""
         w, h = self.x1 - self.x0, self.y1 - self.y0
-        m = np.zeros((h, w), np.uint8)
-        turn = math.pi * (3 - 5 ** 0.5)
+        m = np.zeros((h, w), np.float32)
+        turn = (3 - 5 ** 0.5) / 2                         # 1/φ² of a full turn: the golden angle
         reach = math.hypot(w, h) / 2
         for i in range(1, int((reach / FIELD_GAP) ** 2)):
             r = FIELD_GAP * math.sqrt(i)
-            x, y = w / 2 + r * math.cos(i * turn), h / 2 + r * math.sin(i * turn)
-            if 6 < x < w - 6 and 6 < y < h - 6:          # a little larger towards the middle
+            x, y = w / 2 + r * math.cos(2 * math.pi * i * turn), h / 2 + r * math.sin(2 * math.pi * i * turn)
+            if 6 < x < w - 6 and 6 < y < h - 6:
+                arm = int((i % FIELD_ARMS) * turn % 1 * FIELD_ARMS)      # arms in order round the circle
+                v = (1 - 0.3 * r / reach) * (0.35 if arm % 2 else 1.0)
                 cv2.circle(m, (round(16 * x), round(16 * y)), round(16 * (1.5 - 0.6 * r / reach)),
-                           255, -1, cv2.LINE_AA, shift=4)
-        return m.astype(np.float32) / 255.0
+                           v, -1, cv2.LINE_AA, shift=4)                   # a little larger towards the middle
+        return m
 
     def backdrop(self, W, H, math_mode=False):
         base = np.empty((H, W, 3), np.uint8)

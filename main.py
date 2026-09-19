@@ -75,6 +75,7 @@ class App:
         self.play_button = (W // 2 + 84, H - 64, 19)
         self.math_button = (W // 2 - 84, H - 64, 19)
         self.view_button = (W // 2 - 168, H - 64, 19)   # camera <-> stage
+        self.random_button = (W // 2 + 168, H - 64, 19)  # deal the stage again (the stage only)
         self.on_stage = False
         self.playing = True             # the master switch beside the shutter
         self.t_prev = time.time()
@@ -311,6 +312,8 @@ class App:
                 self.play()
             elif self.over(self.math_button, x, y):
                 self.math_mode()
+            elif self.on_stage and self.over(self.random_button, x, y):
+                self.stage.shuffle()
             elif self.slot_at(x, y):
                 self.select(self.slot_at(x, y))
         elif event == cv2.EVENT_RBUTTONDOWN and self.slot_at(x, y):
@@ -391,9 +394,9 @@ class App:
             c = ui.hex_bgr(C.INSTRUMENTS[name]["tint"])
             c = c + (255 - c) * 0.25                     # its shelf colour, lifted like the stage's rings
             if playing:
-                ui.circle(out, x0 + 26, y + 10, 4, 0.35 + 0.65 * self.glow(name), thickness=-1, color=c)
+                ui.circle(out, x0 + 26, y + 10, 4, 0.45 + 0.55 * self.glow(name), thickness=-1, color=c)
             else:
-                ui.circle(out, x0 + 26, y + 10, 4, 0.35, thickness=1, color=c)
+                ui.circle(out, x0 + 26, y + 10, 4, 0.65, thickness=1, color=c)
             dim = 1.0 if playing else 0.55
             ui.text(out, shown, x0 + 42, y, 16, 0.9 * dim, "Regular")
             ui.text(out, C.INSTRUMENTS[name]["label"], x1 - 20, y, 16, 0.6 * dim, "Light", align="right")
@@ -462,6 +465,17 @@ class App:
             hint = "m  ·  next bar"
         ui.text(out, hint, cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
 
+    def draw_random_button(self, out):
+        """Right of the play button, on the stage only: deal the band a new
+        arrangement (a die, three pips)."""
+        cx, cy, r = self.random_button
+        a = 0.95 if self.over(self.random_button, *self.mouse) else 0.75
+        ui.circle(out, cx, cy, r, a - 0.15, thickness=1)
+        ui.outline(out, cx - 9, cy - 9, cx + 9, cy + 9, 4, a)
+        for dx, dy in ((-4, -4), (0, 0), (4, 4)):
+            ui.circle(out, cx + dx, cy + dy, 1.5, a, thickness=-1)
+        ui.text(out, "r  ·  random", cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
+
     def draw_view_button(self, out):
         """Far left of the row: to the stage (a plot with dots), or back to the camera."""
         cx, cy, r = self.view_button
@@ -519,6 +533,7 @@ class App:
         if self.on_stage:
             out = self.stage.render()
             self.draw_math_button(out)
+            self.draw_random_button(out)
             self.flash = 0.0                    # a photo taken from the remote port: no flash here
             if self.debug:
                 self.draw_debug(out)
@@ -631,6 +646,8 @@ class App:
                     self.play()
                 elif k == ord("m"):
                     self.math_mode()
+                elif k == ord("r") and self.on_stage:
+                    self.stage.shuffle()
                 elif k == 9:                              # tab
                     self.show_stage()
                 elif ord("1") <= k <= ord("9"):           # shelf slots, from the top
