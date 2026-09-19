@@ -20,7 +20,7 @@ from deskband import config as C
 from deskband import ui
 from deskband.music import Composer
 from deskband.synth import Engine
-from deskband.vision import Vision, open_camera
+from deskband.vision import Vision, merge_duplicates, open_camera
 
 WINDOW = "DeskBand"
 W, H = 1280, 720
@@ -59,16 +59,26 @@ class App:
         frame, dets = self.vision.snapshot()
         if frame is None:
             return
+        if self.vision.model is not None:                  # one careful look at the frozen frame
+            dets = merge_duplicates(dets + self.vision.detect(frame, C.SHOOT_IMGSZ))
         names = {d.name for d in dets}
         for name, d in self.vision.recent(0.5).items():   # smooth over flicker
             if name not in names:
                 dets.append(d)
                 names.add(name)
         self.captured = (frame.copy(), dets)
+        self.save_frame(frame, "shot")
         self.state = SHOW
         self.flash = 1.0
         for name in C.INSTRUMENTS:
             self.engine.set_active(name, name in names)
+
+    def save_frame(self, frame, prefix):
+        """Keep the raw picture: tools/eval_prompts.py replays these to tune detection."""
+        os.makedirs(C.SHOTS_DIR, exist_ok=True)
+        path = os.path.join(C.SHOTS_DIR, f"{prefix}_{time.strftime('%Y%m%d_%H%M%S')}.jpg")
+        cv2.imwrite(path, frame)
+        print("saved", path, flush=True)
 
     def retake(self):
         self.state = PREVIEW
@@ -113,7 +123,7 @@ class App:
         ui.outline(out, x0, y0, x1, y1, r, alpha * (0.55 + 0.45 * glow))
         spec = C.INSTRUMENTS[det.name]
         ty = y0 - 26 if y0 > 34 else y1 + 8
-        adv = ui.text(out, det.name, x0 + 2, ty, 17, alpha * 0.95, "Medium")
+        adv = ui.text(out, det.shown, x0 + 2, ty, 17, alpha * 0.95, "Medium")
         ui.text(out, "  ·  " + spec["label"], x0 + 2 + adv, ty, 17, alpha * 0.7, "Light")
 
     def draw_preview(self, out, frame, dets, dt):
@@ -142,7 +152,7 @@ class App:
 
     def draw_card(self, out, members):
         """Bottom-left frosted card: who is in the band right now."""
-        rows = [(n, C.INSTRUMENTS[n]["label"]) for n in C.INSTRUMENTS if n in members]
+        rows = [(n, members[n], C.INSTRUMENTS[n]["label"]) for n in C.INSTRUMENTS if n in members]
         x0, y0 = 28, H - 28 - (58 + 30 * max(len(rows), 1))
         x1 = x0 + 320
         ui.frosted(out, x0, y0, x1, H - 28)
@@ -152,10 +162,10 @@ class App:
         y = y0 + 54
         if not rows:
             ui.text(out, "nothing yet", x0 + 20, y, 16, 0.5, "Light")
-        for name, label in rows:
+        for name, shown, label in rows:
             g = self.glow(name) if self.state == SHOW else 0.0
             ui.circle(out, x0 + 26, y + 10, 4, 0.35 + 0.65 * g, thickness=-1)
-            ui.text(out, name, x0 + 42, y, 16, 0.9, "Regular")
+            ui.text(out, shown, x0 + 42, y, 16, 0.9, "Regular")
             ui.text(out, label, x1 - 20, y, 16, 0.6, "Light", align="right")
             y += 30
 
@@ -192,10 +202,10 @@ class App:
         if self.state == SHOW:
             for d in dets:
                 self.draw_box(out, frame, d, 1.0, lit=True, glow=self.glow(d.name))
-            members = {d.name for d in dets}
+            members = {d.name: d.shown for d in sorted(dets, key=lambda d: d.conf)}
         else:
             self.draw_preview(out, frame, dets, dt)
-            members = set(self.preview_boxes)
+            members = {n: b.det.shown for n, b in self.preview_boxes.items()}
         ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
         if self.state == PREVIEW:
             ui.text(out, "put things on the desk, then shoot", 28, 52, 15, 0.5, "Light")
@@ -212,9 +222,9 @@ class App:
     def draw_debug(self, out):
         e, v = self.engine, self.vision
         lines = [
-            f"display {self.disp_fps:4.1f} fps   vision {v.fps:4.1f} fps / {v.infer_ms:3.0f} ms   audio {e.cpu * 100:3.0f}%",
+            f"display {self.disp_fps:4.1f} fps   camera {v.cam_fps:4.1f} fps   detector {v.model_name} {v.fps:4.1f} fps / {v.infer_ms:3.0f} ms   audio {e.cpu * 100:3.0f}%  xruns {e.xruns}",
             f"chord {self.composer.chord_name}   step {e.step % C.STEPS_PER_PHRASE:2d}   phrase {e.step // C.STEPS_PER_PHRASE}",
-            "  ".join(f"{d.name} {d.conf:.2f}" for d in self.vision.snapshot()[1]) or "no detections",
+            "  ".join(f"{d.alias} {d.conf:.2f}" for d in self.vision.snapshot()[1]) or "no detections",
             "  ".join(f"{n}:{p.gain:.2f}" for n, p in e.parts.items() if p.gain > 0.01),
             "loaded: " + ", ".join(sorted(e.loaded)),
         ]
@@ -257,6 +267,11 @@ class App:
                     self.toggle()
                 elif k == ord("d"):
                     self.debug = not self.debug
+                elif k == ord("s"):                       # save the live frame without shooting
+                    frame, _ = self.vision.snapshot()
+                    if frame is not None:
+                        self.save_frame(frame, "frame")
+                        self.flash = 0.25
                 elif k == ord("f"):
                     self.fullscreen = not self.fullscreen
                     cv2.setWindowProperty(WINDOW, cv2.WND_PROP_FULLSCREEN,

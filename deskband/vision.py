@@ -1,6 +1,12 @@
-"""Camera + YOLO-World in its own thread. Publishes the latest frame and
-detections; a slow inference step never touches the audio."""
+"""Camera and YOLO-World, each in its own thread.
 
+The capture thread keeps the newest frame available at camera rate so the
+preview stays smooth; the detector thread works on whatever frame is newest
+(a large open-vocabulary model only manages a few frames a second). Neither
+ever touches the audio. When a photo is taken, `detect()` can be called once
+more on the frozen frame at full resolution."""
+
+import os
 import threading
 import time
 import cv2
@@ -9,10 +15,33 @@ from . import config as C
 
 
 class Detection:
-    __slots__ = ("name", "conf", "box")
+    """name = the instrument's object (config key); alias = the prompt that fired."""
+    __slots__ = ("name", "conf", "box", "alias")
 
-    def __init__(self, name, conf, box):
-        self.name, self.conf, self.box = name, conf, box
+    def __init__(self, name, conf, box, alias=None):
+        self.name, self.conf, self.box, self.alias = name, conf, box, alias or name
+
+    @property
+    def shown(self):
+        """What to call it on screen: a tablet is a tablet, not a laptop."""
+        return C.SHOW_AS.get(self.alias, self.alias)
+
+
+def iou(a, b):
+    x0, y0, x1, y1 = max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])
+    inter = max(0, x1 - x0) * max(0, y1 - y0)
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def merge_duplicates(dets, thresh=0.5):
+    """Two prompts of the same object ("cup" and "mug"), or two passes over the
+    same picture, often fire on the same thing; keep the more confident box."""
+    kept = []
+    for d in sorted(dets, key=lambda d: -d.conf):
+        if not any(k.name == d.name and iou(k.box, d.box) > thresh for k in kept):
+            kept.append(d)
+    return kept
 
 
 def open_camera():
@@ -27,65 +56,104 @@ def open_camera():
     return cap
 
 
+def model_path():
+    """Preferred model if its weights are here, else the small one."""
+    for name in (C.DETECT_MODEL, C.DETECT_MODEL_FALLBACK):
+        path = os.path.join(C.ROOT, name)
+        if os.path.exists(path):
+            return path
+    return C.DETECT_MODEL_FALLBACK          # ultralytics downloads it
+
+
 class Vision(threading.Thread):
     def __init__(self, cap=None):
         super().__init__(daemon=True)
         self.cap = cap
-        self.lock = threading.Lock()
+        self.lock = threading.Lock()           # frame / detections
+        self.model_lock = threading.Lock()     # one inference at a time
+        self.model = None
+        self.model_name = ""
         self.frame = None
+        self.frame_id = 0
         self.detections = []
-        self.last_seen = {}       # class -> (time, Detection) of the last sighting
-        self.fps = 0.0
+        self.last_seen = {}       # part -> (time, Detection) of the last sighting
+        self.fps = 0.0            # detector rate
+        self.cam_fps = 0.0
         self.infer_ms = 0.0
-        self.ready = False
         self.error = None
         self._halt = threading.Event()
 
     def stop(self):
         self._halt.set()
 
-    def run(self):
-        try:
-            from ultralytics import YOLO
-            model = YOLO("yolov8s-worldv2.pt")
-            model.set_classes(C.DETECT_CLASSES)
-            cap = self.cap
-        except Exception as e:      # surface to the UI instead of dying silently
-            self.error = repr(e)
-            return
-        self.ready = True
+    # ---------------------------------------------------------- capture
+    def _capture_loop(self):
         t_prev = time.time()
         while not self._halt.is_set():
-            ok, frame = cap.read()
+            ok, frame = self.cap.read()
             if not ok:
                 time.sleep(0.01)
                 continue
-            frame = cv2.flip(frame, 1)   # mirror, like a webcam preview
-            t0 = time.time()
-            res = model.predict(frame, device="mps", imgsz=C.DETECT_IMGSZ,
-                                conf=C.DETECT_CONF, verbose=False)[0]
-            self.infer_ms = 0.8 * self.infer_ms + 0.2 * (time.time() - t0) * 1000
-            dets = []
-            now = time.time()
-            for cls, conf, xyxy in zip(res.boxes.cls, res.boxes.conf, res.boxes.xyxy):
-                name = model.names[int(cls)]
-                d = Detection(name, float(conf), [int(v) for v in xyxy.tolist()])
-                dets.append(d)
-                prev = self.last_seen.get(name)
-                if prev is None or prev[0] < now or d.conf > prev[1].conf:
-                    self.last_seen[name] = (now, d)
+            frame = cv2.flip(frame, 1)       # mirror, like a webcam preview
             with self.lock:
                 self.frame = frame
+                self.frame_id += 1
+            now = time.time()
+            self.cam_fps = 0.9 * self.cam_fps + 0.1 / max(1e-3, now - t_prev)
+            t_prev = now
+        self.cap.release()
+
+    # ---------------------------------------------------------- detection
+    def detect(self, frame, imgsz):
+        """Run the model once. Safe to call from any thread."""
+        with self.model_lock:
+            res = self.model.predict(frame, device="mps", imgsz=imgsz,
+                                     conf=C.DETECT_CONF, verbose=False)[0]
+        dets = []
+        for cls, conf, xyxy in zip(res.boxes.cls, res.boxes.conf, res.boxes.xyxy):
+            alias = self.model.names[int(cls)]
+            dets.append(Detection(C.ALIASES[alias], float(conf), [int(v) for v in xyxy.tolist()], alias))
+        return merge_duplicates(dets)
+
+    def run(self):
+        try:
+            from ultralytics import YOLO
+            path = model_path()
+            model = YOLO(path)
+            model.set_classes(C.DETECT_CLASSES)
+            self.model_name = os.path.basename(path)
+            self.model = model
+        except Exception as e:      # surface to the UI instead of dying silently
+            self.error = repr(e)
+            return
+        threading.Thread(target=self._capture_loop, daemon=True).start()
+        seen_id = -1
+        t_prev = time.time()
+        while not self._halt.is_set():
+            with self.lock:
+                frame, fid = self.frame, self.frame_id
+            if frame is None or fid == seen_id:
+                time.sleep(0.005)
+                continue
+            seen_id = fid
+            t0 = time.time()
+            dets = self.detect(frame, C.DETECT_IMGSZ)
+            now = time.time()
+            self.infer_ms = 0.8 * self.infer_ms + 0.2 * (now - t0) * 1000
+            for d in dets:
+                prev = self.last_seen.get(d.name)
+                if prev is None or prev[0] < now or d.conf > prev[1].conf:
+                    self.last_seen[d.name] = (now, d)
+            with self.lock:
                 self.detections = dets
             self.fps = 0.9 * self.fps + 0.1 / max(1e-3, now - t_prev)
             t_prev = now
-        cap.release()
 
     def snapshot(self):
         with self.lock:
             return self.frame, list(self.detections)
 
     def recent(self, within=0.5):
-        """Best detection per class seen within the last `within` seconds."""
+        """Best detection per part seen within the last `within` seconds."""
         now = time.time()
         return {n: d for n, (t, d) in self.last_seen.items() if now - t <= within}

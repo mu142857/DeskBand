@@ -160,7 +160,18 @@ def load_concert_grand():
 
 
 def load_kings_cross():
-    return load_keymap_dir("strings", C.KINGS_CROSS, 7.0)
+    km = load_keymap_dir("strings", C.KINGS_CROSS, 7.0)
+    if km is None:
+        return None
+    # Some low notes were recorded well left of centre (the basses sit there
+    # in the hall). Even out left/right loudness so chords stay centred.
+    for buf in km.notes.values():
+        l, r = np.sqrt((buf[:, 0] ** 2).mean()), np.sqrt((buf[:, 1] ** 2).mean())
+        if l > 0 and r > 0:
+            g = np.sqrt(l * r)
+            buf[:, 0] *= np.clip(g / l, 0.5, 2.0)
+            buf[:, 1] *= np.clip(g / r, 0.5, 2.0)
+    return km
 
 
 def load_drums():

@@ -11,7 +11,7 @@ from deskband import config as C
 
 LOGIC = "/Library/Application Support/Logic"
 OBJECT_CN = {"cup": "杯子", "pen": "笔", "bottle": "瓶子", "book": "书",
-             "lamp": "台灯", "cell phone": "手机", "laptop": "笔记本电脑"}
+             "glasses": "眼镜", "cell phone": "手机", "laptop": "笔记本电脑 / 平板"}
 NOTE = "C C# D D# E F F# G G# A A# B".split()
 
 
@@ -87,6 +87,7 @@ def main():
     for obj, spec in C.INSTRUMENTS.items():
         i = info(spec["voice"])
         L.append(f"【{OBJECT_CN.get(obj, obj)} {obj}】 → {i['name']}")
+        L.append(f"    摄像头认这些词：{' / '.join(spec['detect'])}")
         L.append(f"    在 Logic 里：{i['logic']}")
         L.append(f"    原始音色库：{i['source']}")
         L.append(f"    程序实际读：{i['used']}")
