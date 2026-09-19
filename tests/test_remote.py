@@ -105,7 +105,8 @@ def test_remote():
     assert app.composer.chord_name in ("C", "F#dim")
 
     # one-shot sound: starts on an 8th note, goes through the engine
-    path = os.path.join(C.CACHE_DIR, "_test_sfx.wav")
+    fd, path = tempfile.mkstemp(prefix="deskband_sfx_", suffix=".wav")
+    os.close(fd)
     sf.write(path, (np.sin(np.arange(4800) / 10) * 0.5).astype(np.float32), 48000)
     before = len(app.engine.voices)
     assert ask({"cmd": "sfx", "file": path, "gain": 0.5})["ok"]

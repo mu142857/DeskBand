@@ -55,11 +55,11 @@ BTN1 mutes across later shelf changes; app play/pause stays available through
 hardware BTN1 play/pause mapping, launch `tools/zybo_bridge.py --btn1-master`
 in mixer mode; performance-mode BTN1 still locks the generated rhythm.
 
-Firmware also acts on BTN0 and mixer BTN1 locally. After those presses the
-bridge reasserts the shelf-controlled transport or the persistent mixer mask.
-It does not restart the transport when merely muting a track. The transport
-runs when an unmuted selected track sounds and stops when the band is paused,
-empty, or fully muted.
+Firmware reports BTN0 and mixer BTN1 without changing transport or masks
+locally. The bridge owns those actions, so taking another photo cannot restart
+the musical clock and a mute cannot be applied twice. The transport runs when
+an unmuted selected track sounds and stops when the band is paused, empty, or
+fully muted.
 
 While stopped, the four LEDs mirror the switches. While running, they display
 the low four bits of the 16-step position.
@@ -129,7 +129,7 @@ After programming completes, turn the board **off**, move JP5 to the pair
 labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 `DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
 
-Current image SHA-256: `7c45b9c5c9ed8483f13b09867c2b388ea42623f7445737145fd5866e097bd5da`
+Current image SHA-256: `ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685`
 (4,213,968 bytes, PL ID `44420101`).
 
 Before starting DeskBand, verify the physical board path by itself:

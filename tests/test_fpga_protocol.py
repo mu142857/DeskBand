@@ -26,11 +26,11 @@ def test_fpga_protocol():
     assert command_variation() == "VARIATION ON"
     assert command_variation(False) == "VARIATION OFF"
     assert {"play", "math", "place", "view", "select", "silence", "fpga_bar"} <= COMMANDS
-    assert button_effects(1, 0, 0) == ([{"cmd": "toggle"}], 0, True)
+    assert button_effects(1, 0, 0) == ([{"cmd": "toggle"}], 0, False)
     assert button_effects(2, 0, 0) == ([], 1, True)  # mixer BTN1 mutes cup
     assert button_effects(2, 7, 0) == ([], 1, True)  # selector 7 wraps to cup
     assert button_effects(2, 8, 0) == ([], 0, False)  # performance BTN1 stays on FPGA
-    assert button_effects(2, 0, 0, btn1_master=True) == ([{"cmd": "play"}], 0, True)
+    assert button_effects(2, 0, 0, btn1_master=True) == ([{"cmd": "play"}], 0, False)
     for malformed in ("", "EV 1 2", "CV " + " ".join(["256"] * 14),
                       "BAR -1 1 01 0 0 1 1234", "WHAT 1"):
         try:

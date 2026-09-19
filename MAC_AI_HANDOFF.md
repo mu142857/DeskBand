@@ -188,7 +188,7 @@ to distribute. Other files below `fpga/build/` remain ignored and reproducible.
 Its expected SHA-256 is:
 
 ```
-7c45b9c5c9ed8483f13b09867c2b388ea42623f7445737145fd5866e097bd5da
+ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685
 ```
 
 It targets the **Zybo Z7-20**, not the Z7-10.
@@ -220,7 +220,7 @@ For SD boot:
    a charge-only cable. UART traffic also flashes LD10/LD11.
 
 The board's QSPI was programmed and fully read-back verified with the previous
-image on 2026-09-19. Reprogram the current 4,213,968-byte `BOOT.BIN` before
+image on 2026-09-19. Reprogram the current 4,213,904-byte `BOOT.BIN` before
 testing PL ID `44420101`. With the board powered off, move JP5 to `JTAG` for
 programming, then back to `QSPI` for cold boot. Never move JP5 while powered.
 See `fpga/README.md` for the exact command.

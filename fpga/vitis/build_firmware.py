@@ -14,6 +14,10 @@ if not os.path.isfile(xsa):
 
 client = vitis.create_client()
 client.set_workspace(path=workspace)
+# Explicitly register the bundled embeddedsw tree.  Fresh Vitis data
+# directories otherwise sometimes fail to locate zynq_fsbl/empty_application.
+embedded_sw = os.path.normpath(os.path.join(os.environ["XILINX_VITIS"], "..", "data", "embeddedsw"))
+client.set_embedded_sw_repo(level="LOCAL", path=embedded_sw)
 # Make the batch build repeatable when the hardware XSA or firmware changes.
 # The workspace contains generated components only; source remains under fpga/ps.
 for component_name in ("deskband_firmware", "deskband_platform"):

@@ -28,17 +28,16 @@ def button_effects(pressed, switches, muted, btn1_master=False):
     it mutes a track unless the legacy master-play mapping was requested.
     """
     commands = []
-    resync = False
+    mask_changed = False
     if pressed & 1:
         commands.append({"cmd": "toggle"})
-        resync = True
     if pressed & 2 and not switches & 8:
         if btn1_master:
             commands.append({"cmd": "play"})
         else:
             muted ^= 1 << ((switches & 7) % len(TRACKS))
-        resync = True
-    return commands, muted, resync
+            mask_changed = True
+    return commands, muted, mask_changed
 
 
 def send_json(sock, address, message):
@@ -114,16 +113,13 @@ def main():
                               "levels": message.fields[:7], "lfos": message.fields[7:]})
                 elif message and message.kind == "BTN":
                     live, pressed, released, switches = message.fields
-                    commands, hardware_mute, resync = button_effects(
+                    commands, hardware_mute, mask_changed = button_effects(
                         pressed, switches, hardware_mute, args.btn1_master)
                     for command in commands:
                         send_json(udp, address, command)
-                    if resync:
-                        # Firmware also handles BTN0 and mixer BTN1 locally. Reassert
-                        # the persistent mixer mask without restarting a running song.
+                    if mask_changed:
+                        # Recalculate the shelf mask with the persistent board mute.
                         current_mask = None
-                        if commands:
-                            current_run = None
                     print(f"[zybo] buttons={live:x} pressed={pressed:x} selector={switches:x}")
                 elif message and message.kind == "BAR":
                     bar, energy, locks, fill, queued, enabled, random_state = message.fields
