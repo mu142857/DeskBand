@@ -1,5 +1,8 @@
 VERILATOR ?= verilator
-BUILD_DIR := build
+# Simulation and PS-test output only. It stays under build/sim so `make clean`
+# cannot take build/BOOT.BIN with it: that image is in git and rebuilding it
+# needs Vivado and Vitis.
+BUILD_DIR := build/sim
 TIMING_TOP := tb_deskband_timing_core
 BUTTON_TOP := tb_button_debounce
 AXI_TOP := tb_deskband_axi_peripheral

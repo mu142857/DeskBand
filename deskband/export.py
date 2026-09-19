@@ -29,7 +29,7 @@ class RenderedLoop:
 
 
 class _SnapshotComposer:
-    """Feed the engine the same frozen item events drawn on the Collected page."""
+    """Feed the engine the same frozen item events drawn on the Collections page."""
 
     def __init__(self, snapshot):
         self.backing = snapshot.make_composer()

@@ -1,13 +1,22 @@
 # Direct dependencies for the desktop app, offline WAV rendering, and Zybo bridge.
-# Install with .venv/bin/python -m pip install -r requirements.txt.
+# Install with .venv/bin/python -m pip install -r requirements.txt (Python 3.11).
 # Gemini and ElevenLabs requests use Python's standard-library urllib.
-certifi
-mediapipe==0.10.35      # open-mouth instrument (deskband/face.py); 1.0.x crashes on macOS
-numpy
-opencv-python
-Pillow
-pyserial
-scipy
-sounddevice
-soundfile
-ultralytics
+#
+# Pinned to the set verified together on an Apple Silicon Mac (macOS 26, Python
+# 3.11.9) on 2026-09-19: YOLO-World on mps, MediaPipe on the CPU, OpenCV's Cocoa
+# window, and the whole test suite. Loosen a pin only if you retest that stack.
+certifi==2026.7.22
+mediapipe==0.10.35            # open-mouth instrument (deskband/face.py); 1.0.x crashes on macOS
+numpy==2.4.6
+opencv-python==5.0.0.93
+opencv-contrib-python==5.0.0.93   # pulled in by mediapipe; the two share one cv2 and must match
+Pillow==12.3.0
+pyserial==3.5                 # tools/zybo_bridge.py, deskband/zybo.py
+scipy==1.17.1
+sounddevice==0.5.6
+soundfile==0.14.0
+ultralytics==8.4.155
+# Transitive through ultralytics, pinned because the detector is the part most
+# sensitive to them: this is the pair that runs the model on Metal.
+torch==2.14.0
+torchvision==0.29.0

@@ -5,12 +5,12 @@
 1. Launch `dist/DeskBand.app` on the presentation Mac. Confirm a camera image appears and the MacBook speakers or chosen output device are audible. If using an iPhone, connect Continuity Camera before opening DeskBand and check the macOS Video menu for Main camera, Zoom 1×, and Center Stage off.
 2. Keep 2–4 distinctive objects within reach. The saved shelf holds one slot per instrument category, so use different categories for a visibly growing band.
 3. Check that `cache/elevenlabs_api_key` exists with mode `600` **only if** the account has Music API access. The key never belongs in Git. The present key authenticates but the Music endpoint returns `paid_plan_required`; do not promise a live ElevenLabs generation until that account restriction is resolved.
-4. If a completed ElevenLabs song is available in `cache/songs/`, keep its job JSON and MP3 together. DeskBand restores a completed song when the same arrangement is selected on the Collected page. The current workspace has no completed ElevenLabs MP3.
+4. If a completed ElevenLabs song is available in `cache/songs/`, keep its job JSON and MP3 together. DeskBand restores a completed song when the same arrangement is selected on the Collections page. The current workspace has no completed ElevenLabs MP3.
 
 ## Live sequence
 
 1. Point the camera at the first item, wait for its single white detection frame, then press `space` to capture. Repeat with other categories; `space` again returns to the camera after each shot.
-2. Press `e` or **Finish**. Show each saved card's object name, instrument, and actual note or beat strip. Toggle cards to change the band if useful.
+2. Press `e` or **Collections**. Show each saved card's object name, instrument, and actual note or beat strip. Toggle cards to change the band if useful.
 3. Click **Render loop**. The file is one complete chord cycle, normally four bars and about eight seconds at 120 BPM. Click **Play clip** and **Reveal file**. This entire path works offline.
 4. If Music API access and source-audio rights are confirmed, click **Continue with ElevenLabs**, read the upload notice, then click **Upload & generate**. Wait for the completed MP3, then use **Play song** and **Reveal song**. Upload and generation may take time or credits; an upload can be rejected by screening. If the service errors, show the saved local WAV instead.
 5. Click **Back to collecting** to resume the camera and band.

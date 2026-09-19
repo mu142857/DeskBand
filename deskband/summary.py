@@ -146,7 +146,7 @@ class SummaryView:
         out = np.empty((720, 1280, 3), np.uint8)
         out[:] = ui.TONE_DARK.astype(np.uint8)
         cv2.rectangle(out, (0, 0), (1279, 126), (27, 25, 24), -1)
-        ui.text(out, "Collected", 28, 23, 30, 0.98, "Semibold")
+        ui.text(out, "Collections", 28, 23, 30, 0.98, "Semibold")
         selected = len(snapshot.selected)
         ui.text(out, f"{len(snapshot.items)} saved  ·  {selected} in this song", 30, 69, 17, 0.72, "Regular")
         chords = "  →  ".join(chord[0] for chord in snapshot.chords)
