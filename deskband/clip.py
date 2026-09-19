@@ -21,8 +21,10 @@ class ClipPlayer:
         if clip is None or not os.path.isfile(clip.path):
             raise FileNotFoundError("Rendered loop file is missing")
         audio, rate = sf.read(clip.path, dtype="float32", always_2d=True)
-        if len(audio) != clip.frames or rate != clip.sample_rate or audio.shape[1] != 2:
-            raise ValueError("Rendered loop file no longer matches the arrangement")
+        if len(audio) != clip.frames or rate != clip.sample_rate or audio.shape[1] not in (1, 2):
+            raise ValueError("Audio file no longer matches the saved result")
+        if audio.shape[1] == 1:
+            audio = np.repeat(audio, 2, axis=1)
         self._audio = np.ascontiguousarray(audio)
         self._position = 0
 

@@ -1,6 +1,6 @@
 # DeskBand ending screen, loop export, and ElevenLabs song roadmap
 
-Status: Milestones 0–2 complete. Milestone 3 code and automated checks complete; speaker listening on the presentation Mac remains. Milestones 4–5 remain open.
+Status: Milestones 0–2 complete. Milestone 3 code and automated checks complete; speaker listening on the presentation Mac remains. Milestone 4 code and mocked checks complete; account access, source-audio rights, and one paid live API rehearsal remain. Milestone 5 remains open.
 
 ## Product flow and decisions
 
@@ -104,17 +104,19 @@ Implementation note: `deskband/export.py` rebuilds the displayed score from the 
 **Goal:** turn the user-approved local loop into a longer song while preserving its provenance.
 
 - [ ] M4.1 Confirm the team's ElevenLabs account has Music API access, available credits, and permission to upload the rendered source audio. Check whether any bundled instrument samples trigger the upload copyright screening; prepare an upload-safe fallback sound palette if needed.
-- [ ] M4.2 Build a small integration module, separate from `deskband/synth.py`, with an injectable HTTP client so API calls can be tested without charging credits. Read `ELEVENLABS_API_KEY` only from the environment and show a useful missing-key state.
-- [ ] M4.3 Require an explicit click after local preview. Display that the WAV will be sent to ElevenLabs and that generation can take time or consume credits.
-- [ ] M4.4 Validate the selected WAV exists, matches the current snapshot fingerprint, has a supported format and sensible duration, and is at most the reference limit used by the chosen API path.
-- [ ] M4.5 Upload the WAV with the Music Upload API and save the returned `song_id` with the local job. Handle content screening or upload rejection without losing the WAV.
-- [ ] M4.6 Submit an explicit `music_v2_5` composition plan: first an audio-reference chunk containing the full DeskBand loop unchanged, then one or more instrumental generation chunks. Apply `conditioning_ref` to the first generated chunk and specify the selected instrument palette, tempo, mood, and high context adherence. Keep the plan short for demo latency.
-- [ ] M4.7 Stream or download the generated audio to a temporary file, validate that it decodes and has the expected duration, then move it atomically to `cache/songs/`. Persist the model, prompt/plan, uploaded `song_id`, source fingerprint, output path, and status without logging secrets.
-- [ ] M4.8 Show queued/uploading/generating/saving/done/error states. Keep the UI and local audio usable during network waits. Support retry from the saved WAV; avoid blindly repeating an uncertain, possibly charged compose request.
-- [ ] M4.9 Provide play/stop and reveal controls for the full song. Label the retained intro and AI-generated continuation honestly; the generated portion may reinterpret rather than duplicate the original motif.
+- [x] M4.2 Build a small integration module, separate from `deskband/synth.py`, with an injectable HTTP client so API calls can be tested without charging credits. Read `ELEVENLABS_API_KEY` only from the environment and show a useful missing-key state.
+- [x] M4.3 Require an explicit click after local preview. Display that the WAV will be sent to ElevenLabs and that generation can take time or consume credits.
+- [x] M4.4 Validate the selected WAV exists, matches the current snapshot fingerprint, has a supported format and sensible duration, and is at most the reference limit used by the chosen API path.
+- [x] M4.5 Upload the WAV with the Music Upload API and save the returned `song_id` with the local job. Handle content screening or upload rejection without losing the WAV.
+- [x] M4.6 Submit an explicit `music_v2_5` composition plan: first an audio-reference chunk containing the full DeskBand loop unchanged, then one or more instrumental generation chunks. Apply `conditioning_ref` to the first generated chunk and specify the selected instrument palette, tempo, mood, and high context adherence. Keep the plan short for demo latency.
+- [x] M4.7 Stream or download the generated audio to a temporary file, validate that it decodes and has the expected duration, then move it atomically to `cache/songs/`. Persist the model, prompt/plan, uploaded `song_id`, source fingerprint, output path, and status without logging secrets.
+- [x] M4.8 Show queued/uploading/generating/saving/done/error states. Keep the UI and local audio usable during network waits. Support retry from the saved WAV; avoid blindly repeating an uncertain, possibly charged compose request.
+- [x] M4.9 Provide play/stop and reveal controls for the full song. Label the retained intro and AI-generated continuation honestly; the generated portion may reinterpret rather than duplicate the original motif.
 - [ ] M4.10 Test request construction, upload rejection, invalid key, timeout, partial download, malformed output, stale snapshot, and a successful mocked job. Run one end-to-end real API call with the team's key before the demo and keep the resulting track as a fallback.
 
 **Done when:** a fresh local four-bar WAV can be uploaded, heard unchanged at the start of a longer downloaded track, and shown with clear failure states if the service is unavailable.
+
+Implementation note: `deskband/eleven_music.py` validates the current PCM WAV and its SHA-256, uploads only after an explicit in-app confirmation, and uses `music_v2_5` with a kept audio-reference intro plus a conditioned instrumental continuation. It saves MP3 output and resumable job metadata under ignored `cache/songs/`. A second user-confirmed attempt can reuse an uploaded `song_id`; a compose timeout is marked uncertain and never retried automatically. Mocked API, error, retry, source-validation, and UI tests pass. A read-only account check rejected the supplied key with HTTP 401; that invalid local key was removed so the app now displays its missing-key state. Music access/credits and the real paid call in M4.1/M4.10 are therefore unverified. The team must also establish upload rights for the bundled sample sources before that call.
 
 ## Milestone 5 — release and demo verification
 

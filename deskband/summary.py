@@ -19,7 +19,11 @@ BUTTONS = {
     "play": (240, 622, 364, 672),
     "reveal": (378, 622, 524, 672),
     "extend": (538, 622, 834, 672),
+    "song_play": (848, 622, 1000, 672),
+    "song_reveal": (1014, 622, 1252, 672),
 }
+CONFIRM_UPLOAD = (376, 430, 660, 480)
+CANCEL_UPLOAD = (680, 430, 904, 480)
 
 
 def duration_seconds(snapshot):
@@ -100,7 +104,13 @@ class SummaryView:
         self._strips = {}
         self._thumb_mask = ui.rounded_mask(66, 66, 10).astype(np.float32) / 255.0
 
-    def hit(self, x, y, snapshot):
+    def hit(self, x, y, snapshot, *, confirm_upload=False):
+        if confirm_upload:
+            if contains(CONFIRM_UPLOAD, x, y):
+                return "confirm_extend", None
+            if contains(CANCEL_UPLOAD, x, y):
+                return "cancel_extend", None
+            return None, None
         if contains(BACK, x, y):
             return "back", None
         for index, item in enumerate(snapshot.items):
@@ -130,7 +140,8 @@ class SummaryView:
 
     def render(self, snapshot, shelf, jobs, mouse=(-1, -1), *, song_jobs=None,
                clip_playing=False, can_render=False, can_play=False, can_reveal=False,
-               can_extend=False):
+               can_extend=False, song_playing=False, confirm_upload=False,
+               has_music_key=False, notice=""):
         self._prepare(snapshot)
         out = np.empty((720, 1280, 3), np.uint8)
         out[:] = ui.TONE_DARK.astype(np.uint8)
@@ -178,13 +189,18 @@ class SummaryView:
         busy = jobs.busy or song_busy
         render_enabled = bool(selected) and not snapshot.style_pending and can_render and not busy
         render_label = "Render again" if jobs.status == "done" and not ready else "Render loop"
+        song_ready = song_jobs is not None and song_jobs.status == "done" and song_jobs.result is not None
         controls = (("render", render_label, render_enabled),
-                    ("play", "Stop clip" if clip_playing else "Play clip", ready and can_play and not busy),
-                    ("reveal", "Reveal file", ready and can_reveal and not busy),
-                    ("extend", "Continue with ElevenLabs", ready and can_extend and not busy))
+                    ("play", "Stop clip" if clip_playing else "Play clip", ready and can_play and not jobs.busy),
+                    ("reveal", "Reveal file", ready and can_reveal and not jobs.busy),
+                    ("extend", "Continue with ElevenLabs", ready and can_extend and has_music_key and not busy),
+                    ("song_play", "Stop song" if song_playing else "Play song", song_ready and not busy),
+                    ("song_reveal", "Reveal song", song_ready and not busy))
         for action, label, enabled in controls:
             self._button(out, BUTTONS[action], label, enabled, contains(BUTTONS[action], *mouse))
-        if song_busy:
+        if notice:
+            message = notice
+        elif song_busy:
             message = song_jobs.message
         elif jobs.busy:
             message = jobs.message
@@ -202,7 +218,24 @@ class SummaryView:
             message = "Loop rendering is unavailable. Your selection is saved."
         elif jobs.status == "done" and not ready:
             message = "The song changed. Render again to use the new arrangement."
+        elif song_ready:
+            earlier = " · earlier arrangement" if song_jobs.fingerprint != snapshot.fingerprint else ""
+            message = f"Full song ready · {song_jobs.result.duration:.1f} sec · original intro + AI continuation{earlier}"
+        elif ready and not has_music_key:
+            message = f"Loop ready. Set {C.ELEVENLABS_KEY_ENV} to enable full-song generation."
         else:
             message = jobs.message or "Ready to render one complete chord cycle."
         ui.text(out, fit_text(message, 14, 1170), 29, 686, 14, 0.6, "Light")
+        if confirm_upload:
+            ui.frosted(out, 312, 250, 968, 500, r=18, darken=0.78)
+            ui.text(out, "Continue with ElevenLabs?", 348, 280, 25, 0.98, "Semibold")
+            ui.text(out, "The rendered WAV will be uploaded. Upload and generation may use paid credits.",
+                    348, 329, 15, 0.80, "Regular")
+            ui.text(out, "Confirm you have rights to its sounds; screening can still reject the upload.",
+                    348, 354, 15, 0.80, "Regular")
+            ui.text(out, "Your original loop stays as the intro of the generated song.",
+                    348, 379, 15, 0.80, "Regular")
+            self._button(out, CONFIRM_UPLOAD, "Upload & generate", True,
+                         contains(CONFIRM_UPLOAD, *mouse))
+            self._button(out, CANCEL_UPLOAD, "Cancel", True, contains(CANCEL_UPLOAD, *mouse))
         return out

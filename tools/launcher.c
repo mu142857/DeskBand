@@ -12,6 +12,8 @@
 #include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -32,6 +34,26 @@ int main(void) {
     }
     setenv("SSL_CERT_FILE", ROOT "/.venv/lib/python3.11/site-packages/certifi/cacert.pem", 0);
     setenv("PYTHONUNBUFFERED", "1", 1);
+
+    /* Optional, project-local credential. Keep it out of launchctl and Git;
+     * Python still receives it only through its process environment. */
+    if (getenv("ELEVENLABS_API_KEY") == NULL) {
+        int keyfd = open(ROOT "/cache/elevenlabs_api_key", O_RDONLY | O_NOFOLLOW);
+        if (keyfd >= 0) {
+            struct stat info;
+            if (fstat(keyfd, &info) == 0 && S_ISREG(info.st_mode) &&
+                info.st_uid == geteuid() && (info.st_mode & 0077) == 0) {
+                char key[256] = {0};
+                ssize_t length = read(keyfd, key, sizeof(key) - 1);
+                if (length > 0) {
+                    key[strcspn(key, "\r\n")] = '\0';
+                    if (key[0] != '\0') setenv("ELEVENLABS_API_KEY", key, 0);
+                }
+                memset(key, 0, sizeof(key));
+            }
+            close(keyfd);
+        }
+    }
 
     posix_spawn_file_actions_t fa;
     posix_spawn_file_actions_init(&fa);

@@ -1,6 +1,7 @@
 """Render one frozen arrangement with an isolated, Mac-clocked audio engine."""
 
 import os
+import hashlib
 import tempfile
 from datetime import datetime
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ class RenderedLoop:
     path: str
     sample_rate: int
     frames: int
+    sha256: str = ""
 
     @property
     def duration(self):
@@ -134,7 +136,12 @@ def render_loop(snapshot, progress=lambda message: None, *, folder=None):
             raise RuntimeError("The rendered WAV failed validation")
         os.replace(pending, path)
         progress("Loop ready")
-        return RenderedLoop(snapshot.fingerprint, path, snapshot.sample_rate, frames)
+        digest = hashlib.sha256()
+        with open(path, "rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return RenderedLoop(snapshot.fingerprint, path, snapshot.sample_rate, frames,
+                            digest.hexdigest())
     finally:
         if os.path.exists(pending):
             os.remove(pending)

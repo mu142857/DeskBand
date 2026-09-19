@@ -46,7 +46,24 @@ def main(out):
     for base in (16, 32, 128, 256, 512):
         draw(base).save(os.path.join(iconset, f"icon_{base}x{base}.png"))
         draw(base * 2).save(os.path.join(iconset, f"icon_{base}x{base}@2x.png"))
-    subprocess.run(["iconutil", "-c", "icns", iconset, "-o", out], check=True)
+    try:
+        subprocess.run(["iconutil", "-c", "icns", iconset, "-o", out],
+                       check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        # iconutil sometimes rejects a valid iconset in restricted build
+        # environments. An ICNS container can also hold the same PNG images.
+        chunks = bytearray()
+        for size, code in ((16, b"icp4"), (32, b"icp5"), (64, b"icp6"),
+                           (128, b"ic07"), (256, b"ic08"),
+                           (512, b"ic09"), (1024, b"ic10")):
+            png = draw(size)
+            from io import BytesIO
+            buffer = BytesIO()
+            png.save(buffer, format="PNG")
+            data = buffer.getvalue()
+            chunks.extend(code + (len(data) + 8).to_bytes(4, "big") + data)
+        with open(out, "wb") as result:
+            result.write(b"icns" + (len(chunks) + 8).to_bytes(4, "big") + chunks)
     print("wrote", out)
 
 

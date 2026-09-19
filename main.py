@@ -21,6 +21,7 @@ from deskband import config as C
 from deskband import ui
 from deskband.cloud import Describer
 from deskband.clip import ClipPlayer
+from deskband.eleven_music import continue_song
 from deskband.export import render_loop
 from deskband.arrangement import build_snapshot
 from deskband.music import Composer
@@ -88,10 +89,14 @@ class App:
         self.summary_snapshot = None
         self.summary_signature = None
         self.render_worker = render_loop
-        self.extend_worker = None      # connected by Milestone 4
+        self.extend_worker = continue_song
         self.clip_player = ClipPlayer()
+        self.song_player = ClipPlayer()
         self.clip_revealer = self.reveal_clip
         self.clip_playing = False
+        self.song_playing = False
+        self.confirm_upload = False
+        self.song_notice = ""
         self.playing = True             # the master switch beside the shutter
         self.t_prev = time.time()
         self.disp_fps = 0.0
@@ -201,11 +206,15 @@ class App:
         self.state = SUMMARY
         self.stage.drag = None
         self.summary_signature = None
+        self.confirm_upload = False
+        self.song_notice = ""
         self.apply_parts()
 
     def leave_summary(self):
         if self.state == SUMMARY:
             self.stop_clip()
+            self.stop_song()
+            self.confirm_upload = False
             self.state = self.summary_return_state
             self.apply_parts()
 
@@ -215,6 +224,10 @@ class App:
         elif self.clip_playing and self.clip_player is not None:
             self.clip_player(self.summary_jobs.result, False)
         self.clip_playing = False
+
+    def stop_song(self):
+        self.song_player.stop()
+        self.song_playing = False
 
     @staticmethod
     def reveal_clip(clip):
@@ -243,34 +256,62 @@ class App:
             self.leave_summary()
         elif action == "toggle" and name in self.shelf.entries:
             self.stop_clip()
+            self.stop_song()
             self.select(name)
         elif action == "render":
             snapshot = self.current_summary()
             if (self.render_worker is not None and snapshot.selected
                     and not snapshot.style_pending and not self.song_jobs.busy):
                 self.stop_clip()
+                self.stop_song()
                 self.summary_jobs.start("render", snapshot, self.render_worker)
-        elif (action == "play" and self.clip_player is not None and self.current_clip_ready()
-              and not self.song_jobs.busy):
+        elif action == "play" and self.clip_player is not None and self.current_clip_ready():
             try:
+                self.stop_song()
                 self.clip_player(self.summary_jobs.result, not self.clip_playing)
                 self.clip_playing = not self.clip_playing
                 self.summary_jobs.message = "Playing loop" if self.clip_playing else "Ready"
             except Exception as exc:
                 self.clip_playing = False
                 self.summary_jobs.message = f"Playback failed: {exc}"
-        elif (action == "reveal" and self.clip_revealer is not None and self.current_clip_ready()
-              and not self.song_jobs.busy):
+        elif action == "reveal" and self.clip_revealer is not None and self.current_clip_ready():
             try:
                 self.clip_revealer(self.summary_jobs.result)
             except Exception as exc:
                 self.summary_jobs.message = f"Could not reveal file: {exc}"
-        elif action == "extend" and self.extend_worker is not None:
-            snapshot = self.current_summary()
+        elif action == "extend" and self.extend_worker is not None and not self.song_jobs.busy:
+            if not os.environ.get(C.ELEVENLABS_KEY_ENV, "").strip():
+                self.song_notice = f"Set {C.ELEVENLABS_KEY_ENV} before generating a song."
+            elif self.current_clip_ready():
+                self.confirm_upload = True
+                self.song_notice = ""
+        elif action == "cancel_extend":
+            self.confirm_upload = False
+        elif action == "confirm_extend" and self.confirm_upload:
+            self.confirm_upload = False
             if self.current_clip_ready() and not self.song_jobs.busy:
+                snapshot = self.current_summary()
                 clip = self.summary_jobs.result
+                self.song_notice = ""
                 self.song_jobs.start("extend", snapshot,
                                      lambda snap, progress: self.extend_worker(snap, clip, progress))
+            else:
+                self.song_notice = "The loop changed. Render it again before uploading."
+        elif action == "song_play" and self.song_jobs.status == "done" and self.song_jobs.result:
+            try:
+                self.stop_clip()
+                self.song_player(self.song_jobs.result, not self.song_playing)
+                self.song_playing = not self.song_playing
+                self.song_notice = ""
+            except Exception as exc:
+                self.song_playing = False
+                self.song_notice = f"Song playback failed: {exc}"
+        elif action == "song_reveal" and self.song_jobs.status == "done" and self.song_jobs.result:
+            try:
+                self.reveal_clip(self.song_jobs.result)
+                self.song_notice = ""
+            except Exception as exc:
+                self.song_notice = f"Could not reveal song: {exc}"
 
     def current_clip_ready(self):
         return (self.summary_jobs.status == "done" and self.summary_jobs.result is not None
@@ -404,7 +445,8 @@ class App:
         self.mouse = (x, y)
         if self.state == SUMMARY:
             if event == cv2.EVENT_LBUTTONDOWN:
-                action, name = self.summary_view.hit(x, y, self.current_summary())
+                action, name = self.summary_view.hit(
+                    x, y, self.current_summary(), confirm_upload=self.confirm_upload)
                 self.summary_action(action, name)
             return
         if event == cv2.EVENT_LBUTTONDOWN and contains(self.finish_button, x, y):
@@ -629,6 +671,7 @@ class App:
             self.song_jobs.poll()
             if isinstance(self.clip_player, ClipPlayer):
                 self.clip_playing = self.clip_player.playing
+            self.song_playing = self.song_player.playing
             snapshot = self.current_summary()
             if self.clip_playing and self.summary_jobs.fingerprint != snapshot.fingerprint:
                 self.stop_clip()
@@ -639,7 +682,10 @@ class App:
                 can_render=self.render_worker is not None,
                 can_play=self.clip_player is not None,
                 can_reveal=self.clip_revealer is not None,
-                can_extend=self.extend_worker is not None)
+                can_extend=self.extend_worker is not None,
+                song_playing=self.song_playing, confirm_upload=self.confirm_upload,
+                has_music_key=bool(os.environ.get(C.ELEVENLABS_KEY_ENV, "").strip()),
+                notice=self.song_notice)
         if self.on_stage:
             out = self.stage.render()
             self.draw_math_button(out)
@@ -722,6 +768,10 @@ class App:
         if k == ord("q"):
             return True
         if self.state == SUMMARY:
+            if self.confirm_upload:
+                if k in (27, ord("b"), ord("e")):
+                    self.summary_action("cancel_extend")
+                return False
             if k in (27, ord("b"), ord("e")):
                 self.leave_summary()
             elif ord("1") <= k <= ord("8"):
@@ -804,6 +854,8 @@ class App:
                 if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                     break
         finally:
+            self.stop_clip()
+            self.stop_song()
             self.zybo.stop()
             self.remote.stop()
             self.vision.stop()

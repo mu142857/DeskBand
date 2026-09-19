@@ -38,7 +38,7 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 - **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a long Schroeder hall reverb. The engine runs at the output device's own sample rate, and the master bus uses a gain-riding limiter rather than clipping. The audio callback never blocks on vision; a slow frame only delays the picture.
 - **Remote port:** JSON over UDP (port 9000) so a badge, an FPGA board or another program can take the photo, switch saved instruments on and off, change tempo and chords, play a sound in time, receive FPGA bar telemetry, and subscribe to the beat. `tools/remote_sim.py` is a dependency-free simulator of it. Protocol in [HANDOFF.md](HANDOFF.md) section 10.
 - **FPGA conductor:** a Zybo Z7-20 owns the master beat clock, seven-track sequencer, automatic LFSR/Euclidean bar variation, quantized performance controls, envelopes and LFOs. Its Cortex-A9 firmware bridges the programmable logic to the Mac over UART, while the Mac keeps vision and audio synthesis. Mixer-mode BTN1 mutes the selected track; `--btn1-master` restores its earlier app play/pause mapping. See [fpga/README.md](fpga/README.md).
-- **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, the shelf of saved instruments (each thumbnail under its instrument's own colour filter, `tint` in `INSTRUMENTS`), and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake. Press `e` or click **Finish** to inspect the saved collection, view each part's actual note/rhythm strip, and choose the items in this song. **Render loop** saves one complete chord cycle to `cache/exports/`; **Play clip** previews it, and **Reveal file** shows it in Finder. The live band is muted on this screen and resumes when you go Back. The ElevenLabs continuation is not connected yet.
+- **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, the shelf of saved instruments (each thumbnail under its instrument's own colour filter, `tint` in `INSTRUMENTS`), and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake. Press `e` or click **Finish** to inspect the saved collection, view each part's actual note/rhythm strip, and choose the items in this song. **Render loop** saves one complete chord cycle to `cache/exports/`; **Play clip** previews it, and **Reveal file** shows it in Finder. With `ELEVENLABS_API_KEY` set, **Continue with ElevenLabs** opens a separate upload confirmation and can generate a longer instrumental song with the original loop as its intro. **Play song** and **Reveal song** use files in `cache/songs/`. The live band is muted on this screen and resumes when you go Back.
 - **Stage:** `tab` (or the button at the left of the row) swaps the camera for a plane on which the band is laid out by hand. Drag a thumbnail from the shelf onto it to bring that instrument in, drag its token off (or right-click it) to take it out. Up is loudness (the part's own level in the middle, −24 dB at the bottom, +9 dB at the top), across is complexity: the middle band plays the part as written, to the left notes drop away from the weakest beats first down to the downbeat alone, to the right passing notes and 16th grace notes fill in. Loudness follows the hand at once, complexity from the next bar line. Where each instrument stands is kept on the shelf, so it comes back to the same spot.
 
 ## Requirements
@@ -57,19 +57,23 @@ cd ~/Desktop/DeskBand
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Optional API keys, read from the environment only (without one, that feature is off and everything else runs):
+Optional Gemini key (without one, descriptions are off):
 
 ```bash
 export GEMINI_API_KEY=...        # photo descriptions
 ```
 
 ```bash
-export ELEVENLABS_API_KEY=...    # Voices instrument; future full-song continuation
+read -rsp 'ElevenLabs API key: ' DESKBAND_KEY; echo
+umask 077
+mkdir -p cache
+printf '%s\n' "$DESKBAND_KEY" > cache/elevenlabs_api_key
+unset DESKBAND_KEY
 ```
 
-`DeskBand.app` started from Finder does not see shell variables; start it from a terminal, or use `launchctl setenv GEMINI_API_KEY ...` once per login.
+Put a working key in the ignored `cache/elevenlabs_api_key` file when you are ready; this project has no `local.env` file or parser. Keep the key file readable only by your user (`chmod 600 cache/elevenlabs_api_key`). `tools/run_app.sh` and the rebuilt `DeskBand.app` load it into the app process; no system environment change is needed. An existing `ELEVENLABS_API_KEY` process variable takes precedence. For Gemini in Finder, start the app from a terminal with that variable set or use `launchctl setenv GEMINI_API_KEY ...` once per login.
 
-All Python packages are installed through `.venv/bin/python`; the ElevenLabs and Gemini calls use standard-library HTTPS and need no SDK. Keep API keys in the process environment, never in a committed file. Rendered loop WAVs are in the ignored `cache/exports/` directory; future generated songs and API job files belong under `cache/` too. A selected headphones part requires existing voice takes in `cache/vocal/` before local export.
+All Python packages are installed in `.venv`; the ElevenLabs and Gemini calls use standard-library HTTPS and need no SDK. Never commit API keys. Rendered loop WAVs are in the ignored `cache/exports/` directory, and generated MP3s plus job state are in ignored `cache/songs/`. A selected headphones part requires existing voice takes in `cache/vocal/` before local export. Music upload and generation can both use paid credits, and upload screening can reject a source; verify your rights to the samples before confirming. The app does not retry a possibly charged composition request automatically.
 
 The first run downloads the YOLO-World weights (`yolov8l-worldv2.pt`, ~90 MB; the 25 MB `yolov8s-worldv2.pt` is used if the large one is missing) and the CLIP text encoder (~340 MB), and macOS asks for camera access.
 
@@ -86,7 +90,7 @@ Optional but recommended, the two sounds the piece is written for (both are unpa
 ## Run
 
 ```bash
-.venv/bin/python main.py
+tools/run_app.sh
 ```
 
 Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `e` open the summary; `b`, `e`, or Escape returns (on the summary, `1`–`8` toggle its cards) · `p` or return play / pause · `m` math mode on / off · `tab` camera / stage · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
