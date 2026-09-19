@@ -136,7 +136,15 @@ class Vision(threading.Thread):
         self.cam_fps = 0.0
         self.infer_ms = 0.0
         self.error = None
+        self.failed = False       # the model could not be read: nothing more is coming
         self._halt = threading.Event()
+
+    @property
+    def loading(self):
+        """True until the first frame arrives (the model is read before the
+        camera loop starts), or until the model gives up. The App waits for this
+        to end before starting the music, so nothing plays over the loading screen."""
+        return self.frame is None and not self.failed
 
     def stop(self):
         self._halt.set()
@@ -192,6 +200,7 @@ class Vision(threading.Thread):
             self.model = model
         except Exception as e:      # surface to the UI instead of dying silently
             self.error = repr(e)
+            self.failed = True
             return
         threading.Thread(target=self._capture_loop, daemon=True).start()
         seen_id = -1

@@ -343,7 +343,8 @@ class Stage:
         beat = e.step_len * C.STEPS_PER_BEAT
         phase = ((e.pos - e.latency * C.SAMPLE_RATE) % beat) / beat
         ui.circle(out, cx, cy, r, 0.3, thickness=1)
-        ui.circle(out, cx, cy, r - 7, 0.06 + (0.45 * math.exp(-5 * phase) if app.on else 0.0), thickness=-1)
+        lit = app.on and e.transport                  # nothing beats before the music starts
+        ui.circle(out, cx, cy, r - 7, 0.06 + (0.45 * math.exp(-5 * phase) if lit else 0.0), thickness=-1)
         ui.text(out, app.composer.chord_name, cx, cy + r + 10, 13, 0.55, "Light", align="center")
 
     def render(self):

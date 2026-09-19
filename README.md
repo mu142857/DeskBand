@@ -19,7 +19,7 @@ DeskBand looks at a photo of your desk and turns every object it recognises into
 | laptop or tablet | Soft FM electric piano (synthesised) | dotted-8th shimmer an octave up |
 | headphones (earphones, earbuds) | Voices: sung "ooh" samples made by ElevenLabs | a slow two-voice line on chord tones |
 
-Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. Each capture gives that category a fresh random seed; its saved seed and selection survive a restart until it is captured again. A play / pause button beside the shutter silences the band without losing the selection. Press `0` to clear the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
+Every object you shoot is kept on a shelf down the right edge of the window as a thumbnail cut from the photo. The shelf starts empty and fills from the top in the order things were shot. The band is whatever is switched on there, so it can be built one photo at a time and brought back later with a click; nothing has to stay in front of the camera. Each capture gives that category a fresh random seed; its saved seed and selection survive a restart until it is captured again. A play / pause button beside the shutter silences the band without losing the selection. Nothing plays while the camera and the detector load: the restored band comes in at bar one once they are ready, and a photo, a tile or `p` brings it in sooner. Press `0` to clear the selection. An empty shelf is silent, and everything is played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
 
 The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](INSTRUMENTS.txt).
 
@@ -87,7 +87,7 @@ Optional but recommended, the two sounds the piece is written for (both are unpa
 .venv/bin/python main.py
 ```
 
-Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `p` or return play / pause · `m` math mode on / off · `tab` camera / stage · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
+Keys: `space` shoot / retake · click a shelf thumbnail or `1`–`8` (counting from the top) switch a saved instrument on or off · `p` or return play / pause · `m` math mode on / off · `tab` camera / stage · `r` deal the stage again (on the stage) · `0` deselect them all · right-click a slot (or hover and press `x`) forget it · `s` save the live frame to `cache/shots/` · `d` debug overlay · `f` fullscreen · `q` quit.
 
 With the Zybo's J12 `PROG/UART` port connected using a Micro-USB data cable,
 install `pyserial` and run the bridge in a second terminal:

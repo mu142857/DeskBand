@@ -69,6 +69,8 @@ def test_app_restores_selection():
             shelf.select("cup", True)
             app = main.App()
             assert app.band == {"cup"}
+            assert app.engine.parts["cup"].target == 0.0     # still loading: the band is silent
+            app.start_band()                                 # loaded (or a photo): in at bar one
             assert app.engine.parts["cup"].target == 1.0
             assert app.arrangement_snapshot().selected == ("cup",)
             app.handle_command({"cmd": "fpga_bar", "bar": 3, "energy": 2,

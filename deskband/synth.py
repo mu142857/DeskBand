@@ -202,6 +202,7 @@ class Engine:
         self.pulse = 0.0
         self.hits = {}               # part -> last trigger time (for the UI)
         self.bar_marks = ()          # the last few (sample position, Composer.BarView) bar lines (for the UI)
+        self.transport = False       # the clock waits: see start_transport
         for name, spec in C.INSTRUMENTS.items():
             self.parts[name] = Part(name, spec["level"], spec["send"])
         self.parts["backing"] = Part("backing", C.BACKING["level"], C.BACKING["send"])
@@ -368,6 +369,13 @@ class Engine:
         self.voices.append(v)
         self.hits[part] = self.pos + block_offset
 
+    def start_transport(self):
+        """Start the music, at step 0 of bar one. The stream opens with the app
+        and the mix runs from the first block, but no step is played until this
+        is called, so the App can stay silent while it loads and still begin at
+        the top of the chord loop. Calling it again does nothing."""
+        self.transport = True
+
     def _mark_bar(self, at):
         """A bar line at sample `at`: keep what the composer just planned for it.
         The tuple is replaced whole, so the UI thread never sees it half built."""
@@ -385,7 +393,9 @@ class Engine:
     def _callback(self, out, frames, time_info, status):
         t0 = _time.perf_counter()
         end = self.pos + frames
-        if self.fpga_mode:
+        if not self.transport:
+            self.next_step_at = end          # held at bar one, so nothing has to catch up later
+        elif self.fpga_mode:
             while self.fpga_input:
                 tick, step, event_mask, active_mask = self.fpga_input.popleft()
                 at = None

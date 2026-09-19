@@ -77,7 +77,7 @@ class App:
         self.view_button = (W // 2 - 168, H - 64, 19)   # camera <-> stage
         self.random_button = (W // 2 + 168, H - 64, 19)  # deal the stage again (the stage only)
         self.on_stage = False
-        self.playing = True             # the master switch beside the shutter
+        self.playing = False            # the master switch beside the shutter: silent until loaded
         self.t_prev = time.time()
         self.disp_fps = 0.0
         self.manual = {}                # part -> True/False, forced from the remote port
@@ -115,6 +115,7 @@ class App:
             if entry := self.shelf.add(d.name, d.shown, d.conf, frame, d.box):
                 self.composer.set_motif_seed(d.name, entry.motif_seed)
                 self.shelf.select(d.name, True)
+        self.start_band()
         self.apply_parts()
 
     def pick(self, dets):
@@ -150,7 +151,16 @@ class App:
     def play(self, on=None):
         """The master switch: pausing silences the band but keeps the selection."""
         self.playing = (not self.playing) if on is None else bool(on)
+        if self.playing:
+            self.engine.start_transport()
         self.apply_parts()
+
+    def start_band(self):
+        """Start the music at bar one: the app does this itself once the camera
+        and the detector have loaded, and a photo or a tile does it sooner. A
+        pause asked for after that is never undone."""
+        if not self.engine.transport:
+            self.play(True)
 
     def math_mode(self, on=None):
         """Math mode for the melodic parts (music.Sequence); heard from the next bar."""
@@ -163,6 +173,7 @@ class App:
 
     def select(self, name, on=None):
         self.shelf.select(name, on)
+        self.start_band()
         self.apply_parts()
 
     def forget(self, name):
@@ -632,6 +643,8 @@ class App:
                 dt = min(max(t0 - self.t_prev, 1e-3), 0.1)
                 self.t_prev = t0
                 self.disp_fps = 0.9 * self.disp_fps + 0.1 / dt
+                if not self.vision.loading:      # loaded: the band comes in at bar one
+                    self.start_band()
                 self.process_commands()
                 cv2.imshow(WINDOW, self.render(dt))
                 wait = max(1, int(33 - (time.time() - t0) * 1000))
