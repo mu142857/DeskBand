@@ -19,6 +19,8 @@ FPGA, and playback enters the audio callback at exact sample offsets.
 
 - programmable master sixteenth-note clock and absolute tick counter;
 - seven parallel 16-step sequencers;
+- automatic per-bar variation from a 16-bit maximal LFSR and seven parallel
+  divider-free Euclidean/Bresenham phase accumulators;
 - track-mask changes quantized to step, beat, or bar boundaries;
 - a 16-entry timestamped event FIFO with sticky overflow detection;
 - four synchronized/debounced buttons and a four-switch track selector;
@@ -29,15 +31,22 @@ FPGA, and playback enters the audio callback at exact sample offsets.
 - bare-metal Cortex-A9 UART command/event firmware; and
 - Mac serial-to-UDP bridge plus sample-accurate engine scheduling.
 
-The switches select a track in binary (`0` through `6`; 7–15 wrap modulo
-seven):
+SW3 chooses the control layer. SW2:SW0 select a track in binary (`0` through
+`6`; `7` wraps to track zero):
 
-| Button | Action |
-|---|---|
-| BTN0 | start/stop FPGA transport and toggle DeskBand photo/retake |
-| BTN1 | mute/unmute selected track on the next beat |
-| BTN2 | fade selected track to/from silence over 400 control updates |
-| BTN3 | enable/disable the selected track's hardware triangle LFO |
+| Button | SW3=0: mixer | SW3=1: generative performance |
+|---|---|---|
+| BTN0 | start/stop and photo/retake | start/stop and photo/retake |
+| BTN1 | mute selected track on next beat | lock/unlock its generated rhythm on next bar |
+| BTN2 | four-second hardware fade | next-bar energy: sparse → normal → full |
+| BTN3 | toggle hardware triangle LFO | queue one full-density fill bar |
+
+Automatic variation is the default base behavior; no button press is needed.
+The FPGA advances a repeatable 16-bit LFSR once per bar and uses parallel
+modulo-four phase accumulators to keep an evenly spaced half, three quarters,
+or all of each track's valid base hits. It never creates a hit where the Mac's
+pattern has none, always preserves a step-zero downbeat, and leaves bass and
+strings stable. Every performance action commits exactly at a bar edge.
 
 While stopped, the four LEDs mirror the switches. While running, they display
 the low four bits of the 16-step position.
@@ -91,8 +100,9 @@ the 115200 8-N-1 serial link (and can also power/program the board).
 
 ### From QSPI (no microSD required)
 
-The image was programmed to the Zybo's 16 MiB Winbond QSPI and read-back
-verified on 2026-09-19. To reproduce the write while JP5 is in `JTAG` mode:
+An earlier conductor image was programmed to the Zybo's 16 MiB Winbond QSPI
+and read-back verified on 2026-09-19. The automatic-bar revision must replace
+it. Program the current `fpga/build/BOOT.BIN` while JP5 is in `JTAG` mode:
 
 ```bash
 source /path/to/Vitis/2025.2/settings64.sh
@@ -106,6 +116,9 @@ After programming completes, turn the board **off**, move JP5 to the pair
 labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 `DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
 
+Current image SHA-256: `7c45b9c5c9ed8483f13b09867c2b388ea42623f7445737145fd5866e097bd5da`
+(4,213,968 bytes, PL ID `44420101`).
+
 Before starting DeskBand, verify the physical board path by itself:
 
 ```bash
@@ -113,8 +126,9 @@ Before starting DeskBand, verify the physical board path by itself:
 PYTHONPATH=. .venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
 ```
 
-It checks the firmware/PL identity, all 16 sequential hardware events and their
-default track masks, an envelope endpoint, and a moving LFO. It leaves the
+It checks the firmware/PL identity, 32 sequential events covering the full
+opening bar and a mathematically generated second bar, an envelope endpoint,
+and a moving LFO. It leaves the
 transport stopped and restores track 0 to full level.
 
 ## Run with the Mac
@@ -126,8 +140,9 @@ transport stopped and restores track 0 to full level.
 ```
 
 The bridge mirrors the Mac's vision-selected tracks and BPM into the FPGA,
-forwards FPGA events/control streams back to DeskBand, and renews hardware
-mode. See [registers.md](docs/registers.md) for the PS/PL contract.
+forwards FPGA events/control streams and `BAR` generation telemetry back to
+DeskBand, and renews hardware mode. See [registers.md](docs/registers.md) for
+the PS/PL contract.
 
 At 100 MHz, `cycles_per_step = 100_000_000 * 60 / (BPM * 4)`. At 120 BPM,
 this is `12_500_000` cycles.

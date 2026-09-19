@@ -56,6 +56,7 @@ class App:
         self.disp_fps = 0.0
         self.manual = {}                # part -> True/False, forced from the remote port
         self.photo_parts = set()        # parts found in the current photo
+        self.fpga_bar = None            # live hardware composition telemetry
         self.remote = Remote(self.state_dict)
 
     # ------------------------------------------------------------ actions
@@ -97,6 +98,7 @@ class App:
             "chord": self.composer.chord_name, "chord_index": self.composer.chord_index,
             "parts": {n: {"on": e.parts[n].target > 0, "glow": round(self.glow(n), 3)} for n in C.INSTRUMENTS},
             "detected": sorted({d.shown for d in dets}),
+            "fpga": self.fpga_bar,
         }
 
     def handle_command(self, msg):
@@ -129,6 +131,16 @@ class App:
             self.engine.queue_fpga_event(msg["tick"], msg["step"], msg["events"], msg["active"])
         elif cmd == "fpga_controls":
             self.engine.set_fpga_controls(msg["levels"], msg["lfos"])
+        elif cmd == "fpga_bar":
+            self.fpga_bar = {
+                "bar": int(msg.get("bar", 0)),
+                "energy": min(max(int(msg.get("energy", 1)), 0), 2),
+                "locks": int(msg.get("locks", 0)) & 0x7f,
+                "fill": bool(msg.get("fill")),
+                "fill_queued": bool(msg.get("fill_queued")),
+                "enabled": bool(msg.get("enabled", True)),
+                "random": int(msg.get("random", 0)) & 0xffff,
+            }
 
     def process_commands(self):
         while not self.remote.commands.empty():
@@ -292,6 +304,13 @@ class App:
             "  ".join(f"{n}:{p.gain:.2f}" for n, p in e.parts.items() if p.gain > 0.01),
             "loaded: " + ", ".join(sorted(e.loaded)),
         ]
+        if self.fpga_bar is not None:
+            f = self.fpga_bar
+            energy = ("sparse", "normal", "full")[f["energy"]]
+            lines.insert(2, f"FPGA bar {f['bar']}   generated {energy}   "
+                            f"locks {f['locks']:02x}   fill "
+                            f"{'active' if f['fill'] else 'queued' if f['fill_queued'] else 'off'}   "
+                            f"LFSR {f['random']:04x}")
         y = 90
         for s in lines:
             ui.text(out, s, 28, y, 13, 0.75, "Regular")

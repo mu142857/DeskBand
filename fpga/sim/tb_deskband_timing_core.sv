@@ -17,6 +17,7 @@ module tb_deskband_timing_core;
     logic [NUM_TRACKS-1:0] requested_mask = '0;
     logic [1:0] request_quantization = Q_STEP;
     logic tick_pulse;
+    logic bar_advance_pulse;
     logic [3:0] step_index;
     logic [1:0] beat_index;
     logic [31:0] absolute_tick;
@@ -53,6 +54,10 @@ module tb_deskband_timing_core;
                               output logic [NUM_TRACKS-1:0] mask);
         do @(negedge clk); while (!event_valid);
         if (!tick_pulse) $fatal(1, "event_valid without tick_pulse");
+        if (event_step == 4'd15 && !bar_advance_pulse)
+            $fatal(1, "step 15 did not produce a registered bar pulse");
+        if (event_step != 4'd15 && bar_advance_pulse)
+            $fatal(1, "bar pulse occurred outside step 15");
         tick = event_tick;
         step = event_step;
         mask = event_mask;

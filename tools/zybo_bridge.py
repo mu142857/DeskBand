@@ -15,7 +15,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.fpga_protocol import command_mask, command_tempo, parse_fpga_line
+from deskband.fpga_protocol import (command_mask, command_tempo,
+                                    command_variation, parse_fpga_line)
 
 TRACKS = ("cup", "pen", "bottle", "book", "glasses", "cell phone", "laptop")
 
@@ -56,6 +57,7 @@ def main():
     serial_command("PING")
     serial_command("RESET")
     serial_command("STOP")
+    serial_command(command_variation(True))
     send_json(udp, address, {"cmd": "fpga_mode", "on": True,
                               "lookahead_steps": args.lookahead})
     print(f"[zybo] {args.port} @ {args.baud}; DeskBand udp://{args.host}:{args.udp_port}")
@@ -78,6 +80,7 @@ def main():
                     message = None
                 if message and message.kind == "READY":
                     serial_command("RESET"); serial_command("STOP")
+                    serial_command(command_variation(True))
                 elif message and message.kind == "EV":
                     tick, step, events, active, changed = message.fields
                     send_json(udp, address, {"cmd": "fpga_event", "tick": tick,
@@ -91,6 +94,14 @@ def main():
                     if pressed & 1:
                         send_json(udp, address, {"cmd": "toggle"})
                     print(f"[zybo] buttons={live:x} pressed={pressed:x} selector={switches:x}")
+                elif message and message.kind == "BAR":
+                    bar, energy, locks, fill, queued, enabled, random_state = message.fields
+                    send_json(udp, address, {"cmd": "fpga_bar", "bar": bar,
+                              "energy": energy, "locks": locks, "fill": bool(fill),
+                              "fill_queued": bool(queued), "enabled": bool(enabled),
+                              "random": random_state})
+                    print(f"[zybo] bar={bar} energy={energy} locks={locks:02x} "
+                          f"fill={fill} queued={queued} rng={random_state:04x}")
                 elif message and message.kind in {"ERR", "FATAL"}:
                     print("[zybo]", raw.decode(errors="replace").strip())
 

@@ -30,7 +30,7 @@ import time
 from . import config as C
 
 COMMANDS = {"shoot", "retake", "toggle", "part", "sfx", "bpm", "style",
-            "fpga_mode", "fpga_event", "fpga_controls"}
+            "fpga_mode", "fpga_event", "fpga_controls", "fpga_bar"}
 
 
 def validate_style(chords):

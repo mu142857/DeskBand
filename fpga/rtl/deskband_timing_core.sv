@@ -25,6 +25,7 @@ module deskband_timing_core #(
     input  logic [1:0] request_quantization,
 
     output logic tick_pulse,
+    output logic bar_advance_pulse,
     output logic [3:0] step_index,
     output logic [1:0] beat_index,
     output logic [31:0] absolute_tick,
@@ -53,7 +54,6 @@ module deskband_timing_core #(
 
     assign safe_cycles_per_step = (cycles_per_step == 0) ? 32'd1 : cycles_per_step;
     assign beat_index = step_index[3:2];
-
     always_comb begin
         for (int unsigned track = 0; track < NUM_TRACKS; track++) begin
             pattern_mask[track] = patterns[track][step_index];
@@ -77,6 +77,7 @@ module deskband_timing_core #(
             pending_mask         <= '0;
             pending_quantization <= QUANTIZE_STEP;
             tick_pulse           <= 1'b0;
+            bar_advance_pulse    <= 1'b0;
             mask_applied_pulse   <= 1'b0;
             event_valid          <= 1'b0;
             event_tick           <= 32'd0;
@@ -84,6 +85,7 @@ module deskband_timing_core #(
             event_mask           <= '0;
         end else begin
             tick_pulse         <= 1'b0;
+            bar_advance_pulse  <= 1'b0;
             mask_applied_pulse <= 1'b0;
             event_valid        <= 1'b0;
 
@@ -123,6 +125,11 @@ module deskband_timing_core #(
 
                 if (step_index == 4'd15) begin
                     step_index <= 4'd0;
+                    // Registered boundary notification keeps the 32-bit
+                    // tempo compare off downstream control paths. It fires
+                    // one fabric cycle after step 15, millions of cycles
+                    // before the next musical step at normal tempos.
+                    bar_advance_pulse <= 1'b1;
                 end else begin
                     step_index <= step_index + 1'b1;
                 end
