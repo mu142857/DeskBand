@@ -1,0 +1,184 @@
+DeskBand - object -> instrument -> sample files
+
+Tempo 140 BPM, chords Fmaj7 - Em7 - Dm7 - Cmaj7 (2 bars each), melody notes from C major pentatonic.
+
+[cup]  ->  Grand Piano   (voice: piano, register MIDI 60-84)
+    dir:   /Library/Application Support/Logic/EXS Factory Samples/01 Acoustic Pianos/Yamaha Grand Piano
+    files: *_M.wav  (63 files)
+        021_A-1KM56_M.wav
+        025_C#0KM56_M.wav
+        026_D0KM56_M.wav
+        027_D#0KM56_M.wav
+        028_E0KM56_M.wav
+        029_F0KM56_M.wav
+        030_F#0KM56_M.wav
+        032_G#0KM56_M.wav
+        033_A0KM56_M.wav
+        034_A#0KM56_M.wav
+        036_C1KM56_M.wav
+        037_C#1KM56_M.wav
+        039_D#1KM56_M.wav
+        040_E1KM56_M.wav
+        041_F1KM56_M.wav
+        043_G1KM56_M.wav
+        044_G#1KM56_M.wav
+        046_A#1KM56_M.wav
+        047_B1KM56_M.wav
+        048_C2KM56_M.wav
+        049_C#2KM56_M.wav
+        051_D#2KM56_M.wav
+        052_E2KM56_M.wav
+        053_F2KM56_M.wav
+        055_G2KM56_M.wav
+        056_G#2KM56_M.wav
+        057_A2KM56_M.wav
+        059_B2KM56_M.wav
+        061_C#3KM56_M.wav
+        063_D#3KM56_M.wav
+        066_F#3KM56_M.wav
+        067_G3KM56_M.wav
+        069_A3KM56_M.wav
+        071_B3KM56_M.wav
+        073_C#4KM56_M.wav
+        074_D4KM56_M.wav
+        075_D#4KM56_M.wav
+        076_E4KM56_M.wav
+        078_F#4KM56_M.wav
+        079_G4KM56_M.wav
+        080_G#4KM56_M.wav
+        082_A#4KM56_M.wav
+        083_B4KM56_M.wav
+        084_C5KM56_M.wav
+        085_C#5KM56_M.wav
+        087_D#5KM56_M.wav
+        088_E5KM56_M.wav
+        089_F5KM56_M.wav
+        091_G5KM56_M.wav
+        092_G#5KM56_M.wav
+        093_A5KM56_M.wav
+        094_A#5KM56_M.wav
+        096_C6KM56_M.wav
+        097_C#6KM56_M.wav
+        098_D6KM56_M.wav
+        100_E6KM56_M.wav
+        102_F#6KM56_M.wav
+        103_G6KM56_M.wav
+        104_G#6KM56_M.wav
+        105_A6KM56_M.wav
+        106_A#6KM56_M.wav
+        107_B6KM56_M.wav
+        108_C7KM56_M.wav
+
+[pen]  ->  Classical Guitar   (voice: guitar, register MIDI 48-67)
+    dir:   /Library/Application Support/GarageBand/Instrument Library/Sampler/Sampler Files/Classical Acoustic Guitar
+    files: 50A-1GA2-*.aif  (23 files)
+        50A-1GA2-A1.aif
+        50A-1GA2-A2.aif
+        50A-1GA2-A3.aif
+        50A-1GA2-A4.aif
+        50A-1GA2-B1.aif
+        50A-1GA2-B2.aif
+        50A-1GA2-B3.aif
+        50A-1GA2-C2.aif
+        50A-1GA2-C3.aif
+        50A-1GA2-D2.aif
+        50A-1GA2-D3.aif
+        50A-1GA2-D4.aif
+        50A-1GA2-E1.aif
+        50A-1GA2-E2.aif
+        50A-1GA2-E3.aif
+        50A-1GA2-E4.aif
+        50A-1GA2-F#1.aif
+        50A-1GA2-F#2.aif
+        50A-1GA2-F#3.aif
+        50A-1GA2-F#4.aif
+        50A-1GA2-G1.aif
+        50A-1GA2-G2.aif
+        50A-1GA2-G3.aif
+
+[bottle]  ->  Double Bass   (voice: bass, register MIDI 28-43)
+    dir:   /Library/Application Support/Logic/EXS Factory Samples/06 Pop Strings/Double Bass (Pizzicato)
+    files: Cbs pizz f*.aif  (10 files)
+        Cbs pizz f  0 e.aif
+        Cbs pizz f  0 g.aif
+        Cbs pizz f  0a#.aif
+        Cbs pizz f  1 c#.aif
+        Cbs pizz f  1 e.aif
+        Cbs pizz f  1 g.aif
+        Cbs pizz f  1a#.aif
+        Cbs pizz f  2 c#.aif
+        Cbs pizz f  2 e.aif
+        Cbs pizz f  2 g.aif
+
+[book]  ->  Trap Heat Drums   (voice: drums, register MIDI 0-0)
+    dir:   /Library/Application Support/Logic/EXS Factory Samples/03 Drums & Percussion/02 Electronic Drum Kits/Trap Heat
+        kick      Kick 1 - Trap Heat.aif
+        snare     Snare 1 - Trap Heat.aif
+        clap      Clap 1 - Trap Heat.aif
+        hat       Hi-Hat 1 - Trap Heat.aif
+        hat_open  Hi-Hat Open - Trap Heat.aif
+        shaker    Shaker 1 - Trap Heat.aif
+        rim       Rim 1 - Trap Heat.aif
+        snap      Snap - Trap Heat.aif
+        perc      Perc 1 - Trap Heat.aif
+
+[lamp]  ->  Strings   (voice: strings, register MIDI 55-76)
+    dir:   /Library/Application Support/Logic/EXS Factory Samples/06 Pop Strings/EXS Strings 2
+    files: *-left.aif  (25 files)
+        STRNG24C0-left.aif
+        STRNG27D#1-left.aif
+        STRNG30F#1-left.aif
+        STRNG33A1-left.aif
+        STRNG36C1-left.aif
+        STRNG39D#1-left.aif
+        STRNG42F#1-left.aif
+        STRNG45A1-left.aif
+        STRNG48C2-left.aif
+        STRNG51D#2-left.aif
+        STRNG54F#2-left.aif
+        STRNG57A2-left.aif
+        STRNG60C3-left.aif
+        STRNG63D#3-left.aif
+        STRNG66F#3-left.aif
+        STRNG69A3-left.aif
+        STRNG72C4-left.aif
+        STRNG75D#4-left.aif
+        STRNG78F#4-left.aif
+        STRNG81A4-left.aif
+        STRNG84C5-left.aif
+        STRNG87D#5-left.aif
+        STRNG90F#5-left.aif
+        STRNG93A5-left.aif
+        STRNG96C6-left.aif
+
+[cell phone]  ->  Glockenspiel   (voice: bells, register MIDI 84-96)
+    dir:   /Library/Application Support/GarageBand/Instrument Library/Sampler/Sampler Files/Glockenspiel/Glockenspiel_Pla_mf1
+    files: *.wav  (17 files)
+        GLS2_Pla_mf_A#5.wav
+        GLS2_Pla_mf_A#6.wav
+        GLS2_Pla_mf_A#7.wav
+        GLS2_Pla_mf_B7.wav
+        GLS2_Pla_mf_C6.wav
+        GLS2_Pla_mf_C7.wav
+        GLS2_Pla_mf_C8.wav
+        GLS2_Pla_mf_D6.wav
+        GLS2_Pla_mf_D7.wav
+        GLS2_Pla_mf_E6.wav
+        GLS2_Pla_mf_E7.wav
+        GLS2_Pla_mf_F#6.wav
+        GLS2_Pla_mf_F#7.wav
+        GLS2_Pla_mf_G#5.wav
+        GLS2_Pla_mf_G#6.wav
+        GLS2_Pla_mf_G#7.wav
+        GLS2_Pla_mf_G5.wav
+
+[laptop]  ->  Synth Arp   (voice: arp, register MIDI 60-79)
+    synthesized in deskband/synth.py (detuned saw + lowpass pluck), no samples
+
+[backing, always on]
+    vinyl noise loop: /Library/Audio/Apple Loops/Apple/Beat Tape/Noisy Vinyl FX 01.caf  (decoded to cache/vinyl.wav)
+    shaker / rim from the Trap Heat kit above; sub bass synthesized
+    reverb: Schroeder hall in deskband/fx.py, room 0.86, damp 0.45
+
+Sound library: Apple Logic Pro / GarageBand factory content on this Mac.
+Samples are read in place and never copied into the repo.

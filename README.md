@@ -1,57 +1,87 @@
 # DeskBand
 
-> A Hack the North 2026 project.
+> Put the things on your desk in front of the camera, shoot a photo, and they become a band that never plays out of tune.
 
-## About
+Built at **Hack the North 2026** by Aaron Shangguan, Richard Cai and Hank Lee.
 
-<!-- TODO: One or two sentences on what DeskBand does and the problem it solves. -->
+## What it does
 
-## Features
+DeskBand looks at a photo of your desk and turns every object it recognises into a member of a band. A laptop, a cup, a pen, a bottle, a book, a lamp, a phone: each one has its own instrument, and whatever combination you shoot, the result is always in tune and always on the beat.
 
-<!-- TODO: List the key features. -->
-- 
-- 
+| Object | Instrument | Role |
+|---|---|---|
+| cup | Grand Piano | melody |
+| pen | Classical Guitar | fingerpicked chords |
+| bottle | Double Bass | bass line |
+| book | Trap Heat Drums | drums |
+| lamp | Strings | sustained pad |
+| cell phone | Glockenspiel | high sparkle |
+| laptop | Synth Arp | 16th-note arpeggio |
 
-## Tech Stack
+A light backing layer (vinyl noise, shaker and a sub bass) plays even when the desk is empty, so there is always music.
 
-<!-- TODO: Languages, frameworks, hardware, APIs. -->
+The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](INSTRUMENTS.txt).
 
-## Getting Started
+## How it works
 
-### Prerequisites
+- **Vision:** YOLO-World (`ultralytics`) with the object names given as text prompts, so classes that are not in COCO (pen, lamp) work without training. Runs on Apple Silicon via `mps` in its own thread.
+- **Music:** a fixed chord loop (Fmaj7 – Em7 – Dm7 – Cmaj7, two bars each) at 140 BPM. Melodic parts only pick notes from the C major pentatonic scale, which fits every chord in the loop, so random choices always sound right. The rhythm skeleton is the 3-3-3-3-2-2 accent pattern borrowed from Mikutap. Everything is quantised to a 16th-note grid.
+- **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a Schroeder hall reverb. The audio callback never blocks on vision; a slow frame only delays the picture.
+- **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake.
 
-<!-- TODO: Required tools and versions. -->
+## Requirements
 
-### Installation
+- Apple Silicon Mac with Logic Pro or GarageBand sound library installed (the samples are read from `/Library/Application Support/Logic` and `/Library/Application Support/GarageBand`).
+- Python 3.11 (`/Library/Frameworks/Python.framework/Versions/3.11`).
+- A webcam.
+
+## Setup
 
 ```bash
-git clone <repo-url>
-cd DeskBand
-# TODO: install dependencies
+cd ~/Desktop/DeskBand
+/Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
+.venv/bin/pip install ultralytics opencv-python sounddevice soundfile numpy scipy certifi pillow
 ```
 
-### Running
+The first run downloads the YOLO-World weights (~25 MB) and the CLIP text encoder (~340 MB), and macOS asks for camera access.
+
+## Run
 
 ```bash
-# TODO: command to start the project
+.venv/bin/python main.py
 ```
 
-## How It Works
+Keys: `space` shoot / retake · `d` debug overlay · `f` fullscreen · `q` quit.
 
-<!-- TODO: Short overview of the architecture. -->
+To get a double-clickable app:
 
-## Challenges
+```bash
+tools/build_app.sh
+```
 
-<!-- TODO: What was hard, and how you solved it. -->
+which writes `dist/DeskBand.app`, a launcher that runs the project with its own `.venv`.
 
-## What's Next
+## Tools
 
-<!-- TODO: Future plans. -->
+- `tools/render_demo.py out.wav` renders the whole band offline, one instrument entering per phrase. Useful for tuning the music without a camera.
+- `tools/check_pitch.py` measures the pitch of every sample and compares it with the note in the file name.
+- `tools/write_instruments_txt.py` regenerates `INSTRUMENTS.txt` from `deskband/config.py`.
+- `tools/exs_extract.py` unpacks a Logic "consolidated" EXS instrument (such as the Concert Grand Piano) into per-note WAVs the sampler can use.
 
-## Team
+## Project layout
 
-Built at **Hack the North 2026** by:
+```
+main.py                app, states (preview / show), drawing
+deskband/config.py     tempo, chords, instrument table, sample paths
+deskband/vision.py     camera + YOLO-World thread
+deskband/music.py      composer: patterns per instrument
+deskband/synth.py      audio engine, voices, sequencer
+deskband/sampler.py    sample loading and key maps
+deskband/fx.py         hall reverb
+deskband/ui.py         drawing primitives (duotone, outlines, text, cards)
+tools/                 demo renderer, checks, packaging
+```
 
-- Aaron Shangguan
-- Richard Cai
-- Hank Lee
+## Notes
+
+All code was written during the hackathon. Sounds come from Apple's Logic Pro / GarageBand factory library on the local machine and are never copied into this repository.

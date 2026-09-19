@@ -179,3 +179,10 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+# DeskBand
+cache/
+weights/
+*.pt
+*.wav
+*.icns
+.DS_Store
