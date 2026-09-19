@@ -29,7 +29,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 | `.app` 一键启动 + 摄像头权限 | 完成 |
 | 物体识别 | **能用但不稳，是当前最大的未决问题**，见第 2 节和第 9 节 |
 | 外部控制接口（给硬件和 AI 用的 UDP 口） | 完成，有测试、有模拟器，见第 10 节 |
-| Zybo Z7-20 FPGA 实时指挥器（Hank） | **逻辑、固件、Mac 桥、bitstream、BOOT.BIN 已完成并自动验证；只差真机 UART + Mac 音频联调**，见 `fpga/README.md` |
+| Zybo Z7-20 FPGA 实时指挥器（Hank） | **逻辑、固件、Mac 桥、bitstream、BOOT.BIN 和 Zybo 真机 UART/时序/LFO/envelope 已验证，QSPI 已写入并回读通过；只差 QSPI 冷启动 + Mac 音频联调**，见 `fpga/README.md` |
 | "拿起来晃动 → 演奏变密变亮"的交互 | **没做**（拍照模式下物体是定格的，这个交互需要重新设计，见第 15 节） |
 
 **分工**
@@ -597,7 +597,9 @@ python3 tools/remote_sim.py
 - Cortex-A9 bare-metal 固件通过 AXI-Lite 控制 PL，并经 UART1/J12 和 Mac 双向通信。Mac 只保留视觉、作曲和音频合成；音符何时触发由 FPGA 决定。
 - BTN0 启停并拍照/重拍；四个 switch 二进制选择轨道；BTN1 下一拍 mute；BTN2 做硬件 fade；BTN3 开关硬件 LFO。运行时 LED 显示十六步位置。
 - RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过，并已生成 `fpga/build/BOOT.BIN`。
-- **剩余工作只有实机闭环验证**：把 `BOOT.BIN` 放到 FAT32 SD 卡，Zybo 设 SD boot；用一根可传数据的 Micro-USB 线连接 J12 `PROG/UART` 和 Mac（板载 FT2232 已经是 USB-UART，不需要另买 TTL 串口模块）；运行 DeskBand 及 `tools/zybo_bridge.py`，检查连续播放、按钮量化、fade/LFO 和长时间无 FIFO overflow。接线及命令见 `fpga/README.md`。
+- **2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过 `tools/zybo_smoke.py`。修复了 `xil_printf` 的 32/64-bit 格式问题后，`ID` 和 `STATUS` 数值输出正确。
+- `BOOT.BIN` 已写入板载 16 MiB Winbond QSPI，全部 4,213,648 bytes 回读验证成功。SHA-256：`0766d40ce56d8e9b9f1541d9841f4239866dfe1d5491a57e1401d70cfa1e95c9`。
+- **剩余工作**：断电后把 JP5 从 `JTAG` 移到 `QSPI`，完成一次冷启动；拿到 Mac 后运行 DeskBand 和 `tools/zybo_bridge.py`，检查连续音频、按钮量化、fade/LFO 和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot
 去展台借硬件：让台灯机器人跟着节奏点头、转向正在发声的物体。画面很出效果。先去问一句能不能借到，借到再决定做不做。
@@ -679,7 +681,7 @@ python3 tools/remote_sim.py
 
 1. **查清并修复"换大模型后笔认不出来"**（第 2.1 节，工具和样本照片都已就位，预计半小时内）。
 2. 在真实摄像头下验证眼镜、iPad、笔、书、瓶子的识别率，必要时换提示词或换物体。
-3. Hank：在 Zybo Z7-20 + Mac 上完成 `fpga/README.md` 的实机 UART/音频验收；FPGA、固件和 boot image 已完成。
+3. Hank：Zybo Z7-20 的真机 UART/FPGA 验收和 QSPI 写入已完成；按 `fpga/README.md` 完成 QSPI 冷启动，再在 Mac 上做音频闭环验收。
 4. Richard：先做 ElevenLabs 的预生成音效 + `sfx`，再做 Gemini → `style`。
 5. 调试面板加上限幅前电平（`engine.pre_peak`）和限幅量（`engine.gain_reduction_db`）的显示，这两个值引擎里已经有了，只差画出来（`main.py` 的 `draw_debug`）。
 6. "晃动交互"：最初的设想是拿起物体摇晃 → 该声部变密、变亮。改成拍照模式后物体是定格的，这个交互没有了。可选的替代：定格演奏期间**继续看实时画面**，如果某个物体在实时画面里的移动速度大，就给它的声部加密度和亮度（`Pattern` 需要一个 `energy` 参数；`Vision.last_seen` 里有每个物体最新的框，前后两次的位移除以时间就是速度）。没时间就不做。

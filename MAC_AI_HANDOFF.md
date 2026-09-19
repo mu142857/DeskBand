@@ -68,7 +68,7 @@ They come from the board preset and did not cause timing or DRC failure.
 
 | Path | Purpose |
 |---|---|
-| `fpga/build/BOOT.BIN` | Prebuilt SD boot image: FSBL + final bitstream + firmware |
+| `fpga/build/BOOT.BIN` | Prebuilt SD/QSPI boot image: FSBL + final bitstream + firmware |
 | `fpga/README.md` | Build, boot, physical test and run instructions |
 | `fpga/docs/registers.md` | Exact PS/PL register contract |
 | `fpga/rtl/` | Timing core, AXI peripheral, debounce, envelope and LFO RTL |
@@ -84,7 +84,7 @@ to distribute. Other files below `fpga/build/` remain ignored and reproducible.
 Its expected SHA-256 is:
 
 ```
-462e2e786c00ad9c306f376e03dcfd568be0a4c17298c3a1cc725c0ec6ea9d0e
+0766d40ce56d8e9b9f1541d9841f4239866dfe1d5491a57e1401d70cfa1e95c9
 ```
 
 It targets the **Zybo Z7-20**, not the Z7-10.
@@ -94,7 +94,7 @@ It targets the **Zybo Z7-20**, not the Z7-10.
 Required:
 
 - Zybo Z7-20;
-- FAT32 microSD card;
+- FAT32 microSD card, unless using the already-programmed onboard QSPI;
 - data-capable Micro-USB cable from the Mac to J12 `PROG/UART`;
 - USB-C adapter if the Mac has no USB-A port; and
 - Mac speakers, wired speakers or headphones for the first test.
@@ -114,6 +114,12 @@ For SD boot:
 5. Connect J12 and turn on the board. The blue `DONE` LED should illuminate.
 6. On macOS, run `ls /dev/cu.usbserial-*`. If there is no device, first suspect
    a charge-only cable. UART traffic also flashes LD10/LD11.
+
+For the current board, `BOOT.BIN` was programmed to QSPI and fully read-back
+verified on 2026-09-19. With the board powered off, move JP5 from `JTAG` to the
+pair labelled `QSPI`, then power it on. Do not move the jumper while powered.
+The same image may be reprogrammed whenever the firmware changes; see
+`fpga/README.md` for the exact command.
 
 ## Mac preparation
 
@@ -135,7 +141,7 @@ startup lines before blaming UART.
 Do this before opening the camera or audio application:
 
 ```bash
-.venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
+PYTHONPATH=. .venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
 ```
 
 Expected final output:
