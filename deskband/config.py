@@ -141,4 +141,5 @@ DETECT_MODEL_FALLBACK = "yolov8s-worldv2.pt"   # used when the large weights are
 DETECT_IMGSZ = 960          # live preview: ~115 ms per frame with the large model on an M2 Pro
 SHOOT_IMGSZ = 1280          # one extra full-resolution pass on the frozen photo (~200 ms)
 SHOTS_DIR = os.path.join(CACHE_DIR, "shots")   # every photo is kept here for tuning the detector
+SHELF_DIR = os.path.join(CACHE_DIR, "shelf")   # saved instruments: one thumbnail per slot + shelf.json
 PRESENCE_HOLD = 1.0

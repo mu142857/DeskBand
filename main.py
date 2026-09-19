@@ -20,12 +20,14 @@ from deskband import config as C
 from deskband import ui
 from deskband.music import Composer
 from deskband.remote import Remote
+from deskband.shelf import Shelf
 from deskband.synth import Engine
 from deskband.vision import Vision, merge_duplicates, open_camera
 
 WINDOW = "DeskBand"
 W, H = 1280, 720
 PREVIEW, SHOW = "preview", "show"
+TILE, TILE_GAP, TILE_R = 72, 12, 14            # shelf slots, down the right edge
 
 
 class Box:
@@ -55,7 +57,12 @@ class App:
         self.t_prev = time.time()
         self.disp_fps = 0.0
         self.manual = {}                # part -> True/False, forced from the remote port
-        self.photo_parts = set()        # parts found in the current photo
+        self.shelf = Shelf(C.SHELF_DIR, C.INSTRUMENTS)   # saved instruments; the selected ones are the band
+        self.on = set()                 # parts playing now
+        self.slots = list(C.INSTRUMENTS)
+        self.dock_x = W - 28 - TILE
+        self.dock_y = (H - (len(self.slots) * (TILE + TILE_GAP) - TILE_GAP)) // 2
+        self.tile_mask = ui.rounded_mask(TILE, TILE, TILE_R).astype(np.float32) / 255.0
         self.remote = Remote(self.state_dict)
 
     # ------------------------------------------------------------ actions
@@ -74,14 +81,29 @@ class App:
         self.save_frame(frame, "shot")
         self.state = SHOW
         self.flash = 1.0
-        self.photo_parts = names
+        for d in sorted(dets, key=lambda d: d.conf):       # best box of each object last, so it wins
+            if self.shelf.add(d.name, d.shown, d.conf, frame, d.box):
+                self.shelf.select(d.name, True)
         self.apply_parts()
 
     def apply_parts(self):
-        """Band = what the photo shows, plus/minus anything forced remotely."""
+        """Band = the instruments selected on the shelf, plus/minus anything forced remotely."""
+        selected = self.shelf.selected()
+        self.on = {n for n in C.INSTRUMENTS if self.manual.get(n, n in selected)}
         for name in C.INSTRUMENTS:
-            on = self.manual.get(name, name in self.photo_parts)
-            self.engine.set_active(name, on)
+            self.engine.set_active(name, name in self.on)
+
+    def select(self, name, on=None):
+        self.shelf.select(name, on)
+        self.apply_parts()
+
+    def forget(self, name):
+        self.shelf.remove(name)
+        self.apply_parts()
+
+    def silence(self):
+        self.shelf.clear_selection()
+        self.apply_parts()
 
     # ------------------------------------------------------------ remote port
     def state_dict(self):
@@ -97,6 +119,8 @@ class App:
             "chord": self.composer.chord_name, "chord_index": self.composer.chord_index,
             "parts": {n: {"on": e.parts[n].target > 0, "glow": round(self.glow(n), 3)} for n in C.INSTRUMENTS},
             "detected": sorted({d.shown for d in dets}),
+            "saved": [n for n in self.slots if n in self.shelf.entries],
+            "selected": [n for n in self.slots if n in self.shelf.selected()],
         }
 
     def handle_command(self, msg):
@@ -113,6 +137,10 @@ class App:
             else:
                 self.manual[msg["name"]] = bool(msg["on"])
             self.apply_parts()
+        elif cmd == "select" and msg.get("name") in C.INSTRUMENTS:
+            self.select(msg["name"], msg.get("on"))
+        elif cmd == "silence":
+            self.silence()
         elif cmd == "sfx" and os.path.isfile(str(msg.get("file"))):
             self.engine.play_file(msg["file"], msg.get("gain", 0.6))
         elif cmd == "bpm":
@@ -145,10 +173,9 @@ class App:
         print("saved", path, flush=True)
 
     def retake(self):
+        """Back to the camera. The band keeps playing: it lives on the shelf now."""
         self.state = PREVIEW
         self.captured = None
-        self.photo_parts = set()
-        self.apply_parts()
 
     def toggle(self):
         if self.state == PREVIEW:
@@ -156,12 +183,23 @@ class App:
         else:
             self.retake()
 
+    def slot_at(self, x, y):
+        """Name of the shelf slot under a point, or None."""
+        if not self.dock_x <= x < self.dock_x + TILE:
+            return None
+        i, rest = divmod(y - self.dock_y, TILE + TILE_GAP)
+        return self.slots[i] if 0 <= i < len(self.slots) and rest < TILE else None
+
     def on_mouse(self, event, x, y, flags, param):
         self.mouse = (x, y)
         if event == cv2.EVENT_LBUTTONDOWN:
             cx, cy, r = self.shutter
             if (x - cx) ** 2 + (y - cy) ** 2 <= (r + 8) ** 2:
                 self.toggle()
+            elif self.slot_at(x, y):
+                self.select(self.slot_at(x, y))
+        elif event == cv2.EVENT_RBUTTONDOWN and self.slot_at(x, y):
+            self.forget(self.slot_at(x, y))
 
     # ------------------------------------------------------------ drawing
     def glow(self, name):
@@ -214,24 +252,64 @@ class App:
             d.box = [int(v) for v in b.xyxy]
             self.draw_box(out, frame, d, 0.45 * b.alpha, lit=False, glow=0.0)
 
-    def draw_card(self, out, members):
-        """Bottom-left frosted card: who is in the band right now."""
-        rows = [(n, members[n], C.INSTRUMENTS[n]["label"]) for n in C.INSTRUMENTS if n in members]
+    def draw_card(self, out, desk):
+        """Bottom-left frosted card: the band, then whatever else is in view."""
+        rows = []
+        for n in C.INSTRUMENTS:
+            entry = self.shelf.entries.get(n)
+            if n in self.on:
+                rows.append((n, entry.shown if entry else desk.get(n, n), True))
+            elif n in desk:
+                rows.append((n, desk[n], False))
         x0, y0 = 28, H - 28 - (58 + 30 * max(len(rows), 1))
         x1 = x0 + 320
         ui.frosted(out, x0, y0, x1, H - 28)
-        title = "Band" if self.state == SHOW else "On the desk"
-        ui.text(out, title, x0 + 20, y0 + 16, 20, 0.95, "Semibold")
+        ui.text(out, "Band", x0 + 20, y0 + 16, 20, 0.95, "Semibold")
         ui.text(out, self.composer.chord_name, x1 - 20, y0 + 20, 15, 0.55, "Light", align="right")
         y = y0 + 54
         if not rows:
             ui.text(out, "nothing yet", x0 + 20, y, 16, 0.5, "Light")
-        for name, shown, label in rows:
-            g = self.glow(name) if self.state == SHOW else 0.0
-            ui.circle(out, x0 + 26, y + 10, 4, 0.35 + 0.65 * g, thickness=-1)
-            ui.text(out, shown, x0 + 42, y, 16, 0.9, "Regular")
-            ui.text(out, label, x1 - 20, y, 16, 0.6, "Light", align="right")
+        for name, shown, playing in rows:
+            if playing:
+                ui.circle(out, x0 + 26, y + 10, 4, 0.35 + 0.65 * self.glow(name), thickness=-1)
+            else:
+                ui.circle(out, x0 + 26, y + 10, 4, 0.35, thickness=1)
+            dim = 1.0 if playing else 0.55
+            ui.text(out, shown, x0 + 42, y, 16, 0.9 * dim, "Regular")
+            ui.text(out, C.INSTRUMENTS[name]["label"], x1 - 20, y, 16, 0.6 * dim, "Light", align="right")
             y += 30
+
+    def draw_dock(self, out):
+        """The shelf: one slot per instrument. Lit = in the band."""
+        x = self.dock_x
+        hover = self.slot_at(*self.mouse)
+        for i, name in enumerate(self.slots):
+            y = self.dock_y + i * (TILE + TILE_GAP)
+            entry = self.shelf.entries.get(name)
+            lift = 0.25 if name == hover else 0.0
+            if entry is None:
+                ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, 0.14 + lift)
+                ui.text(out, name, x + TILE // 2, y + TILE // 2 - 8, 12, 0.34 + lift, "Light", align="center")
+                continue
+            if entry.tiles is None:
+                small = cv2.resize(entry.thumb, (TILE, TILE), interpolation=cv2.INTER_AREA)
+                entry.tiles = (small.astype(np.float32), ui.duotone(small).astype(np.float32))
+            if name in self.on:
+                g = self.glow(name)
+                ui.picture(out, entry.tiles[0], self.tile_mask, x, y)
+                ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, min(1.0, 0.45 + 0.55 * g + lift))
+            else:
+                ui.picture(out, entry.tiles[1], self.tile_mask, x, y, 0.5 + lift)
+                ui.outline(out, x, y, x + TILE, y + TILE, TILE_R, 0.2 + lift)
+        if hover:
+            entry = self.shelf.entries.get(hover)
+            y = self.dock_y + self.slots.index(hover) * (TILE + TILE_GAP)
+            top = f"{self.slots.index(hover) + 1}  ·  {entry.shown if entry else hover}"
+            sub = C.INSTRUMENTS[hover]["label"] if entry else "shoot one to add it"
+            wide = max(ui.text_mask(top, 15, "Medium")[0].shape[1], ui.text_mask(sub, 13, "Light")[0].shape[1])
+            ui.frosted(out, x - 38 - wide, y + 10, x - 12, y + TILE - 10, r=10)
+            ui.text(out, top, x - 25, y + 18, 15, 0.95, "Medium", align="right")
+            ui.text(out, sub, x - 25, y + 40, 13, 0.6, "Light", align="right")
 
     def draw_shutter(self, out):
         cx, cy, r = self.shutter
@@ -265,15 +343,18 @@ class App:
         out = self.base.render(frame, dim=0.12 if self.state == PREVIEW else 0.0)
         if self.state == SHOW:
             for d in dets:
-                self.draw_box(out, frame, d, 1.0, lit=True, glow=self.glow(d.name))
-            members = {d.name: d.shown for d in sorted(dets, key=lambda d: d.conf)}
+                playing = d.name in self.on
+                self.draw_box(out, frame, d, 1.0 if playing else 0.5, lit=playing,
+                              glow=self.glow(d.name) if playing else 0.0)
+            desk = {d.name: d.shown for d in sorted(dets, key=lambda d: d.conf)}
         else:
             self.draw_preview(out, frame, dets, dt)
-            members = {n: b.det.shown for n, b in self.preview_boxes.items()}
+            desk = {n: b.det.shown for n, b in self.preview_boxes.items()}
         ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
         if self.state == PREVIEW:
-            ui.text(out, "put things on the desk, then shoot", 28, 52, 15, 0.5, "Light")
-        self.draw_card(out, members)
+            ui.text(out, "shoot an object to add it to the band", 28, 52, 15, 0.5, "Light")
+        self.draw_card(out, desk)
+        self.draw_dock(out)
         self.draw_shutter(out)
         if self.flash > 0.01:
             f = self.flash * 0.85
@@ -333,6 +414,12 @@ class App:
                     self.toggle()
                 elif k == ord("d"):
                     self.debug = not self.debug
+                elif ord("1") <= k < ord("1") + len(self.slots):      # shelf slots
+                    self.select(self.slots[k - ord("1")])
+                elif k == ord("0"):
+                    self.silence()
+                elif k == ord("x") and self.slot_at(*self.mouse):
+                    self.forget(self.slot_at(*self.mouse))
                 elif k == ord("s"):                       # save the live frame without shooting
                     frame, _ = self.vision.snapshot()
                     if frame is not None:

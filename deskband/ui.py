@@ -151,14 +151,38 @@ def circle(img, cx, cy, radius, alpha, thickness=2, color=WHITE):
 
 # ------------------------------------------------------------ base ----
 
+def _duotone_lut():
+    t = (np.arange(256, dtype=np.float32) / 255.0)[:, None]
+    t = t ** 1.05
+    return np.clip(TONE_DARK * (1 - t) + TONE_LIGHT * t, 0, 255).astype(np.uint8)
+
+
+LUT = _duotone_lut()
+
+
+def duotone(bgr):
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    return cv2.LUT(cv2.merge([gray, gray, gray]), LUT.reshape(1, 256, 3))
+
+
+def picture(img, src, mask, x0, y0, alpha=1.0):
+    """Alpha-blend a small picture (float32 BGR) through `mask` (float 0..1) at x0,y0."""
+    h, w = mask.shape
+    H, W = img.shape[:2]
+    xa, ya, xb, yb = max(x0, 0), max(y0, 0), min(x0 + w, W), min(y0 + h, H)
+    if xb <= xa or yb <= ya:
+        return
+    a = mask[ya - y0:yb - y0, xa - x0:xb - x0, None] * alpha
+    roi = img[ya:yb, xa:xb]
+    roi[:] = (src[ya - y0:yb - y0, xa - x0:xb - x0] * a + roi * (1 - a)).astype(np.uint8)
+
+
 class Base:
     """Duotone + vignette for a fixed frame size (LUTs built once)."""
 
     def __init__(self, W, H):
         self.W, self.H = W, H
-        t = (np.arange(256, dtype=np.float32) / 255.0)[:, None]
-        t = t ** 1.05
-        self.lut = np.clip(TONE_DARK * (1 - t) + TONE_LIGHT * t, 0, 255).astype(np.uint8)
+        self.lut = LUT
         yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
         d = np.sqrt(((xx / W - 0.5) * 2) ** 2 + ((yy / H - 0.5) * 2) ** 2)
         vig = np.clip(1 - 0.28 * np.clip(d - 0.55, 0, 1.5), 0, 1)
