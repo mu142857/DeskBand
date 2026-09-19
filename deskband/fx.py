@@ -17,9 +17,11 @@ class Delay:
         self.i = 0
 
     def read(self, k):
+        # Always a copy: the caller writes to this same region right after
+        # reading, and a view would silently turn into the new data.
         i, n = self.i, self.n
         if i + k <= n:
-            return self.buf[i:i + k]
+            return self.buf[i:i + k].copy()
         return np.concatenate([self.buf[i:], self.buf[: i + k - n]])
 
     def write(self, x):
@@ -57,20 +59,23 @@ class Allpass:
 
 
 class Reverb:
-    COMBS_L = [1116, 1188, 1277, 1356]
-    COMBS_R = [1422, 1491, 1557, 1617]
-    ALLPASS_L = [556, 441]
-    ALLPASS_R = [579, 464]
+    COMBS_L = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617]
+    COMBS_R = [n + 23 for n in COMBS_L]          # Freeverb's stereo spread
+    ALLPASS_L = [556, 441, 341]
+    ALLPASS_R = [n + 23 for n in ALLPASS_L]
 
     def __init__(self):
         p = C.REVERB
         fb = 0.7 + 0.28 * p["room"]
         self.pre = Delay(max(SUB + 1, int(p["predelay_ms"] / 1000 * C.SAMPLE_RATE)))
-        self.cl = [Comb(n, fb, p["damp"]) for n in self.COMBS_L]
-        self.cr = [Comb(n, fb, p["damp"]) for n in self.COMBS_R]
-        self.al = [Allpass(n) for n in self.ALLPASS_L]
-        self.ar = [Allpass(n) for n in self.ALLPASS_R]
+        k = C.SAMPLE_RATE / 44100.0            # lengths below are for 44.1 kHz
+        scale = lambda n: max(SUB + 1, int(round(n * k)))
+        self.cl = [Comb(scale(n), fb, p["damp"]) for n in self.COMBS_L]
+        self.cr = [Comb(scale(n), fb, p["damp"]) for n in self.COMBS_R]
+        self.al = [Allpass(scale(n)) for n in self.ALLPASS_L]
+        self.ar = [Allpass(scale(n)) for n in self.ALLPASS_R]
         self.wet = p["wet"]
+        self.norm = 0.5 / np.sqrt(len(self.cl))     # keep level independent of comb count
         self.lp = np.zeros(1)
 
     def process(self, send):
@@ -84,8 +89,8 @@ class Reverb:
             delayed = self.pre.read(len(x))     # read before write = full delay
             self.pre.write(x)
             x = delayed
-            l = sum(c.process(x) for c in self.cl) * 0.25
-            r = sum(c.process(x) for c in self.cr) * 0.25
+            l = sum(c.process(x) for c in self.cl) * self.norm
+            r = sum(c.process(x) for c in self.cr) * self.norm
             for a in self.al:
                 l = a.process(l)
             for a in self.ar:

@@ -18,8 +18,9 @@ def main():
         lines.append(f"[{obj}]  ->  {spec['label']}   (voice: {spec['voice']}, register MIDI {spec['lo']}-{spec['hi']})")
         kind = spec["voice"]
         if kind == "piano" and os.path.exists(os.path.join(C.CONCERT_GRAND, "keymap.json")):
-            lines.append(f"    Concert Grand Piano, unpacked from Logic's EXS instrument into {C.CONCERT_GRAND}/")
+            lines.append(f"    Concert Grand Piano (88 notes, mf layer), unpacked by tools/exs_extract.py into {C.CONCERT_GRAND}/")
             lines.append(f"    source: {C.LIB_LOGIC}/Studio Piano/Concert Grand Piano/*.caf")
+            lines.append(f"    fallback when the cache is missing: the Yamaha Grand set below")
         if kind in C.SAMPLE_SETS:
             s = C.SAMPLE_SETS[kind]
             files = sorted(glob.glob(os.path.join(s["dir"], s["glob"])))
@@ -36,9 +37,12 @@ def main():
         elif kind == "arp":
             lines.append("    synthesized in deskband/synth.py (detuned saw + lowpass pluck), no samples")
         lines.append("")
-    lines.append("[backing, always on]")
-    lines.append(f"    vinyl noise loop: {C.VINYL_LOOP}  (decoded to cache/vinyl.wav)")
-    lines.append(f"    shaker / rim from the Trap Heat kit above; sub bass synthesized")
+    on = lambda k: "on" if C.BACKING[k] else "off"
+    lines.append("[backing bed, optional - switches in deskband/config.py BACKING]")
+    lines.append(f"    vinyl noise loop ({on('vinyl')}): {C.VINYL_LOOP}")
+    lines.append(f"    shaker / rim from the Trap Heat kit ({on('perc')}); synthesized sub bass ({on('sub')})")
+    lines.append("")
+    lines.append("[effects]")
     lines.append(f"    reverb: Schroeder hall in deskband/fx.py, room {C.REVERB['room']}, damp {C.REVERB['damp']}")
     lines.append("")
     lines.append("Sound library: Apple Logic Pro / GarageBand factory content on this Mac.")

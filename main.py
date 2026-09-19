@@ -20,7 +20,7 @@ from deskband import config as C
 from deskband import ui
 from deskband.music import Composer
 from deskband.synth import Engine
-from deskband.vision import Vision
+from deskband.vision import Vision, open_camera
 
 WINDOW = "DeskBand"
 W, H = 1280, 720
@@ -95,8 +95,10 @@ class App:
         hit = self.engine.hits.get(name)
         if hit is None:
             return 0.0
-        age = (self.engine.pos - hit) / C.SAMPLE_RATE
-        return math.exp(-max(age, 0) / 0.22)
+        age = (self.engine.pos - hit) / C.SAMPLE_RATE - self.engine.latency
+        if age < 0:                       # queued but not audible yet
+            return 0.0
+        return math.exp(-age / 0.22)
 
     def draw_box(self, out, frame, det, alpha, lit, glow):
         x0, y0, x1, y1 = det.box
@@ -224,12 +226,25 @@ class App:
     # -------------------------------------------------------------- loop
     def run(self):
         self.engine.start()
-        self.vision.start()
         cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
         cv2.setMouseCallback(WINDOW, self.on_mouse)
+        camera_ok, next_try = False, 0.0
         try:
             while True:
                 t0 = time.time()
+                # The camera is opened here, on the main thread, so macOS can show
+                # its permission prompt; keep retrying while the user answers it.
+                if not camera_ok and t0 >= next_try:
+                    cap = open_camera()
+                    if cap is not None:
+                        self.vision.cap = cap
+                        self.vision.error = None
+                        self.vision.start()
+                        camera_ok = True
+                    else:
+                        self.vision.error = ("waiting for camera access  ·  allow DeskBand in "
+                                             "System Settings › Privacy & Security › Camera")
+                        next_try = time.time() + 1.5
                 dt = min(max(t0 - self.t_prev, 1e-3), 0.1)
                 self.t_prev = t0
                 self.disp_fps = 0.9 * self.disp_fps + 0.1 / dt

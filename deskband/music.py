@@ -74,7 +74,7 @@ class Melody(Pattern):
             pool = chord_notes if (s in ACC or rng.random() < 0.5) else pent
             midi = rng.choice(nearest(pool, prev))
             nxt_s = steps[i + 1] if i + 1 < len(steps) else P
-            dur = min(nxt_s - s, 12)
+            dur = max(nxt_s - s, 16)          # let it ring ~2 s: pentatonic notes never clash
             vel = rng.uniform(0.75, 0.95) if s in ACC else rng.uniform(0.45, 0.7)
             self.put(s, midi, vel, dur)
             if s in ACC and rng.random() < 0.35:        # occasional 3rd/6th below
@@ -125,11 +125,11 @@ class Guitar(Pattern):
         j = rng.randrange(len(seq))
         for s in steps:
             if s in (0, 12, 24):
-                self.put(s, bass, 0.85, 12)
+                self.put(s, bass, 0.85, 16)
             else:
                 m = seq[j % len(seq)]
                 j += 1
-                self.put(s, m, rng.uniform(0.5, 0.7), 6 if s in ACC else 3)
+                self.put(s, m, rng.uniform(0.5, 0.7), 12 if s in ACC else 8)
 
 
 class Bass(Pattern):
@@ -222,14 +222,16 @@ class Backing(Pattern):
     def plan(self, chord, nxt):
         self.bar = {}
         root = in_range([chord.root], 36, 47)[0]
-        for s in range(0, P, 2):
-            self.put(s, ("drums", "shaker"), 0.45 if s % 4 == 0 else 0.3, 1)
-        for s in (4, 12, 20, 28):
-            self.put(s, ("drums", "rim"), 0.3, 1)
-        acc = C.ACCENTS
-        for i, s in enumerate(acc):
-            nxt_s = acc[i + 1] if i + 1 < len(acc) else P
-            self.put(s, ("sub", root), 0.5, nxt_s - s)
+        if C.BACKING["perc"]:
+            for s in range(0, P, 2):
+                self.put(s, ("drums", "shaker"), 0.45 if s % 4 == 0 else 0.3, 1)
+            for s in (4, 12, 20, 28):
+                self.put(s, ("drums", "rim"), 0.3, 1)
+        if C.BACKING["sub"]:
+            acc = C.ACCENTS
+            for i, s in enumerate(acc):
+                nxt_s = acc[i + 1] if i + 1 < len(acc) else P
+                self.put(s, ("sub", root), 0.5, nxt_s - s)
 
     def events(self, s):
         return [("backing", kind, m, v, d) for (kind, m), v, d in self.bar.get(s, [])]

@@ -3,6 +3,9 @@ DeskBand - object -> instrument -> sample files
 Tempo 140 BPM, chords Fmaj7 - Em7 - Dm7 - Cmaj7 (2 bars each), melody notes from C major pentatonic.
 
 [cup]  ->  Grand Piano   (voice: piano, register MIDI 60-84)
+    Concert Grand Piano (88 notes, mf layer), unpacked by tools/exs_extract.py into /Users/jiamulin/Desktop/DeskBand/cache/concert_grand/
+    source: /Library/Application Support/Logic/EXS Factory Samples/Studio Piano/Concert Grand Piano/*.caf
+    fallback when the cache is missing: the Yamaha Grand set below
     dir:   /Library/Application Support/Logic/EXS Factory Samples/01 Acoustic Pianos/Yamaha Grand Piano
     files: *_M.wav  (63 files)
         021_A-1KM56_M.wav
@@ -175,10 +178,12 @@ Tempo 140 BPM, chords Fmaj7 - Em7 - Dm7 - Cmaj7 (2 bars each), melody notes from
 [laptop]  ->  Synth Arp   (voice: arp, register MIDI 60-79)
     synthesized in deskband/synth.py (detuned saw + lowpass pluck), no samples
 
-[backing, always on]
-    vinyl noise loop: /Library/Audio/Apple Loops/Apple/Beat Tape/Noisy Vinyl FX 01.caf  (decoded to cache/vinyl.wav)
-    shaker / rim from the Trap Heat kit above; sub bass synthesized
-    reverb: Schroeder hall in deskband/fx.py, room 0.86, damp 0.45
+[backing bed, optional - switches in deskband/config.py BACKING]
+    vinyl noise loop (off): /Library/Audio/Apple Loops/Apple/Beat Tape/Noisy Vinyl FX 01.caf
+    shaker / rim from the Trap Heat kit (off); synthesized sub bass (off)
+
+[effects]
+    reverb: Schroeder hall in deskband/fx.py, room 0.84, damp 0.5
 
 Sound library: Apple Logic Pro / GarageBand factory content on this Mac.
 Samples are read in place and never copied into the repo.

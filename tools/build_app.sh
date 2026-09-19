@@ -23,6 +23,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundleExecutable</key><string>DeskBand</string>
     <key>CFBundleIconFile</key><string>DeskBand</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>LSArchitecturePriority</key><array><string>arm64</string></array>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSCameraUsageDescription</key>
     <string>DeskBand looks at the objects on your desk to turn them into a band.</string>
@@ -37,9 +38,15 @@ cat > "$APP/Contents/MacOS/DeskBand" <<EOF
 # Launcher: run DeskBand from its project folder with the bundled venv.
 cd "$ROOT"
 export SSL_CERT_FILE="$ROOT/.venv/lib/python3.11/site-packages/certifi/cacert.pem"
-exec "$ROOT/.venv/bin/python" "$ROOT/main.py" >> "$ROOT/cache/deskband.log" 2>&1
+# A script-only bundle can be started under Rosetta by Finder; the venv's
+# packages are arm64-only, so force the native architecture.
+# No exec: this script must stay alive as the parent so macOS attributes the
+# camera request to DeskBand.app (whose Info.plist explains why) and not to Python.
+/usr/bin/arch -arm64 "$ROOT/.venv/bin/python" "$ROOT/main.py" >> "$ROOT/cache/deskband.log" 2>&1
 EOF
 chmod +x "$APP/Contents/MacOS/DeskBand"
 mkdir -p "$ROOT/cache"
+# ad-hoc signature: gives the bundle a stable identity for the privacy database
+codesign --force --deep -s - "$APP" >/dev/null 2>&1 || true
 touch "$APP"
 echo "built $APP"

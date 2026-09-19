@@ -18,7 +18,7 @@ DeskBand looks at a photo of your desk and turns every object it recognises into
 | cell phone | Glockenspiel | high sparkle |
 | laptop | Synth Arp | 16th-note arpeggio |
 
-A light backing layer (vinyl noise, shaker and a sub bass) plays even when the desk is empty, so there is always music.
+An empty desk is silent: the band is exactly what you photographed, played through a hall reverb. (An optional backing bed of vinyl noise, shaker and sub bass can be switched on in `deskband/config.py`.)
 
 The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](INSTRUMENTS.txt).
 
@@ -44,6 +44,12 @@ cd ~/Desktop/DeskBand
 ```
 
 The first run downloads the YOLO-World weights (~25 MB) and the CLIP text encoder (~340 MB), and macOS asks for camera access.
+
+Optional, for the better piano: unpack Logic's Concert Grand once (88 MB into `cache/`, read by the sampler automatically; without it the Yamaha Grand set is used):
+
+```bash
+.venv/bin/python tools/exs_extract.py "/Library/Application Support/Logic/Sampler Instruments/z_Internal/Studio Piano/Concert Grand Piano.exs" "/Library/Application Support/Logic/EXS Factory Samples/Studio Piano/Concert Grand Piano" cache/concert_grand --velocity 84
+```
 
 ## Run
 

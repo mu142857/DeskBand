@@ -21,6 +21,20 @@ def midi_to_hz(m):
     return 440.0 * 2 ** ((m - 69) / 12)
 
 
+def blep_saw(t, f):
+    """Band-limited sawtooth (polyBLEP): a naive saw aliases into audible grit."""
+    dt = f / SR
+    ph = (t * f) % 1.0
+    saw = 2 * ph - 1
+    lo = ph < dt
+    x = ph[lo] / dt
+    saw[lo] -= x + x - x * x - 1
+    hi = ph > 1 - dt
+    x = (ph[hi] - 1) / dt
+    saw[hi] -= x * x + x + x + 1
+    return saw
+
+
 # ---------------------------------------------------------------- voices ----
 
 class Voice:
@@ -51,8 +65,7 @@ class SynthVoice(Voice):
         t = (self.t + np.arange(n)) / SR
         k = self.kind
         if k == "arp":       # saw pluck through a closing lowpass
-            saw = 2 * ((t * self.f) % 1.0) - 1
-            saw += 0.5 * (2 * ((t * self.f * 1.005) % 1.0) - 1)
+            saw = blep_saw(t, self.f) + 0.5 * blep_saw(t, self.f * 1.005)
             env = np.exp(-t * 9.0)
             cut = 500 + 4500 * float(env[0]) * self.vel
             sig = self._lowpass(saw, cut) * env * 0.35
@@ -134,7 +147,7 @@ class SampleVoice(Voice):
         return out
 
 
-RELEASE = {"piano": 0.3, "guitar": 0.25, "bass": 0.12, "strings": 0.6, "bells": 0.5}
+RELEASE = {"piano": 0.9, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2}
 
 
 # ---------------------------------------------------------------- engine ----
@@ -169,6 +182,12 @@ class Engine:
         self.next_step_at = 0
         self.stream = None
         self.cpu = 0.0
+        self.xruns = 0               # callbacks that reported an under/overflow
+        self.pre_peak = 0.0          # level going into the limiter
+        self.latency = 0.0
+        self.makeup = 1.0
+        self.lim_gain = 1.0
+        self.gain_reduction_db = 0.0
         self.pulse = 0.0
         self.hits = {}               # part -> last trigger time (for the UI)
         for name, spec in C.INSTRUMENTS.items():
@@ -195,6 +214,8 @@ class Engine:
         self.loaded.add("drums")
         log(f"[sampler] drums: {len(self.drums)} hits")
         try:
+            if not C.BACKING["vinyl"]:
+                raise LookupError("disabled in config")
             vinyl = sampler.load_loop(C.VINYL_LOOP, "vinyl")
             v = SampleVoice(vinyl, 1.0, C.VINYL_LEVEL, 0, loop=True)
             v.part = self.parts["backing"]
@@ -211,8 +232,9 @@ class Engine:
         threading.Thread(target=self.load_instruments, daemon=True).start()
         self.stream = sd.OutputStream(
             samplerate=SR, channels=2, dtype="float32",
-            blocksize=C.BLOCK_SIZE, latency="low", callback=self._callback)
+            blocksize=C.BLOCK_SIZE, latency="high", callback=self._callback)
         self.stream.start()
+        self.latency = float(self.stream.latency)     # the UI delays its glow by this
 
     def stop(self):
         if self.stream:
@@ -283,7 +305,30 @@ class Engine:
                 alive.append(v)
         self.voices = alive
         mix = dry + self.reverb.process(send)
-        out[:] = np.tanh(mix * 1.1) * 0.92
+        if status:
+            self.xruns += 1
+        # makeup for sparse bands, smoothed over ~1 s
+        active = sum(1 for n, p in self.parts.items() if n != "backing" and p.target > 0)
+        want = C.MAKEUP.get(active, 1.0)
+        self.makeup += (want - self.makeup) * min(1.0, frames / (1.0 * SR))
+        mix *= self.makeup
+        peak = float(np.abs(mix).max())
+        self.pre_peak = max(self.pre_peak * 0.999, peak)
+        # limiter: ride the gain, never bend the waveform. Attack within 32
+        # samples, slow release; the clip below only ever catches stray samples.
+        need = min(1.0, C.CEILING / peak) if peak > 0 else 1.0
+        g0 = self.lim_gain
+        if need < g0:
+            g1 = need
+            ramp_g = np.full(frames, g1, np.float32)
+            k = min(32, frames)
+            ramp_g[:k] = np.linspace(g0, g1, k, dtype=np.float32)
+        else:
+            g1 = g0 + (need - g0) * min(1.0, frames / (C.LIMITER_RELEASE_S * SR))
+            ramp_g = np.linspace(g0, g1, frames, dtype=np.float32)
+        self.lim_gain = g1
+        self.gain_reduction_db = -20 * np.log10(max(g1, 1e-6))
+        np.clip(mix * ramp_g[:, None], -1.0, 1.0, out=out)
         self.pos = end
         beat = self.step_len * C.STEPS_PER_BEAT
         self.pulse = (self.pos % beat) / beat

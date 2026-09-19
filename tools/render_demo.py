@@ -19,7 +19,10 @@ SCRIPT = [None, "cup", "pen", "bottle", "book", "lamp", "cell phone", "laptop",
           None, None, "-book", "-laptop", "-lamp", None]
 
 
-def main(out_path):
+def main(out_path, script=None):
+    global SCRIPT
+    if script:      # e.g. "cup,,pen,,cell phone,,-pen" : one entry per phrase
+        SCRIPT = [s.strip() or None for s in script.split(",")]
     engine = Engine(Composer())
     engine.load_instruments()
     frames = C.BLOCK_SIZE
@@ -48,4 +51,5 @@ def main(out_path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "demo.wav")
+    main(sys.argv[1] if len(sys.argv) > 1 else "demo.wav",
+         sys.argv[2] if len(sys.argv) > 2 else None)

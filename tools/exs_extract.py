@@ -62,8 +62,10 @@ bodies) and the 2013 "Steinway Grand Piano 2.exs" (128-byte zone bodies)):
     +16 u32 channels, +88 zero-terminated directory path.  The audio file name
     is the chunk name (a longer full name, if any, follows the path field).
   * In a consolidated instrument every zone's [start, end) lies inside the
-    named CAF, with no overlaps between zones.  ALAC-compressed CAFs are decoded
-    with macOS `afconvert` (libsndfile reads PCM CAF directly).
+    named CAF, with no overlaps between zones.  libsndfile >= 1.0.26 reads both
+    PCM and ALAC CAF directly (verified with 1.2.2: output identical to an
+    afconvert decode); if it cannot, the file is decoded once with macOS
+    `afconvert` into --decoded-dir.
 """
 
 import argparse
@@ -480,6 +482,7 @@ def _peak_interp(spec, i):
     y0, y1, y2 = np.log(spec[i - 1] + 1e-12), np.log(spec[i] + 1e-12), np.log(spec[i + 1] + 1e-12)
     den = y0 - 2 * y1 + y2
     d = 0.5 * (y0 - y2) / den if den != 0 else 0.0
+    d = max(-1.0, min(1.0, d))
     return i + d, 20 * math.log10(spec[i] + 1e-12)
 
 
@@ -495,80 +498,111 @@ def _fundamental_from_partials(spec, ref, df, f0):
     """refine f0 from the strongest of its first three partials (fundamental preferred)"""
     best = None
     for h in (1, 2, 3):
-        tol = min(0.05, 0.004 * h * h)
+        tol = 0.03                          # the seed may come from a stretched partial
         a = max(1, int(h * f0 * (1 - tol) / df))
         b = min(len(spec) - 2, int(h * f0 * (1 + tol) / df) + 1)
         if b <= a:
             continue
         i = a + int(np.argmax(spec[a:b]))
+        if i <= a or i >= b - 1:          # band edge, not a real peak
+            continue
         pos, lvl = _peak_interp(spec, i)
         lvl -= ref
         if h == 1:
-            lvl += 20.0                     # prefer the fundamental unless it is >20 dB weaker
+            if lvl < -30.0:                 # too weak to trust (bass notes): use a partial
+                continue
+            lvl += 10.0                     # prefer the fundamental unless it is >10 dB weaker
         if best is None or lvl > best[1]:
             best = (pos * df / h, lvl)
     return best[0] if best else f0
 
 
+def _inharmonicity(f0):
+    """generous envelope of the piano inharmonicity coefficient B versus f0
+    (2e-4 at A0 - measured 1.5e-4 on the Concert Grand - up to 3e-2 at C7);
+    partial h sits near h*f0*(1 + B*h*h/2).  Used only for match tolerances."""
+    return 2e-4 * (f0 / 27.5)
+
+
 def _harmonic_pick(seg, rate, fmin, fmax):
-    """Peak-based fundamental search for a struck/plucked string tone.
-    Candidates are (strong peak)/n; a candidate is scored by the mean level of
-    its predicted partials, a bonus for a present fundamental, and a penalty
-    for strong peaks that are not near any of its multiples.  This resolves
-    both the weak-fundamental bass case (octave/twelfth errors) and the
-    few-partials treble case (sub-octave / noise-floor errors)."""
+    """Blind fundamental search for a struck string tone (two-way mismatch on
+    spectral peaks).  Candidates are (strong peak)/n.  Each candidate is scored
+    by: amplitude-weighted balance of peaks it explains vs. peaks it does not
+    (tolerances follow a piano inharmonicity model, so irregular hammer/room
+    peaks cannot line up with a comb); a penalty for predicted low harmonics
+    that are absent (defeats sub-octave candidates; a missing fundamental costs
+    extra only above ~80 Hz, since bass piano tones often have none); and the
+    level of its three strongest partials."""
     from scipy.signal import find_peaks
     spec, ref, df = _spectrum(seg, rate)
     spec_db = np.maximum(20 * np.log10(spec + 1e-12) - ref, -50.0)
     nyq = 0.45 * rate
     lo, hi = int(fmin / df), int(min(nyq, fmax * 8) / df)
-    idx, props = find_peaks(spec_db[lo:hi], height=-35.0, prominence=6.0, distance=max(1, int(0.5 * fmin / df)))
+    idx, _props = find_peaks(spec_db[lo:hi], height=-35.0, prominence=6.0, distance=max(1, int(0.5 * fmin / df)))
     idx = idx + lo
     if len(idx) == 0:
         return None, None
-    order = np.argsort(spec_db[idx])[::-1][:12]
-    peaks = [(idx[j] * df, spec_db[idx[j]]) for j in order]
+    order = np.argsort(spec_db[idx])[::-1][:15]
+    peaks = [(idx[j] * df, spec_db[idx[j]], 10 ** (spec_db[idx[j]] / 20.0)) for j in order]
+    total_a = sum(a for _f, _l, a in peaks)
 
     cands = set()
-    for p, _l in peaks:
+    for p, _l, _a in peaks:
         for n in range(1, 9):
             c = p / n
             if fmin <= c <= fmax:
                 cands.add(round(c, 3))
-    cands = sorted(cands)
 
-    def band_max(fc, tol):
-        a = max(0, int(fc * (1 - tol) / df))
-        b = min(len(spec_db), int(fc * (1 + tol) / df) + 1)
+    def tol(f0, h):               # relative tolerance for partial h of f0
+        return min(0.03, 0.003 + _inharmonicity(f0) * h * h)
+
+    def band_max(fc, t):
+        a = max(0, int(fc * (1 - t) / df))
+        b = min(len(spec_db), int(fc * (1 + t) / df) + 1)
         return spec_db[a:b].max() if b > a else -50.0
 
-    def tol_h(h):
-        return min(0.06, 0.004 * h * h)
-
-    best = None
-    for f0 in cands:
-        Hn = max(1, min(6, int(nyq // f0)))
-        levels = [band_max(h * f0, tol_h(h)) for h in range(1, Hn + 1)]
-        # strongest three predicted partials (treble notes only have a few),
-        # plus the first two partials and the fundamental itself, so that a
-        # sub-octave candidate (all odd partials missing) or a noise-floor
-        # candidate cannot tie with the true fundamental
-        pred = float(np.mean(sorted(levels, reverse=True)[:3]))
-        first2 = float(np.mean(levels[:2]))
-        fund = levels[0]
-        penalty = 0.0
-        for p, l in peaks:
+    hi_total = sum(a for p, _l, a in peaks if p > 400.0)
+    scored = []
+    for f0 in sorted(cands):
+        # only partials below ~5 kHz are expected of a piano string
+        Hn = max(1, min(6, int(min(nyq, 5000.0) // f0)))
+        levels = [band_max(h * f0, tol(f0, h)) for h in range(1, Hn + 1)]
+        explained = unexplained = hi_explained = 0.0
+        for p, _l, a in peaks:
             r = p / f0
-            if r >= 8.5:
-                continue
             h = int(round(r))
-            if h < 1 or abs(r - h) > min(0.35, tol_h(h) * h):
-                penalty += 15.0 * (l + 50.0) / 50.0
-        score = pred + 0.3 * first2 + 0.3 * fund - penalty
-        if best is None or score > best[0]:
-            best = (score, f0)
-    f0 = best[1]
-    return _fundamental_from_partials(spec, ref, df, f0), band_max(f0, tol_h(1))
+            fits = h >= 1 and abs(r - h) <= min(0.12, tol(f0, h) * h)
+            # string partials above 400 Hz must be explained by f0 (hammer,
+            # keybed and room resonances live below and wander in frequency)
+            if p > 400.0 and r <= 8.5 and fits:
+                hi_explained += a
+            if not (0.5 <= r <= 12.5):
+                continue                  # far below / high-order: uninformative
+            if fits:
+                explained += a
+            else:
+                unexplained += a
+        comb = 30.0 * (explained - unexplained) / total_a
+        if hi_total > 0:
+            comb += 20.0 * hi_explained / hi_total
+        missing = 0.0
+        for h in range(1, min(Hn, 4) + 1):
+            if levels[h - 1] < -42.0:
+                missing += 6.0
+        if levels[0] < -30.0:             # above the bass register the fundamental is prominent
+            missing += 14.0 * min(1.0, max(0.0, math.log2(f0 / 80.0)))
+        if levels[0] < -12.0:             # in the treble it is the strongest partial
+            missing += 10.0 * min(1.0, max(0.0, math.log2(f0 / 500.0)))
+        strength = 0.3 * float(np.mean(sorted(levels, reverse=True)[:3]))
+        scored.append((comb - missing + strength, f0, comb, missing, strength, levels[0]))
+    scored.sort(reverse=True)
+    global _LAST_CANDIDATES
+    _LAST_CANDIDATES = (peaks, scored[:8])
+    score, f0, _c, _m, _s, _fund = scored[0]
+    return _fundamental_from_partials(spec, ref, df, f0), score
+
+
+_LAST_CANDIDATES = None
 
 
 def estimate_f0(x, rate, seconds=0.5, fmin=25.0, fmax=4500.0):
@@ -591,13 +625,21 @@ def estimate_f0(x, rate, seconds=0.5, fmin=25.0, fmax=4500.0):
     head_db = 20 * math.log10(np.sqrt((head ** 2).mean()) / peak_abs + 1e-12)
     level_db = 20 * math.log10(peak_abs / 32768.0)
 
-    seg_start = onset + int(0.02 * rate)
+    seg_start = onset + int(0.03 * rate)      # skip the very first hammer transient
     seg = mono[seg_start:seg_start + int(seconds * rate)]
     if len(seg) < rate * 0.1:
         return None
-    f0, _fund = _harmonic_pick(seg, rate, fmin, fmax)
-    if f0 is None:
+    # treble strings decay within a few hundred ms while low-frequency
+    # resonances linger: also try a short window and keep the better-scored pick
+    best = None
+    for win_s in (seconds, 0.15):
+        s = mono[seg_start:seg_start + int(win_s * rate)]
+        f0, score = _harmonic_pick(s, rate, fmin, fmax)
+        if f0 is not None and (best is None or score > best[1]):
+            best = (f0, score)
+    if best is None:
         return None
+    f0 = best[0]
     win = min(1.5, max(seconds, 40.0 / f0))
     if win > seconds:
         seg2 = mono[seg_start:seg_start + int(win * rate)]
@@ -611,7 +653,10 @@ def estimate_f0(x, rate, seconds=0.5, fmin=25.0, fmax=4500.0):
     S = np.fft.rfft(seg, 2 * n)
     ac = np.fft.irfft(S * np.conj(S))[:n]
     ac /= (ac[0] + 1e-12)
-    lag_lo, lag_hi = max(2, int(rate / fmax)), min(n - 2, int(rate / fmin) + 1)
+    # search for the ACF maximum only after the main lobe (first zero crossing)
+    neg = np.nonzero(ac < 0)[0]
+    first_zero = int(neg[0]) if len(neg) else n
+    lag_lo, lag_hi = max(2, int(rate / fmax), first_zero), min(n - 2, int(rate / fmin) + 1)
     f_acf = float("nan")
     if lag_hi > lag_lo:
         i = lag_lo + int(np.argmax(ac[lag_lo:lag_hi]))

@@ -15,9 +15,22 @@ class Detection:
         self.name, self.conf, self.box = name, conf, box
 
 
+def open_camera():
+    """Open the webcam. Must be called on the main thread: macOS only shows
+    the camera permission prompt for a request made from there."""
+    cap = cv2.VideoCapture(C.CAMERA_INDEX)
+    if not cap.isOpened():
+        cap.release()
+        return None
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    return cap
+
+
 class Vision(threading.Thread):
-    def __init__(self):
+    def __init__(self, cap=None):
         super().__init__(daemon=True)
+        self.cap = cap
         self.lock = threading.Lock()
         self.frame = None
         self.detections = []
@@ -26,28 +39,23 @@ class Vision(threading.Thread):
         self.infer_ms = 0.0
         self.ready = False
         self.error = None
-        self._stop = threading.Event()
+        self._halt = threading.Event()
 
     def stop(self):
-        self._stop.set()
+        self._halt.set()
 
     def run(self):
         try:
             from ultralytics import YOLO
             model = YOLO("yolov8s-worldv2.pt")
             model.set_classes(C.DETECT_CLASSES)
-            cap = cv2.VideoCapture(C.CAMERA_INDEX)
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            if not cap.isOpened():
-                self.error = "camera not available"
-                return
+            cap = self.cap
         except Exception as e:      # surface to the UI instead of dying silently
             self.error = repr(e)
             return
         self.ready = True
         t_prev = time.time()
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             ok, frame = cap.read()
             if not ok:
                 time.sleep(0.01)
