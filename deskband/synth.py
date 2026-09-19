@@ -2,6 +2,7 @@
 sample-accurate step sequencer running inside the sounddevice callback.
 Nothing here blocks; the callback only slices preloaded arrays."""
 
+import os
 import threading
 import time as _time
 
@@ -69,6 +70,13 @@ class SynthVoice(Voice):
             env = np.exp(-t * 9.0)
             cut = 500 + 4500 * float(env[0]) * self.vel
             sig = self._lowpass(saw, cut) * env * 0.35
+        elif k == "keys":    # mellow FM electric piano: sine carrier, decaying index
+            att = np.minimum(t / 0.004, 1.0)
+            env = np.exp(-t * 2.4)
+            idx = 1.5 * np.exp(-t * 6.0) * self.vel
+            ph = TWO_PI * self.f * t
+            sig = np.sin(ph + idx * np.sin(ph)) * env * att * 0.4
+            sig += np.sin(2 * ph) * np.exp(-t * 7.0) * 0.05
         elif k == "sub":     # soft sine bass to ground the harmony
             att = np.minimum(t / 0.01, 1.0)
             sig = (np.sin(TWO_PI * self.f * t) + 0.15 * np.sin(TWO_PI * 2 * self.f * t)) * att * 0.5
@@ -77,7 +85,7 @@ class SynthVoice(Voice):
         sig = sig * self.vel
         if self.releasing:
             r = np.arange(n) + self.rel_t
-            rel = 0.06 * SR
+            rel = (0.35 if k == "keys" else 0.06) * SR
             sig = sig * np.clip(1 - r / rel, 0, 1)
             self.rel_t += n
             if self.rel_t > rel:
@@ -85,7 +93,7 @@ class SynthVoice(Voice):
         self.t += n
         if not self.releasing and self.t >= self.dur:
             self.release()
-        if k == "arp" and self.t > 3 * SR:
+        if k in ("arp", "keys") and self.t > 3 * SR:
             self.done = True
         return self._stereo(sig)
 
@@ -147,7 +155,7 @@ class SampleVoice(Voice):
         return out
 
 
-RELEASE = {"piano": 0.9, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2}
+RELEASE = {"piano": 1.6, "guitar": 0.6, "bass": 0.15, "strings": 0.7, "bells": 1.2}
 
 
 # ---------------------------------------------------------------- engine ----
@@ -202,7 +210,12 @@ class Engine:
         if km is not None:
             self.keymaps["piano"] = km
             self.loaded.add("piano")
-            log(f"[sampler] piano: Concert Grand, {len(km.keys)} notes")
+            log(f"[sampler] piano: {os.path.basename(km.source)}, {len(km.keys)} notes")
+        km = sampler.load_kings_cross()
+        if km is not None:
+            self.keymaps["strings"] = km
+            self.loaded.add("strings")
+            log(f"[sampler] strings: King's Cross, {len(km.keys)} notes")
         for kind in C.SAMPLE_SETS:
             if kind in self.loaded:
                 continue
@@ -228,7 +241,14 @@ class Engine:
     def set_active(self, name, active):
         self.parts[name].target = 1.0 if active else 0.0
 
+    def warm_up(self):
+        """First calls into numpy/scipy are slow; pay for them before audio runs."""
+        self.reverb.process(np.zeros(C.BLOCK_SIZE, np.float32))
+        SynthVoice("keys", 60, 0.1, SR).render(C.BLOCK_SIZE)
+        SampleVoice(np.zeros((SR, 2), np.float32), 1.01, 0.1, SR).render(C.BLOCK_SIZE)
+
     def start(self):
+        self.warm_up()
         threading.Thread(target=self.load_instruments, daemon=True).start()
         self.stream = sd.OutputStream(
             samplerate=SR, channels=2, dtype="float32",
@@ -243,7 +263,9 @@ class Engine:
 
     # -- composer events -> voices
     def _trigger(self, ev, block_offset):
-        part, kind, midi, vel, dur_steps = ev
+        part, kind, midi, vel, dur_steps = ev[:5]
+        if len(ev) > 5 and ev[5]:                       # rolled chords: start a little late
+            block_offset += int(ev[5] * self.step_len)
         p = self.parts[part]
         if not p.audible:
             return
@@ -259,7 +281,7 @@ class Engine:
             # spread the upper register a little; keep bass centred
             pan = 0.0 if kind == "bass" else float(np.clip((midi - 66) / 80, -0.25, 0.25))
             v = SampleVoice(buf, ratio, vel, dur, RELEASE.get(kind, 0.25), pan=pan)
-        elif kind in ("arp", "sub"):
+        elif kind in ("arp", "keys", "sub"):
             v = SynthVoice(kind, midi, vel, dur)
         if v is None:
             return
@@ -292,6 +314,10 @@ class Engine:
         alive = []
         for v in self.voices:
             off = v.offset
+            if off >= frames:                 # starts in a later block
+                v.offset -= frames
+                alive.append(v)
+                continue
             blk = v.render(frames - off)
             g = gains[v.part.name]
             if off:

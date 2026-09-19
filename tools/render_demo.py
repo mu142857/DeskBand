@@ -26,7 +26,7 @@ def main(out_path, script=None):
     engine = Engine(Composer())
     engine.load_instruments()
     frames = C.BLOCK_SIZE
-    phrase_samples = engine.step_len * C.STEPS_PER_PHRASE
+    phrase_samples = engine.step_len * C.STEPS_PER_PHRASE * len(C.CHORDS)     # one full chord loop
     blocks_per_phrase = phrase_samples // frames + 1
     audio, times = [], []
     for phrase, change in enumerate(SCRIPT):

@@ -10,7 +10,7 @@ import subprocess
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import resample_poly
+from scipy.signal import lfilter, resample_poly
 
 from . import config as C
 
@@ -130,17 +130,37 @@ def load_set(kind):
     return km.finish()
 
 
-def load_concert_grand():
-    """Concert Grand unpacked by tools/exs_extract.py, if present."""
-    keymap = os.path.join(C.CONCERT_GRAND, "keymap.json")
+def load_keymap_dir(name, folder, max_seconds, lowpass_hz=0):
+    """A folder of <midi>.wav files plus keymap.json (tools/exs_extract.py,
+    tools/make_kings_cross.py). Returns None when it is not there."""
+    keymap = os.path.join(folder, "keymap.json")
     if not os.path.exists(keymap):
         return None
-    km = KeyMap("piano")
+    km = KeyMap(name)
     with open(keymap) as f:
-        for z in json.load(f):
-            path = os.path.join(C.CONCERT_GRAND, z["file"])
-            km.add(int(z["midi"]), fade_tail(read_audio(path, 6.0)), path)
+        zones = json.load(f)
+    for z in zones:
+        path = os.path.join(folder, z["file"])
+        buf = read_audio(path, max_seconds)
+        if lowpass_hz:                       # two one-pole stages: a soft 12 dB/oct felt
+            a = np.exp(-2 * np.pi * lowpass_hz / SR)
+            for _ in range(2):
+                buf = lfilter([1 - a], [1, -a], buf, axis=0).astype(np.float32)
+        km.add(int(z["midi"]), fade_tail(buf), path)
+    km.source = folder
     return km.finish()
+
+
+def load_concert_grand():
+    for folder in C.CONCERT_GRAND:
+        km = load_keymap_dir("piano", folder, 8.0, C.PIANO_LOWPASS_HZ)
+        if km is not None:
+            return km
+    return None
+
+
+def load_kings_cross():
+    return load_keymap_dir("strings", C.KINGS_CROSS, 7.0)
 
 
 def load_drums():
