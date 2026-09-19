@@ -2,12 +2,12 @@
 
 // Deterministic, musically constrained next-bar generator.
 //
-// A 16-bit Fibonacci LFSR supplies repeatable variation.  For every track an
-// modulo-four phase accumulator distributes 1/2, 3/4, or all hits across only
-// the set bits in its base pattern (the same integer technique used by
-// Euclidean / Bresenham rhythm generators). Step zero is protected whenever
-// present. Restricting density to musically useful quarters keeps the circuit
-// shallow enough for the 100 MHz fabric clock; no divider is synthesized.
+// A 16-bit Fibonacci LFSR supplies repeatable variation. For every track a
+// modulo-four phase accumulator distributes 1/4, 1/2, 3/4, or all hits across
+// a musically safe candidate grid (the same integer technique used by
+// Euclidean / Bresenham rhythm generators). The candidate grids are wider than
+// the written patterns, so the hardware can create new rhythmic onsets rather
+// than merely remove notes. Step zero is protected whenever present.
 // Energy, track-lock and fill requests are committed together at a bar edge.
 module bar_variation_engine #(
     parameter int unsigned NUM_TRACKS = 7,
@@ -25,6 +25,7 @@ module bar_variation_engine #(
     input  logic lock_button_pulse,
     input  logic energy_button_pulse,
     input  logic fill_button_pulse,
+    input  logic eighth_button_pulse,
 
     output logic [NUM_TRACKS-1:0][15:0] generated_patterns,
     output logic [1:0] energy,
@@ -33,6 +34,8 @@ module bar_variation_engine #(
     output logic [NUM_TRACKS-1:0] lock_pending_mask,
     output logic fill_pending,
     output logic fill_active,
+    output logic eighth_only,
+    output logic eighth_pending,
     output logic [15:0] random_state,
     output logic [31:0] bar_index
 );
@@ -43,6 +46,7 @@ module bar_variation_engine #(
 
     logic [1:0] requested_energy;
     logic [NUM_TRACKS-1:0][15:0] locked_patterns;
+    logic requested_eighth_only;
 
     function automatic logic [15:0] next_lfsr(input logic [15:0] state);
         logic feedback;
@@ -68,6 +72,7 @@ module bar_variation_engine #(
             for (integer step = 0; step < 16; step++) begin
                 if (candidates[step]) begin
                     unique case (numerator)
+                        3'd1: result[step] = accumulator[1:0] == 2'd0;
                         3'd2: result[step] = !accumulator[0];
                         3'd3: result[step] = accumulator[1:0] != 2'd3;
                         default: result[step] = 1'b1;
@@ -79,6 +84,21 @@ module bar_variation_engine #(
             result[0] = candidates[0];
             return result;
         end
+    endfunction
+
+    function automatic logic [15:0] candidate_grid(
+        input int unsigned track,
+        input logic [15:0] written,
+        input logic eighths
+    );
+        // Eighth mode uses even sixteenth-note slots. Mixed mode adds the
+        // second sixteenth of each beat (0x7777), producing syncopation while
+        // leaving the fourth sixteenth clear. Bass and strings remain anchors.
+        unique case (track)
+            2, 4:    candidate_grid = written;
+            5:       candidate_grid = eighths ? 16'h5554 : 16'h7776;
+            default: candidate_grid = eighths ? 16'h5555 : 16'h7777;
+        endcase
     endfunction
 
     function automatic logic [1:0] next_energy(input logic [1:0] current);
@@ -93,14 +113,25 @@ module bar_variation_engine #(
         for (int unsigned track = 0; track < NUM_TRACKS; track++) begin
             logic [2:0] numerator;
             logic random_dense;
+            logic [15:0] candidates;
 
             random_dense = random_state[track] ^ random_state[track + 7];
+            candidates = candidate_grid(track, base_patterns[track], eighth_only);
 
             unique case (energy)
-                ENERGY_SPARSE: numerator = random_dense ? 3'd3 : 3'd2; // 1/2 or 3/4
-                ENERGY_NORMAL: numerator = random_dense ? 3'd4 : 3'd3; // 3/4 or full
+                ENERGY_SPARSE: numerator = random_dense ? 3'd2 : 3'd1; // 1/4 or 1/2
+                ENERGY_NORMAL: numerator = random_dense ? 3'd3 : 3'd2; // 1/2 or 3/4
                 default:       numerator = 3'd4;                        // full
             endcase
+
+            // Sixteenth-capable drums need fewer hits than the melodic grids.
+            if (track == 3) begin
+                unique case (energy)
+                    ENERGY_SPARSE: numerator = 3'd1;                    // 1/4
+                    ENERGY_NORMAL: numerator = random_dense ? 3'd2 : 3'd1;
+                    default:       numerator = 3'd4;
+                endcase
+            end
 
             // Bass is the harmonic anchor and strings have only a downbeat;
             // keep both stable while the other five parts breathe around them.
@@ -108,13 +139,18 @@ module bar_variation_engine #(
                 numerator = 3'd4;
 
             generated_patterns[track] = euclidean_subset(
-                base_patterns[track], numerator,
+                bar_index == 0 ? base_patterns[track] : candidates, numerator,
                 random_state[(track * 2) +: 2]);
 
             if (!enable)
                 generated_patterns[track] = base_patterns[track];
             else if (locked_mask[track])
                 generated_patterns[track] = locked_patterns[track];
+
+            // Eighth-only is a global performance guarantee, including any
+            // pattern retained by the optional lock mechanism.
+            if (enable && eighth_only && track != 2 && track != 4)
+                generated_patterns[track] &= 16'h5555;
         end
     end
 
@@ -128,6 +164,9 @@ module bar_variation_engine #(
             locked_patterns  <= '0;
             fill_pending     <= 1'b0;
             fill_active      <= 1'b0;
+            eighth_only      <= 1'b0;
+            requested_eighth_only <= 1'b0;
+            eighth_pending   <= 1'b0;
             random_state     <= RESET_SEED;
             bar_index        <= 32'd0;
         end else begin
@@ -148,6 +187,13 @@ module bar_variation_engine #(
             if (performance_mode && fill_button_pulse)
                 fill_pending <= 1'b1;
 
+            if (eighth_button_pulse) begin
+                requested_eighth_only <= ~(eighth_pending
+                                          ? requested_eighth_only
+                                          : eighth_only);
+                eighth_pending <= 1'b1;
+            end
+
             if (bar_advance_pulse) begin
                 random_state <= next_lfsr(random_state);
                 bar_index <= bar_index + 1'b1;
@@ -162,6 +208,11 @@ module bar_variation_engine #(
 
                 fill_active <= fill_pending;
                 fill_pending <= 1'b0;
+
+                if (eighth_pending) begin
+                    eighth_only <= requested_eighth_only;
+                    eighth_pending <= 1'b0;
+                end
             end
         end
     end

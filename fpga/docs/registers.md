@@ -6,7 +6,7 @@ This document fixes that boundary before the AXI wrapper is implemented.
 
 | Offset | Name | Direction | Meaning |
 |---:|---|---|---|
-| `0x00` | `ID_VERSION` | RO | `0x44420101` (`DB`, major 1, minor 1) |
+| `0x00` | `ID_VERSION` | RO | `0x44420102` (`DB`, major 1, minor 2) |
 | `0x04` | `CONTROL` | RW/pulse | bit 0 run, bit 1 transport reset |
 | `0x08` | `CYCLES_PER_STEP` | RW | FPGA clocks per sixteenth note |
 | `0x0C` | `ABSOLUTE_TICK` | RO | Tick currently being scheduled |
@@ -31,9 +31,10 @@ This document fixes that boundary before the AXI wrapper is implemented.
 | `0x84` | `LFO_INCREMENT` | RW | 24-bit phase increment used by the next command |
 | `0x88` | `LFO_STATUS` | RO | enabled bits 6:0 |
 | `0x90–0xA8` | `LFO_VALUE_0–6` | RO | current unsigned 8-bit triangle value per track |
-| `0xAC` | `VARIATION_STATUS` | RO | energy 1:0, energy-pending 2, locked 9:3, lock-pending 16:10, fill-pending 17, fill-active 18 |
+| `0xAC` | `VARIATION_STATUS` | RO | energy 1:0, energy-pending 2, locked 9:3, lock-pending 16:10, fill-pending 17, fill-active 18, eighth-only 19, eighth-pending 20 |
 | `0xB0` | `VARIATION_RANDOM` | RO | current 16-bit LFSR state |
 | `0xB4` | `BAR_INDEX` | RO | generated bar number since transport reset |
+| `0xB8` | `TAP_STATUS` | RW1C | accepted tap count 1:0; new-tempo-applied sticky bit 8 |
 
 Quantization values are `0 = next step`, `1 = next beat`, and `2 = next bar`.
 Reserved values and bits must be written as zero.
@@ -54,12 +55,18 @@ software uses `increment = round(frequency * 2^24 / 100)`; reset-phase makes
 repeatable beat-synchronized modulation starts possible.
 
 Variation is enabled after reset. Bar zero preserves every base-pattern hit.
-On later bars a maximal-length 16-bit LFSR selects phase and either 1/2, 3/4,
-or full density. Seven parallel modulo-four Bresenham accumulators operate only
-on hits present in each base pattern, so hardware never invents a pitch/event
-the Mac did not supply. Step zero is protected; bass (track 2) and strings
-(track 4) remain harmonic anchors. Energy, track locks, and one-bar fills are
-committed atomically at bar boundaries.
+On later bars a maximal-length 16-bit LFSR selects phase and 1/4, 1/2, 3/4, or
+full density. Seven parallel modulo-four Bresenham accumulators place onsets on
+safe eighth-only or mixed eighth/sixteenth candidate grids. The Mac supplies a
+nearby chord-safe note when hardware creates an onset outside the written
+pattern. Step zero is protected; bass (track 2) and strings (track 4) remain
+harmonic anchors. BTN2 grid changes commit atomically at bar boundaries.
+
+BTN3 tap tempo uses the 100 MHz fabric counter. Four presses produce three
+validated intervals; hardware divides their sum by twelve to obtain the
+sixteenth-note period and clamps it to the 60–180 BPM range. Bit 8 of
+`TAP_STATUS` tells firmware to publish the new tempo and is cleared by writing
+one to that bit.
 
 The AXI wrapper must use clock-domain crossing FIFOs if its AXI clock differs
 from the timing core clock. The first implementation should use one shared

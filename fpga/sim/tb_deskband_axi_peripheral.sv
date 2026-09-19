@@ -31,7 +31,11 @@ module tb_deskband_axi_peripheral;
     deskband_axi_peripheral #(
         .FIFO_DEPTH(FIFO_DEPTH),
         .BUTTON_STABLE_CYCLES(4),
-        .CONTROL_UPDATE_CYCLES(4)
+        .CONTROL_UPDATE_CYCLES(4),
+        .TAP_MIN_INTERVAL_CYCLES(8),
+        .TAP_MAX_INTERVAL_CYCLES(100),
+        .TAP_MIN_STEP_CYCLES(1),
+        .TAP_MAX_STEP_CYCLES(100)
     ) dut (
         .s_axi_aclk(clk),
         .s_axi_aresetn(resetn),
@@ -137,7 +141,7 @@ module tb_deskband_axi_peripheral;
         repeat (4) @(negedge clk);
         resetn = 1'b1;
 
-        expect_read(8'h00, 32'h4442_0101);
+        expect_read(8'h00, 32'h4442_0102);
         axi_read(8'h18, value);
         if (value[27:24] != switches) $fatal(1, "switch state not exposed through AXI");
         expect_read(8'h08, 32'd12_500_000);
@@ -227,7 +231,24 @@ module tb_deskband_axi_peripheral;
         repeat (2) @(negedge clk);
         expect_read(8'h0C, 32'd0);
 
-        $display("PASS: AXI registers, event FIFO, overflow, buttons, and core integration");
+        // Four evenly spaced BTN3 presses average three intervals in hardware
+        // and replace the sixteenth-note period. The applied flag is sticky.
+        for (int tap = 0; tap < 4; tap++) begin
+            raw_buttons[3] = 1'b1;
+            repeat (8) @(negedge clk);
+            raw_buttons[3] = 1'b0;
+            repeat (32) @(negedge clk);
+        end
+        axi_read(8'hB8, value);
+        if (!value[8] || value[1:0] != 0)
+            $fatal(1, "four-tap tempo did not assert applied status");
+        axi_read(8'h08, value);
+        if (value < 8 || value > 12)
+            $fatal(1, "four-tap tempo average is outside expected range");
+        axi_write(8'hB8, 32'h0000_0100);
+        expect_read(8'hB8, 32'd0);
+
+        $display("PASS: AXI, FIFO, buttons, tap tempo, and core integration");
         $finish;
     end
 

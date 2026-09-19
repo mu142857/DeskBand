@@ -29,16 +29,22 @@ def parse_fpga_line(line):
             return FpgaMessage(kind, values)
         if kind == "BTN" and len(words) == 5:
             return FpgaMessage(kind, tuple(int(value, 16) for value in words[1:]))
-        if kind == "BAR" and len(words) == 8:
+        if kind == "BAR" and len(words) == 10:
             values = (int(words[1]), int(words[2]), int(words[3], 16),
                       int(words[4]), int(words[5]), int(words[6]),
-                      int(words[7], 16))
+                      int(words[7], 16), int(words[8]), int(words[9]))
             if not (values[0] >= 0 and 0 <= values[1] <= 2 and
                     0 <= values[2] <= 0x7f and
                     values[3] in (0, 1) and values[4] in (0, 1) and
-                    values[5] in (0, 1) and 0 <= values[6] <= 0xffff):
+                    values[5] in (0, 1) and 0 <= values[6] <= 0xffff and
+                    values[7] in (0, 1) and values[8] in (0, 1)):
                 raise ValueError("bar-generation value outside valid range")
             return FpgaMessage(kind, values)
+        if kind == "TAP" and len(words) == 2:
+            bpm = int(words[1])
+            if not 60 <= bpm <= 180:
+                raise ValueError("tap tempo outside 60..180 BPM")
+            return FpgaMessage(kind, (bpm,))
         if kind in {"OK", "ERR", "PONG", "ID", "ST", "BUSY", "FATAL"}:
             return FpgaMessage(kind, tuple(words[1:]))
     except (ValueError, UnicodeError) as error:

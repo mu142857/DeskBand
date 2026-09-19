@@ -16,8 +16,9 @@ def test_fpga_protocol():
     controls = parse_fpga_line("CV " + " ".join(str(i) for i in range(14)))
     assert controls.fields[:7] == tuple(range(7)) and controls.fields[7:] == tuple(range(7, 14))
     assert parse_fpga_line("BTN 1 2 4 a").fields == (1, 2, 4, 10)
-    bar = parse_fpga_line("BAR 12 1 09 1 0 1 ace1")
-    assert bar.kind == "BAR" and bar.fields == (12, 1, 9, 1, 0, 1, 0xACE1)
+    bar = parse_fpga_line("BAR 12 1 09 1 0 1 ace1 1 0")
+    assert bar.kind == "BAR" and bar.fields == (12, 1, 9, 1, 0, 1, 0xACE1, 1, 0)
+    assert parse_fpga_line("TAP 137").fields == (137,)
     assert command_tempo(120.2) == "TEMPO 120"
     assert command_mask(0x45, "bar") == "MASK 45 BAR"
     assert command_pattern(6, 0xA55A) == "PATTERN 6 A55A"
@@ -26,11 +27,9 @@ def test_fpga_protocol():
     assert command_variation() == "VARIATION ON"
     assert command_variation(False) == "VARIATION OFF"
     assert {"play", "math", "place", "view", "select", "silence", "fpga_bar"} <= COMMANDS
-    assert button_effects(1, 0, 0) == ([{"cmd": "toggle"}], 0, False)
-    assert button_effects(2, 0, 0) == ([], 1, True)  # mixer BTN1 mutes cup
-    assert button_effects(2, 7, 0) == ([], 1, True)  # selector 7 wraps to cup
-    assert button_effects(2, 8, 0) == ([], 0, False)  # performance BTN1 stays on FPGA
-    assert button_effects(2, 0, 0, btn1_master=True) == ([{"cmd": "play"}], 0, False)
+    assert button_effects(1) == [{"cmd": "toggle"}]
+    assert button_effects(2) == [{"cmd": "math"}]
+    assert button_effects(3) == [{"cmd": "toggle"}, {"cmd": "math"}]
     for malformed in ("", "EV 1 2", "CV " + " ".join(["256"] * 14),
                       "BAR -1 1 01 0 0 1 1234", "WHAT 1"):
         try:

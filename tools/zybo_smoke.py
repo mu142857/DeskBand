@@ -27,7 +27,8 @@ def euclidean_subset(candidates, numerator, phase):
     accumulator = phase
     for step in range(16):
         if candidates & (1 << step):
-            if (numerator == 2 and not (accumulator & 1)) or \
+            if (numerator == 1 and (accumulator & 3) == 0) or \
+                    (numerator == 2 and not (accumulator & 1)) or \
                     (numerator == 3 and (accumulator & 3) != 3) or \
                     numerator >= 4:
                 result |= 1 << step
@@ -35,6 +36,14 @@ def euclidean_subset(candidates, numerator, phase):
     if candidates & 1:
         result |= 1
     return result
+
+
+def candidate_grid(track, written, eighths=False):
+    if track in (2, 4):
+        return written
+    if track == 5:
+        return 0x5554 if eighths else 0x7776
+    return 0x5555 if eighths else 0x7777
 
 
 def patterns_for_bar(bar):
@@ -46,11 +55,14 @@ def patterns_for_bar(bar):
     generated = []
     for track, pattern in enumerate(PATTERNS):
         dense = ((state >> track) ^ (state >> (track + 7))) & 1
-        numerator = 3 + dense
+        numerator = 2 + dense
+        if track == 3:
+            numerator = 1 + dense
         if track in (2, 4):
             numerator = 4
         generated.append(euclidean_subset(
-            pattern, numerator, (state >> (track * 2)) & 0x3))
+            candidate_grid(track, pattern), numerator,
+            (state >> (track * 2)) & 0x3))
     return tuple(generated)
 
 
@@ -102,7 +114,7 @@ def main():
                 identity = message.fields[0].upper()
             if pong and identity is not None:
                 break
-        if not pong or identity != "44420101":
+        if not pong or identity != "44420102":
             raise RuntimeError(f"firmware/PL identity failed: pong={pong}, id={identity}")
 
         send("STOP")

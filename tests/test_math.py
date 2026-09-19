@@ -67,6 +67,15 @@ def test_math():
     c.set_math()
     assert c.math is False
 
+    # FPGA-created onsets reuse chord-safe material from the planned bar;
+    # generated drum gaps become quiet hats rather than surprise kicks.
+    c = Composer()
+    c.step(0)
+    extra = c.rhythmic_events("cup", 2)
+    assert len(extra) == 1 and extra[0][0] == "cup"
+    assert extra[0][2] % 12 in C.PENTATONIC or extra[0][2] % 12 in c.chords[0].pcs
+    assert c.rhythmic_events("book", 1) == [("book", "drums", "hat", 0.12, 1, 0.0)]
+
 
 if __name__ == "__main__":
     test_math()

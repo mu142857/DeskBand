@@ -16,10 +16,15 @@ class FakeComposer:
     def __init__(self):
         self.steps = []
         self.bar_view = None
+        self.generated = []
 
     def step(self, step):
         self.steps.append(step)
         return [("cup", "keys", 60, 0.5, 1, 0.0)]
+
+    def rhythmic_events(self, name, step):
+        self.generated.append((name, step))
+        return [(name, "keys", 64, 0.3, 1, 0.0)]
 
 
 def blocks(engine, n):
@@ -50,15 +55,17 @@ def test_fpga_engine():
     engine._trigger = lambda event, offset: triggered.append((event[0], engine.pos + offset))
     engine.set_fpga_mode(True, lookahead_steps=2)
     engine.queue_fpga_event(10, 10, 0x01, 0x01)
-    engine.queue_fpga_event(11, 11, 0x02, 0x7f)  # hardware gate excludes cup
+    engine.queue_fpga_event(11, 11, 0x00, 0x7f)  # hardware gate excludes cup
+    engine.queue_fpga_event(12, 12, 0x02, 0x7f)  # hardware creates a pen onset
     engine.set_fpga_mode(True, lookahead_steps=2)  # bridge renewal must not clear queued events
 
-    for _ in range(20):
+    for _ in range(30):
         out = np.zeros((C.BLOCK_SIZE, 2), np.float32)
         engine._callback(out, C.BLOCK_SIZE, None, None)
 
-    assert composer.steps == [10, 11]
-    assert triggered == [("cup", 2 * engine.step_len)]
+    assert composer.steps == [10, 11, 12]
+    assert composer.generated == [("pen", 12)]
+    assert triggered == [("cup", 2 * engine.step_len), ("pen", 4 * engine.step_len)]
 
     # Transport reset and restarted (pause/play, a new photo): ticks start again
     # from 0 and must be scheduled ahead of now again, not in the past.

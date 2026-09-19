@@ -9,7 +9,11 @@ module deskband_axi_peripheral #(
     parameter int unsigned AXI_ADDR_WIDTH = 8,
     parameter int unsigned FIFO_DEPTH = 16,
     parameter int unsigned BUTTON_STABLE_CYCLES = 1_000_000,
-    parameter int unsigned CONTROL_UPDATE_CYCLES = 1_000_000
+    parameter int unsigned CONTROL_UPDATE_CYCLES = 1_000_000,
+    parameter int unsigned TAP_MIN_INTERVAL_CYCLES = 20_000_000,
+    parameter int unsigned TAP_MAX_INTERVAL_CYCLES = 200_000_000,
+    parameter int unsigned TAP_MIN_STEP_CYCLES = 8_333_333,
+    parameter int unsigned TAP_MAX_STEP_CYCLES = 25_000_000
 ) (
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 S_AXI_ACLK CLK",
        X_INTERFACE_PARAMETER = "XIL_INTERFACENAME S_AXI_ACLK, ASSOCIATED_BUSIF S_AXI, ASSOCIATED_RESET s_axi_aresetn, FREQ_HZ 100000000" *)
@@ -60,7 +64,7 @@ module deskband_axi_peripheral #(
     output logic [3:0] leds
 );
 
-    localparam logic [31:0] ID_VERSION = 32'h4442_0101;
+    localparam logic [31:0] ID_VERSION = 32'h4442_0102;
     localparam int unsigned FIFO_PTR_WIDTH = $clog2(FIFO_DEPTH);
     localparam int unsigned FIFO_COUNT_WIDTH = $clog2(FIFO_DEPTH + 1);
     localparam logic [FIFO_COUNT_WIDTH-1:0] FIFO_CAPACITY = FIFO_COUNT_WIDTH'(FIFO_DEPTH);
@@ -86,6 +90,11 @@ module deskband_axi_peripheral #(
     localparam logic [7:0] REG_VARIATION_STATUS = 8'hAC;
     localparam logic [7:0] REG_VARIATION_RANDOM = 8'hB0;
     localparam logic [7:0] REG_BAR_INDEX        = 8'hB4;
+    localparam logic [7:0] REG_TAP_STATUS       = 8'hB8;
+    localparam logic [31:0] TAP_MIN_INTERVAL = 32'(TAP_MIN_INTERVAL_CYCLES);
+    localparam logic [31:0] TAP_MAX_INTERVAL = 32'(TAP_MAX_INTERVAL_CYCLES);
+    localparam logic [31:0] TAP_STEP_MIN = 32'(TAP_MIN_STEP_CYCLES);
+    localparam logic [31:0] TAP_STEP_MAX = 32'(TAP_MAX_STEP_CYCLES);
 
     logic rst;
     assign rst = !s_axi_aresetn;
@@ -171,6 +180,16 @@ module deskband_axi_peripheral #(
         return result;
     endfunction
 
+    function automatic logic [31:0] clamp_tap_step(input logic [31:0] measured);
+        logic [31:0] result;
+        result = measured;
+        if (result < TAP_STEP_MIN)
+            result = TAP_STEP_MIN;
+        else if (result > TAP_STEP_MAX)
+            result = TAP_STEP_MAX;
+        return result;
+    endfunction
+
     // -------------------------------------------------------------- configuration
     logic run;
     logic transport_reset;
@@ -196,6 +215,38 @@ module deskband_axi_peripheral #(
     logic [3:0] button_released;
     logic [3:0] press_sticky;
     logic [3:0] release_sticky;
+    logic [31:0] tap_cycle_counter;
+    logic [31:0] tap_last_cycle;
+    logic [31:0] tap_interval_sum;
+    logic [31:0] tap_interval;
+    logic [1:0] tap_count;
+    logic tap_applied;
+    logic tap_divider_start;
+    /* verilator lint_off UNUSEDSIGNAL */
+    logic tap_divider_busy;
+    /* verilator lint_on UNUSEDSIGNAL */
+    logic tap_divider_done;
+    logic [31:0] tap_divider_numerator;
+    logic [31:0] tap_divider_quotient;
+
+    assign tap_interval = tap_cycle_counter - tap_last_cycle;
+
+    // Four taps contain three quarter-note intervals. Dividing their sum by
+    // twelve produces the sixteenth-note period. An iterative divider keeps
+    // this occasional calculation off the 100 MHz critical path.
+    unsigned_divider #(
+        .NUMERATOR_WIDTH(32),
+        .DENOMINATOR_WIDTH(4)
+    ) tap_divider (
+        .clk(s_axi_aclk),
+        .rst(rst),
+        .start(tap_divider_start),
+        .numerator(tap_divider_numerator),
+        .denominator(4'd12),
+        .busy(tap_divider_busy),
+        .done(tap_divider_done),
+        .quotient(tap_divider_quotient)
+    );
 
     logic [3:0] step_index;
     logic bar_advance_pulse;
@@ -226,6 +277,13 @@ module deskband_axi_peripheral #(
             lfo_command_enable <= 1'b0;
             lfo_command_reset_phase <= 1'b0;
             lfo_command_depth <= 8'd0;
+            tap_cycle_counter  <= 32'd0;
+            tap_last_cycle     <= 32'd0;
+            tap_interval_sum   <= 32'd0;
+            tap_count          <= 2'd0;
+            tap_applied        <= 1'b0;
+            tap_divider_start  <= 1'b0;
+            tap_divider_numerator <= 32'd0;
             patterns[0]          <= 16'h5551;
             patterns[1]          <= 16'h5555;
             patterns[2]          <= 16'h1041;
@@ -238,6 +296,12 @@ module deskband_axi_peripheral #(
             request_valid   <= 1'b0;
             envelope_command_valid <= 1'b0;
             lfo_command_valid <= 1'b0;
+            tap_cycle_counter <= tap_cycle_counter + 1'b1;
+            tap_divider_start <= 1'b0;
+
+            if (write_commit && awaddr_stored[7:0] == REG_TAP_STATUS &&
+                wdata_stored[8])
+                tap_applied <= 1'b0;
 
             if (write_commit) begin
                 unique case (awaddr_stored[7:0])
@@ -288,6 +352,32 @@ module deskband_axi_peripheral #(
                     default: begin end
                 endcase
             end
+
+            if (button_pressed[3]) begin
+                tap_last_cycle <= tap_cycle_counter;
+                if (tap_count == 0) begin
+                    tap_count <= 2'd1;
+                    tap_interval_sum <= 32'd0;
+                end else if (tap_interval < TAP_MIN_INTERVAL ||
+                             tap_interval > TAP_MAX_INTERVAL) begin
+                    // An implausible gap starts a fresh four-tap gesture.
+                    tap_count <= 2'd1;
+                    tap_interval_sum <= 32'd0;
+                end else if (tap_count == 3) begin
+                    tap_divider_numerator <= tap_interval_sum + tap_interval + 32'd6;
+                    tap_divider_start <= 1'b1;
+                    tap_count <= 2'd0;
+                    tap_interval_sum <= 32'd0;
+                end else begin
+                    tap_count <= tap_count + 1'b1;
+                    tap_interval_sum <= tap_interval_sum + tap_interval;
+                end
+            end
+
+            if (tap_divider_done) begin
+                cycles_per_step <= clamp_tap_step(tap_divider_quotient);
+                tap_applied <= 1'b1;
+            end
         end
     end
 
@@ -298,6 +388,8 @@ module deskband_axi_peripheral #(
     logic [6:0] variation_lock_pending_mask;
     logic variation_fill_pending;
     logic variation_fill_active;
+    logic variation_eighth_only;
+    logic variation_eighth_pending;
     logic [15:0] variation_random_state;
     logic [31:0] variation_bar_index;
 
@@ -308,11 +400,15 @@ module deskband_axi_peripheral #(
         .bar_advance_pulse(bar_advance_pulse),
         .enable(variation_enable),
         .base_patterns(patterns),
-        .performance_mode(switches[3]),
+        // Physical buttons have one fixed meaning in the demo. Automatic bar
+        // generation remains active, but its old alternate button layer is
+        // deliberately disconnected to avoid double actions.
+        .performance_mode(1'b0),
         .selected_track(switches[2:0]),
-        .lock_button_pulse(button_pressed[1]),
-        .energy_button_pulse(button_pressed[2]),
-        .fill_button_pulse(button_pressed[3]),
+        .lock_button_pulse(1'b0),
+        .energy_button_pulse(1'b0),
+        .fill_button_pulse(1'b0),
+        .eighth_button_pulse(button_pressed[2]),
         .generated_patterns(generated_patterns),
         .energy(variation_energy),
         .energy_pending(variation_energy_pending),
@@ -320,6 +416,8 @@ module deskband_axi_peripheral #(
         .lock_pending_mask(variation_lock_pending_mask),
         .fill_pending(variation_fill_pending),
         .fill_active(variation_fill_active),
+        .eighth_only(variation_eighth_only),
+        .eighth_pending(variation_eighth_pending),
         .random_state(variation_random_state),
         .bar_index(variation_bar_index)
     );
@@ -518,7 +616,9 @@ module deskband_axi_peripheral #(
             8'hA0: read_register = {24'd0, lfo_values[4]};
             8'hA4: read_register = {24'd0, lfo_values[5]};
             8'hA8: read_register = {24'd0, lfo_values[6]};
-            REG_VARIATION_STATUS: read_register = {13'd0, variation_fill_active,
+            REG_VARIATION_STATUS: read_register = {11'd0, variation_eighth_pending,
+                                                    variation_eighth_only,
+                                                    variation_fill_active,
                                                     variation_fill_pending,
                                                     variation_lock_pending_mask,
                                                     variation_locked_mask,
@@ -526,6 +626,8 @@ module deskband_axi_peripheral #(
                                                     variation_energy};
             REG_VARIATION_RANDOM: read_register = {16'd0, variation_random_state};
             REG_BAR_INDEX:        read_register = variation_bar_index;
+            REG_TAP_STATUS:       read_register = {23'd0, tap_applied, 6'd0,
+                                                    tap_count};
             default: read_register = 32'd0;
         endcase
     endfunction
