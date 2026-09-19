@@ -388,12 +388,24 @@ class Engine:
                 at, tick, event_mask, active_mask = self.fpga_pending.popleft()
                 offset = max(0, at - self.pos)
                 allowed = event_mask & active_mask
+                written_tracks = 0
                 for ev in self.composer.step(tick):
                     track = self.fpga_track_index.get(ev[0], -1)
-                    if track >= 0 and (allowed & (1 << track)):
-                        self._trigger(ev, offset)
+                    if track >= 0:
+                        written_tracks |= 1 << track
+                        if allowed & (1 << track):
+                            self._trigger(ev, offset)
                     elif track < 0 and ev[0] in C.INSTRUMENTS:     # no track on the board: clock only
                         self._trigger(ev, offset)
+                # A hardware onset on an otherwise empty step is now a real
+                # rhythmic addition. The composer supplies one nearby,
+                # chord-safe note (or a quiet hat) while the FPGA still owns
+                # its exact timing and track selection.
+                generated = allowed & ~written_tracks
+                for track, name in enumerate(self.fpga_track_names):
+                    if generated & (1 << track):
+                        for ev in self.composer.rhythmic_events(name, tick):
+                            self._trigger(ev, offset)
                 if tick % 2 == 0 and self.pending_sfx:
                     pending, self.pending_sfx = self.pending_sfx, []
                     for buf, gain in pending:

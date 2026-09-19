@@ -91,27 +91,8 @@ static void report_controls(void) {
     uint32_t buttons = reg_read(DB_BUTTON_STATUS);
     if ((buttons & 0x000f0f00u) != 0) {
         uint32_t presses = (buttons >> 8) & 0xfu;
-        uint32_t switch_value = (buttons >> 24) & 0xfu;
-        uint32_t performance_mode = switch_value >> 3;
-        uint32_t selected = switch_value & 0x7u;
-        if (selected > 6) selected %= 7;
-        /* BTN0 is the Mac shutter. Mixer-mode BTN1 is a persistent mute in
-         * the bridge; performance-mode BTN1 is handled by the PL. Keeping
-         * transport and mask ownership in one layer avoids double actions. */
-        if (!performance_mode && (presses & 4u)) {
-            uint32_t target = reg_read(DB_LEVEL(selected)) > 127 ? 0 : 255;
-            if (reg_read(DB_ENVELOPE_ACTIVE) & DB_ENVELOPE_READY)
-                reg_write(DB_ENVELOPE_COMMAND, (400u << 16) | (target << 8) | selected);
-        }
-        if (!performance_mode && (presses & 8u)) {
-            uint32_t enabled = reg_read(DB_LFO_STATUS) & (1u << selected);
-            if (enabled) reg_write(DB_LFO_COMMAND, DB_COMMAND_VALID | selected);
-            else {
-                reg_write(DB_LFO_INCREMENT, 0x051EB8u);
-                reg_write(DB_LFO_COMMAND, DB_COMMAND_VALID | (1u << 30) | (1u << 29) |
-                          (64u << 21) | selected);
-            }
-        }
+        /* BTN0/BTN1 are forwarded to the Mac as shutter/math. BTN2 changes
+         * the PL rhythm grid and BTN3 is measured by the PL tap-tempo unit. */
         xil_printf("BTN %x %x %x %x\r\n", buttons & 0xfu, presses,
                    (buttons >> 16) & 0xfu, (buttons >> 24) & 0xfu);
         reg_write(DB_BUTTON_STATUS, buttons & 0x000f0f00u);
@@ -135,17 +116,29 @@ static void report_controls(void) {
     }
 }
 
+static void report_tap_tempo(void) {
+    uint32_t status = reg_read(DB_TAP_STATUS);
+    if (status & DB_TAP_APPLIED) {
+        uint32_t cycles = reg_read(DB_CYCLES_PER_STEP);
+        uint32_t bpm = (UINT32_C(1500000000) + cycles / 2u) / cycles;
+        xil_printf("TAP %u\r\n", bpm);
+        reg_write(DB_TAP_STATUS, DB_TAP_APPLIED);
+    }
+}
+
 static void report_variation(void) {
     static uint32_t previous_bar = UINT32_MAX;
     static uint32_t previous_status = UINT32_MAX;
     uint32_t bar = reg_read(DB_BAR_INDEX);
     uint32_t status = reg_read(DB_VARIATION_STATUS);
     if (bar != previous_bar || status != previous_status) {
-        xil_printf("BAR %u %u %02x %u %u %u %04x\r\n",
+        xil_printf("BAR %u %u %02x %u %u %u %04x %u %u\r\n",
             bar, DB_VARIATION_ENERGY(status), DB_VARIATION_LOCKS(status),
             DB_VARIATION_FILL_ACTIVE(status), DB_VARIATION_FILL_PENDING(status),
             reg_read(DB_VARIATION_CONTROL) & 1u,
-            reg_read(DB_VARIATION_RANDOM) & 0xffffu);
+            reg_read(DB_VARIATION_RANDOM) & 0xffffu,
+            DB_VARIATION_EIGHTH_ONLY(status),
+            DB_VARIATION_EIGHTH_PENDING(status));
         previous_bar = bar;
         previous_status = status;
     }
@@ -173,6 +166,7 @@ int main(void) {
         }
         drain_events();
         report_controls();
+        report_tap_tempo();
         report_variation();
     }
 }

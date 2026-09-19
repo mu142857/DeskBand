@@ -21,23 +21,14 @@ from deskband.fpga_protocol import (command_mask, command_tempo,
 TRACKS = ("cup", "pen", "bottle", "book", "glasses", "cell phone", "laptop")
 
 
-def button_effects(pressed, switches, muted, btn1_master=False):
-    """Route Mac controls and retain mixer mutes across later shelf changes.
-
-    In performance mode BTN1 is owned by FPGA rhythm locking. In mixer mode
-    it mutes a track unless the legacy master-play mapping was requested.
-    """
+def button_effects(pressed):
+    """Map the two Mac-owned board buttons to unambiguous UI actions."""
     commands = []
-    mask_changed = False
     if pressed & 1:
         commands.append({"cmd": "toggle"})
-    if pressed & 2 and not switches & 8:
-        if btn1_master:
-            commands.append({"cmd": "play"})
-        else:
-            muted ^= 1 << ((switches & 7) % len(TRACKS))
-            mask_changed = True
-    return commands, muted, mask_changed
+    if pressed & 2:
+        commands.append({"cmd": "math"})
+    return commands
 
 
 def send_json(sock, address, message):
@@ -51,8 +42,6 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--udp-port", type=int, default=9000)
     parser.add_argument("--lookahead", type=int, default=2, choices=range(1, 9))
-    parser.add_argument("--btn1-master", action="store_true",
-                        help="map mixer-mode BTN1 to app play/pause instead of track mute")
     args = parser.parse_args()
 
     try:
@@ -66,7 +55,6 @@ def main():
     udp.setblocking(False)
     address = (args.host, args.udp_port)
     current_mask = None
-    hardware_mute = 0
     current_bpm = None
     current_run = None
     last_subscribe = 0.0
@@ -113,22 +101,23 @@ def main():
                               "levels": message.fields[:7], "lfos": message.fields[7:]})
                 elif message and message.kind == "BTN":
                     live, pressed, released, switches = message.fields
-                    commands, hardware_mute, mask_changed = button_effects(
-                        pressed, switches, hardware_mute, args.btn1_master)
-                    for command in commands:
+                    for command in button_effects(pressed):
                         send_json(udp, address, command)
-                    if mask_changed:
-                        # Recalculate the shelf mask with the persistent board mute.
-                        current_mask = None
                     print(f"[zybo] buttons={live:x} pressed={pressed:x} selector={switches:x}")
                 elif message and message.kind == "BAR":
-                    bar, energy, locks, fill, queued, enabled, random_state = message.fields
+                    bar, energy, locks, fill, queued, enabled, random_state, eighths, grid_queued = message.fields
                     send_json(udp, address, {"cmd": "fpga_bar", "bar": bar,
                               "energy": energy, "locks": locks, "fill": bool(fill),
                               "fill_queued": bool(queued), "enabled": bool(enabled),
-                              "random": random_state})
+                              "random": random_state, "eighths": bool(eighths),
+                              "grid_queued": bool(grid_queued)})
                     print(f"[zybo] bar={bar} energy={energy} locks={locks:02x} "
-                          f"fill={fill} queued={queued} rng={random_state:04x}")
+                          f"fill={fill} grid={'8th' if eighths else 'mixed'} "
+                          f"queued={grid_queued} rng={random_state:04x}")
+                elif message and message.kind == "TAP":
+                    bpm, = message.fields
+                    send_json(udp, address, {"cmd": "bpm", "value": bpm})
+                    print(f"[zybo] four-tap tempo={bpm} BPM")
                 elif message and message.kind in {"ERR", "FATAL"}:
                     print("[zybo]", raw.decode(errors="replace").strip())
 
@@ -151,7 +140,6 @@ def main():
                 for track, name in enumerate(TRACKS):
                     if packet.get("parts", {}).get(name, {}).get("on"):
                         mask |= 1 << track
-                mask &= ~hardware_mute
                 if mask != current_mask:
                     serial_command(command_mask(mask, "BEAT")); current_mask = mask
                 run = mask != 0

@@ -13,12 +13,11 @@ controls, envelopes and LFOs. It sends timestamped events/control values back
 to the Mac, which schedules them at exact audio-sample offsets with two
 sixteenth notes of lookahead.
 
-The current revision includes automatic hardware bar generation, the
-performance-control layer, and compatibility with the shelf/stage software.
-Its 22 software tests, RTL tests, place-and-route, firmware build and BOOT.BIN
-build pass. Hank programmed that exact image into the Zybo's QSPI and completed
-full read-back verification on 2026-09-19. It still needs a cold QSPI boot and
-the current 32-event physical smoke test.
+The current source revision includes automatic hardware rhythm generation,
+eighth-only/mixed-grid switching, four-tap hardware tempo, and compatibility
+with the shelf/stage software. The previous image was programmed into QSPI and
+read-back verified on 2026-09-19. The new image identified below has not yet
+been flashed; Hank must program it once before Mac testing.
 The Mac-side task is to run that smoke test, then listen to the full Mac/Zybo
 audio loop and make only evidence-driven integration corrections.
 
@@ -65,8 +64,10 @@ The first application run downloads YOLO-World and CLIP weights. Internet is
 needed for that first run, and macOS must be allowed to use the camera and
 audio output.
 
-The current Zybo has already been programmed. With power off, put JP5 on the
-pair labelled `QSPI`; put JP6 on `USB` if J12 supplies power. Connect J12
+Do not assume the current QSPI contents are compatible. First have Hank program
+the checked-in `BOOT.BIN` using the QSPI procedure below and confirm its smoke
+test. Then, with power off, put JP5 on the pair labelled `QSPI`; put JP6 on
+`USB` if J12 supplies power. Connect J12
 `PROG/UART` to the Mac using a data-capable Micro-USB cable, power on and check
 that the blue `DONE` LED lights. No SD card, Ethernet, Vivado, Vitis or external
 TTL-UART adapter is needed on the Mac.
@@ -79,7 +80,7 @@ ls /dev/cu.usbserial-*
 
 The UART is normally the FTDI `B` channel. If two ports appear and the suffix
 is not clear, run the smoke test against each; the UART port is the one that
-returns `PONG` and ID `44420101`.
+returns `PONG` and ID `44420102`.
 
 From the repository root, prove the board before starting DeskBand:
 
@@ -112,8 +113,9 @@ The bridge reports the serial device at 115200 baud and DeskBand UDP port
 9000. Press Zybo BTN0, the spacebar or the onscreen shutter once to take a
 photo. The detected instruments must then loop continuously without taking
 more photos. Press BTN0 again to return to the camera (the music keeps
-playing). Use `p` or the on-screen button to pause and resume; mixer-mode BTN1
-mutes the selected track, and performance-mode BTN1 locks its generated rhythm.
+playing). Use `p` or the on-screen button to pause and resume. BTN1 toggles
+Math melody mode, BTN2 toggles the FPGA rhythm grid on the next bar, and four
+BTN3 taps set BPM.
 
 ## Do not change these architectural decisions
 
@@ -141,6 +143,8 @@ Programmable logic at AXI base `0x43C00000` contains:
 - seven parallel 16-step pattern sequencers;
 - a maximal-length 16-bit LFSR and seven parallel divider-free
   Euclidean/Bresenham bar generators;
+- eighth-only/mixed eighth-and-sixteenth rhythm grids and a 100 MHz four-tap
+  tempo analyzer;
 - step/beat/bar-quantized track-mask changes;
 - 16-record timestamped event FIFO with sticky overflow reporting;
 - four two-flop-synchronized, debounced buttons and four selector switches;
@@ -149,11 +153,11 @@ Programmable logic at AXI base `0x43C00000` contains:
 - AXI4-Lite registers, LEDs and status reporting.
 
 Bar zero plays the Mac's base patterns exactly. Each later bar is generated
-automatically: hardware chooses half, three-quarter, or full density and an
-LFSR-derived phase, then distributes retained events across only valid base
-hits. It protects downbeats, keeps bass/strings stable, and commits all changes
-at a bar edge. Firmware emits `BAR` telemetry and the bridge displays it in the
-debug overlay.
+automatically: hardware chooses a musically bounded density and LFSR-derived
+phase, then places onsets on safe eighth/sixteenth grids. These grids are wider
+than the written patterns, so hardware can add rhythmic notes; the Mac maps new
+onsets to nearby chord-safe pitches or quiet hi-hats. It protects downbeats,
+keeps bass/strings stable, and commits BTN2 grid changes at a bar edge.
 
 The Zynq Cortex-A9 bare-metal firmware parses line-oriented UART commands,
 drives those AXI registers, drains the event FIFO and emits `EV`, `CV` and
@@ -162,10 +166,10 @@ understood by DeskBand.
 
 Full implementation results for `xc7z020clg400-1` at 100 MHz:
 
-- setup WNS `+0.116 ns`, setup TNS `0`, zero failing endpoints;
-- hold WHS `+0.039 ns`, hold THS `0`, zero failing endpoints;
+- setup WNS `+0.032 ns`, setup TNS `0`, zero failing endpoints;
+- hold WHS `+0.028 ns`, hold THS `0`, zero failing endpoints;
 - zero implementation DRC errors and zero unrouted nets;
-- 3,203 slice LUTs (6.02%) and 2,319 registers (2.18%).
+- 3,128 slice LUTs (5.88%) and 2,397 registers (2.25%).
 
 The official Digilent PS preset emits known negative DDR DQS-skew warnings.
 They come from the board preset and did not cause timing or DRC failure.
@@ -190,7 +194,7 @@ to distribute. Other files below `fpga/build/` remain ignored and reproducible.
 Its expected SHA-256 is:
 
 ```
-ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685
+482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427
 ```
 
 It targets the **Zybo Z7-20**, not the Z7-10.
@@ -200,7 +204,7 @@ It targets the **Zybo Z7-20**, not the Z7-10.
 Required:
 
 - Zybo Z7-20;
-- FAT32 microSD card, unless using the already-programmed onboard QSPI;
+- FAT32 microSD card, unless Hank programs the onboard QSPI first;
 - data-capable Micro-USB cable from the Mac to J12 `PROG/UART`;
 - USB-C adapter if the Mac has no USB-A port; and
 - Mac speakers, wired speakers or headphones for the first test.
@@ -221,11 +225,26 @@ For SD boot:
 6. On macOS, run `ls /dev/cu.usbserial-*`. If there is no device, first suspect
    a charge-only cable. UART traffic also flashes LD10/LD11.
 
-Hank programmed the current 4,213,904-byte image into the board's 16 MiB
-Winbond QSPI and completed full read-back verification on 2026-09-19. With the
-board powered off, move JP5 from `JTAG` to `QSPI`, then power on for the first
-cold boot. Never move JP5 while powered. Reprogramming is unnecessary unless
-the checksum or FPGA/firmware sources change.
+Hank programmed and read-back verified an older image in the board's 16 MiB
+Winbond QSPI on 2026-09-19. It does not contain this final BTN2/BTN3 behavior.
+Program the current 4,213,904-byte image with the command below; only after it
+passes verification should the powered-off board be moved from `JTAG` to
+`QSPI`. Never move JP5 while powered.
+
+On Hank's Vivado/Vitis laptop, attach J12 to WSL, leave JP5 on `JTAG`, and run
+from the repository root:
+
+```bash
+source /home/leech/Xilinx/2025.2/Vitis/settings64.sh
+program_flash -f fpga/build/BOOT.BIN -offset 0 \
+  -flash_type qspi-x4-single \
+  -fsbl fpga/build/vitis_workspace/deskband_platform/zynq_fsbl/build/fsbl.elf \
+  -verify
+```
+
+After `Program/Verify Operation successful`, turn the board off, move JP5 to
+`QSPI`, and power it back on. The Mac only needs J12 after that; it does not
+need Vivado, Vitis, an SD card, or Ethernet.
 
 ## Mac preparation
 
@@ -252,7 +271,7 @@ Expected final output:
 PASS: UART, PL ID, generated bars, sequencer, envelope, and LFO
 ```
 
-The test requires PL ID `44420101`, receives 32 events (the exact opening bar
+The test requires PL ID `44420102`, receives 32 events (the exact opening bar
 plus a generated second bar), checks their track masks against a host mirror of
 the LFSR/math, observes at least three LFO values, and requires
 the track-0 envelope to reach zero. Its `finally` block disables that LFO,
@@ -288,33 +307,22 @@ integer BPM and the seven hardware-backed shelf-selected parts into hardware, th
 forwards events and continuous controls. It renews FPGA mode every four seconds
 without disturbing the event timeline.
 
-Track selector mapping (switch value interpreted as binary):
+The four switches no longer change the button layer. While transport is
+stopped the LEDs mirror them, which is useful as an input/LED sanity check.
 
-| Value | Object / track |
-|---:|---|
-| 0 | cup / piano |
-| 1 | pen / guitar |
-| 2 | bottle / bass |
-| 3 | book / drums |
-| 4 | glasses / strings |
-| 5 | cell phone / glockenspiel |
-| 6 | laptop / soft keys |
-
-SW2:SW0 value 7 wraps to track zero. SW3 selects mixer/performance mode and is
-not part of the track number.
-
-Physical controls (SW2:SW0 select track 0–6; value 7 wraps to zero):
+Physical controls:
 
 - BTN0: DeskBand shutter. Preview → take photo (its objects join the band);
   show → back to the camera. The music keeps playing either way.
-- SW3=0 mixer mode: BTN1 mute/unmute the selected track at the next beat,
-  BTN2 fade over four seconds, BTN3 toggle the hardware triangle LFO.
-- SW3=1 performance mode: BTN1 lock/unlock the selected generated rhythm at
-  the next bar, BTN2 queue the next energy state (sparse/normal/full), BTN3
-  queue one full-density fill bar, after which automatic generation resumes.
-- DeskBand's `p` key, on-screen button, and remote `play` command still pause
-  and resume the whole band. For the older hardware BTN1 master play/pause
-  mapping, start the bridge with `--btn1-master` (mixer mode only).
+- BTN1: toggle the Mac's Math melody mode; the melodic change begins on the
+  next bar because composition is bar-planned.
+- BTN2: toggle the FPGA generator between mixed 8th/16th and eighth-only
+  onsets; the queued change commits on the next bar.
+- BTN3: tap exactly four times at the desired quarter-note pulse. The FPGA
+  averages the three intervals, clamps to 60–180 BPM, changes its clock, and
+  sends the BPM to the Mac audio scheduler.
+- DeskBand's `p` key, on-screen button, and remote `play` command pause and
+  resume the whole band.
 - LEDs: switches while stopped; low four bits of the step while running.
 
 ## Final acceptance checklist
@@ -328,11 +336,11 @@ Record the result of every item rather than changing several layers at once:
    instruments begin and the LEDs count continuously through 16 steps.
 4. BTN0 again returns to the camera and the music keeps looping; a second photo
    of another object adds it to the band.
-5. With SW3=0, verify BTN1 quantized track mute, BTN2 four-second fade, and
-   BTN3 LFO. Verify `p` or the on-screen button pauses/resumes the entire band.
-6. With SW3=1, verify BTN1 freezes/unfreezes one track only at a bar edge.
-7. Verify BTN2 cycles sparse/normal/full on bar edges and BTN3 produces exactly
-   one full-density fill before generated bars resume.
+5. Verify BTN1 toggles `math on/off` and takes musical effect at the next bar.
+6. Press BTN2 and verify the overlay changes from `8th+16th` to `8th` at the
+   next bar; press again and verify mixed timing returns.
+7. Tap BTN3 four times at a steady pulse and verify the terminal reports the
+   measured BPM, both FPGA and Mac adopt it, and the music remains aligned.
 8. Spacebar and the on-screen shutter behave like BTN0; music continues after
    retaking the photo.
 9. Change BPM through the existing remote/UI path and verify board events and
@@ -387,7 +395,8 @@ Board records:
 EV tick step event_mask_hex active_mask_hex mask_changed
 CV level0 ... level6 lfo0 ... lfo6
 BTN live_hex pressed_hex released_hex switches_hex
-BAR index energy locked_mask_hex fill_active fill_pending enabled random_hex
+BAR index energy locked_mask_hex fill_active fill_pending enabled random_hex eighth_only eighth_pending
+TAP bpm
 ```
 
 Do not parse these ad hoc; use `deskband/fpga_protocol.py`.

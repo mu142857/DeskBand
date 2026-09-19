@@ -403,6 +403,8 @@ class App:
                 "fill_queued": bool(msg.get("fill_queued")),
                 "enabled": bool(msg.get("enabled", True)),
                 "random": int(msg.get("random", 0)) & 0xffff,
+                "eighths": bool(msg.get("eighths")),
+                "grid_queued": bool(msg.get("grid_queued")),
             }
 
     def process_commands(self):
@@ -761,7 +763,9 @@ class App:
         if self.fpga_bar is not None:
             f = self.fpga_bar
             energy = ("sparse", "normal", "full")[f["energy"]]
-            lines.insert(2, f"FPGA bar {f['bar']}   generated {energy}   "
+            grid = "8th" if f["eighths"] else "8th+16th"
+            lines.insert(2, f"FPGA bar {f['bar']}   generated {energy} {grid}"
+                            f"{' (queued)' if f['grid_queued'] else ''}   "
                             f"locks {f['locks']:02x}   fill "
                             f"{'active' if f['fill'] else 'queued' if f['fill_queued'] else 'off'}   "
                             f"LFSR {f['random']:04x}")

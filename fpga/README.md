@@ -2,8 +2,8 @@
 
 The Zybo Z7-20 is the real-time conductor and effects controller. The Mac
 still performs vision, composes pitches/chords, and renders samples, while the
-Zynq owns musical time, seven-track sequencing, quantized controls, envelopes,
-LFO modulation, and physical interaction.
+Zynq owns musical time, seven-track sequencing, generated rhythm, four-tap
+tempo measurement, quantized controls, envelopes, LFOs, and physical input.
 
 ```
 camera -> Mac vision/composer -> UART commands -> Cortex-A9 -> AXI-Lite
@@ -21,9 +21,10 @@ FPGA, and playback enters the audio callback at exact sample offsets.
 - seven parallel 16-step sequencers;
 - automatic per-bar variation from a 16-bit maximal LFSR and seven parallel
   divider-free Euclidean/Bresenham phase accumulators;
+- a 100 MHz four-tap tempo analyzer that averages three measured intervals;
 - track-mask changes quantized to step, beat, or bar boundaries;
 - a 16-entry timestamped event FIFO with sticky overflow detection;
-- four synchronized/debounced buttons and a four-switch track selector;
+- four synchronized/debounced buttons and four status switches;
 - seven parallel Q8.16 level envelopes with exact endpoints;
 - seven independent 24-bit triangle LFOs at a 100 Hz control rate;
 - robust AXI4-Lite register interface at `0x43C00000`;
@@ -31,35 +32,29 @@ FPGA, and playback enters the audio callback at exact sample offsets.
 - bare-metal Cortex-A9 UART command/event firmware; and
 - Mac serial-to-UDP bridge plus sample-accurate engine scheduling.
 
-SW3 chooses the control layer. SW2:SW0 select a track in binary (`0` through
-`6`; `7` wraps to track zero):
+The buttons have one fixed meaning; the switches do not change their layer:
 
-| Button | SW3=0: mixer | SW3=1: generative performance |
-|---|---|---|
-| BTN0 | DeskBand shutter: photo/retake | DeskBand shutter: photo/retake |
-| BTN1 | mute selected track on next beat | lock/unlock its generated rhythm on next bar |
-| BTN2 | four-second hardware fade | next-bar energy: sparse → normal → full |
-| BTN3 | toggle hardware triangle LFO | queue one full-density fill bar |
+| Button | Action |
+|---|---|
+| BTN0 | DeskBand shutter: photo/retake |
+| BTN1 | toggle the Mac's Math melody mode at the next bar |
+| BTN2 | toggle generated rhythm between mixed 8th/16th and eighth-only at the next bar |
+| BTN3 | tap four times at quarter-note speed to set BPM |
 
 Automatic variation is the default base behavior; no button press is needed.
 The FPGA advances a repeatable 16-bit LFSR once per bar and uses parallel
-modulo-four phase accumulators to keep an evenly spaced half, three quarters,
-or all of each track's valid base hits. It never creates a hit where the Mac's
-pattern has none, always preserves a step-zero downbeat, and leaves bass and
-strings stable. Every performance action commits exactly at a bar edge.
+modulo-four phase accumulators to place an evenly spaced quarter, half, three
+quarters, or full set of onsets on safe musical grids. Those grids are wider
+than the written patterns, so hardware can create new rhythmic onsets. The Mac
+maps each new onset to a nearby chord-safe note, or a quiet hi-hat for drums.
+Downbeats are protected and bass/strings remain stable.
 
-The bridge sends BTN0 to DeskBand as the shutter. The shelf owns the band, so
-retaking a photo leaves music running in preview. The bridge holds mixer-mode
-BTN1 mutes across later shelf changes; app play/pause stays available through
-`p`, the on-screen button, and the remote `play` command. To use the earlier
-hardware BTN1 play/pause mapping, launch `tools/zybo_bridge.py --btn1-master`
-in mixer mode; performance-mode BTN1 still locks the generated rhythm.
-
-Firmware reports BTN0 and mixer BTN1 without changing transport or masks
-locally. The bridge owns those actions, so taking another photo cannot restart
-the musical clock and a mute cannot be applied twice. The transport runs when
-an unmuted selected track sounds and stops when the band is paused, empty, or
-fully muted.
+The bridge sends BTN0/BTN1 to DeskBand as shutter/Math commands. BTN2 is
+committed by the PL at a bar boundary. BTN3 is measured entirely against the
+100 MHz FPGA clock: four valid taps provide three intervals, their average is
+converted to a sixteenth-note period, clamped to 60–180 BPM, and reported to
+the Mac so its sample scheduler adopts the same tempo. Retaking a photo does
+not restart the musical clock.
 
 While stopped, the four LEDs mirror the switches. While running, they display
 the low four bits of the 16-step position.
@@ -113,9 +108,9 @@ the 115200 8-N-1 serial link (and can also power/program the board).
 
 ### From QSPI (no microSD required)
 
-The current automatic-bar image was programmed to the Zybo's 16 MiB Winbond
-QSPI and fully read-back verified on 2026-09-19. Reprogram it only when the
-image changes, with JP5 in `JTAG` mode:
+An earlier automatic-bar image was programmed to the Zybo's 16 MiB Winbond
+QSPI and fully read-back verified on 2026-09-19. The BTN2 grid / BTN3 tap-tempo
+image below is newer and **must be programmed once** with JP5 in `JTAG` mode:
 
 ```bash
 source /path/to/Vitis/2025.2/settings64.sh
@@ -129,8 +124,10 @@ After programming completes, turn the board **off**, move JP5 to the pair
 labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 `DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
 
-Current image SHA-256: `ce1deea16831f150d23fe3474cb592255ed635bae3fedbe1043449fa6cbd0685`
-(4,213,904 bytes, PL ID `44420101`).
+Current image SHA-256: `482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427`
+(4,213,904 bytes, PL ID `44420102`). This exact image was built and verified
+in software on 2026-09-19, but has not yet been written to QSPI or tested on
+the physical board.
 
 Before starting DeskBand, verify the physical board path by itself:
 
