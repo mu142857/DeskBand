@@ -169,6 +169,41 @@ def _validate_song(path, expected_seconds):
     return info
 
 
+def load_saved_song(snapshot, *, folder=None):
+    """Find a completed song for this arrangement without contacting ElevenLabs."""
+    folder = os.path.realpath(folder or os.path.join(C.CACHE_DIR, "songs"))
+    if not os.path.isdir(folder):
+        return None
+    jobs = []
+    for name in os.listdir(folder):
+        if name.startswith("job-") and name.endswith(".json"):
+            path = os.path.join(folder, name)
+            try:
+                jobs.append((os.path.getmtime(path), path))
+            except OSError:
+                continue
+    for _, job_path in sorted(jobs, reverse=True):
+        try:
+            with open(job_path) as source:
+                job = json.load(source)
+            if job.get("status") != "done" or job.get("fingerprint") != snapshot.fingerprint:
+                continue
+            path = os.path.realpath(job["output_path"])
+            if os.path.commonpath((folder, path)) != folder or not path.endswith(".mp3"):
+                continue
+            info = sf.info(path)
+            if info.format != "MP3" or info.frames <= 0 or info.samplerate <= 0:
+                continue
+            intro_ms = int(job["intro_ms"])
+            if info.duration <= intro_ms / 1000 or not job.get("song_id"):
+                continue
+            return RenderedSong(snapshot.fingerprint, path, info.samplerate, info.frames,
+                                intro_ms, job["source_path"], job["song_id"])
+        except (OSError, ValueError, KeyError, TypeError, sf.LibsndfileError):
+            continue
+    return None
+
+
 def continue_song(snapshot, clip, progress=lambda message: None, *, client=None, folder=None):
     """One confirmed job. Explicit retries may reuse a saved upload ID."""
     intro_ms = validate_source(snapshot, clip)

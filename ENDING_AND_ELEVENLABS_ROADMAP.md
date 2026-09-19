@@ -1,6 +1,6 @@
 # DeskBand ending screen, loop export, and ElevenLabs song roadmap
 
-Status: Milestones 0–2 complete. Milestone 3 code and automated checks complete; speaker listening on the presentation Mac remains. Milestone 4 code and mocked checks complete; account access, source-audio rights, and one paid live API rehearsal remain. Milestone 5 remains open.
+Status: Milestones 0–2 complete. Milestone 3 code and automated checks complete; subjective speaker listening remains. Milestone 4 code and mocked checks complete; Music API access, source-audio rights, and one paid live rehearsal remain. Milestone 5 documentation, tests, rebuilt app, and local fallback are prepared; the full visual/ElevenLabs rehearsal remains open.
 
 ## Product flow and decisions
 
@@ -120,12 +120,14 @@ Implementation note: `deskband/eleven_music.py` validates the current PCM WAV an
 
 ## Milestone 5 — release and demo verification
 
-- [ ] M5.1 Document the new controls, `.venv` dependencies, `ELEVENLABS_API_KEY` setup, local export locations, model choice, and API/network requirements in `README.md`.
-- [ ] M5.2 Verify `cache/exports/`, `cache/songs/`, shelf photos, API keys, and generated audio remain outside Git; inspect `git status` after a complete session.
-- [ ] M5.3 Run the existing reverb, voice, remote, shelf, and FPGA tests. Add only meaningful tests for new snapshot, exporter, UI transitions, and API integration behavior.
+- [x] M5.1 Document the new controls, `.venv` dependencies, `ELEVENLABS_API_KEY` setup, local export locations, model choice, and API/network requirements in `README.md` and `DEMO_RUNBOOK.md`.
+- [x] M5.2 Verify `cache/exports/`, `cache/songs/`, shelf photos, API keys, and generated audio remain outside Git; inspect `git status` after a complete session.
+- [x] M5.3 Run the existing reverb, voice, remote, shelf, and FPGA tests. Add only meaningful tests for new snapshot, exporter, UI transitions, and API integration behavior.
 - [ ] M5.4 Rebuild `dist/DeskBand.app`, verify its arm64 launcher/signature, and test the full click path in the app on the presentation Mac with the actual camera and audio output.
 - [ ] M5.5 Do a timed rehearsal: collect 2–4 reliable objects, inspect the summary, render and play the loop, generate and play the full track. Record actual upload/generation times and adjust the demo script.
 - [ ] M5.6 Prepare an offline demo fallback: the local render must work without ElevenLabs, and a previously generated full song should be available if network or credits fail.
+
+Implementation note: all existing Python tests passed from `.venv`, including local UDP. The app bundle was rebuilt as arm64 with a valid ad hoc signature and icon. The running app reported all four saved items and one live laptop detection. An offline render of those four selected items took 0.7 seconds and produced a valid 7.999-second stereo WAV; its player opened and stopped a stream on MacBook Pro Speakers. Completed song jobs now reload after app restart for the same arrangement, and a focused test covers that restore path. The full on-screen click sequence and subjective listening need a person at the presentation Mac. There is no completed ElevenLabs song to cache or rehearse because the account currently returns HTTP 402 `paid_plan_required` for the Music API; M5.4–M5.6 remain open on those specific checks.
 
 **Demo-ready cutoff:** Milestones 0–3 provide a complete, local, reliable ending screen and four-bar export. Milestone 4 is the sponsor feature. Milestone 5 makes the presentation dependable.
 

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from deskband import config as C
 from deskband.clip import ClipPlayer
 from deskband.eleven_music import (MODEL, MusicHTTP, RenderedSong, composition_plan,
-                                  continue_song, validate_source)
+                                  continue_song, load_saved_song, validate_source)
 from deskband.export import render_loop
 from deskband.summary import CANCEL_UPLOAD, CONFIRM_UPLOAD
 
@@ -166,6 +166,9 @@ def test_success_and_explicit_retry():
             done = json.load(f)
         assert done["status"] == "done" and done["attempts"] == 2
         assert done["output_path"] == result.path and os.path.exists(clip.path)
+        restored = load_saved_song(score, folder=folder)
+        assert restored is not None and os.path.samefile(restored.path, result.path)
+        assert load_saved_song(replace(score, fingerprint="another"), folder=folder) is None
 
         class FakeStream:
             def __init__(self, **kwargs):
@@ -184,6 +187,21 @@ def test_success_and_explicit_retry():
             player.stream.callback(out, 256, None, None)
             assert np.abs(out).max() > 0
             player.stop()
+
+
+def test_app_restores_saved_song_after_restart():
+    with tempfile.TemporaryDirectory() as folder:
+        app = helper("test_summary.py", "summary_helpers_restore").make_app(folder, ("cup",))
+        score = app.current_summary()
+        clip = render_loop(score, folder=folder)
+        with patch.dict(os.environ, {C.ELEVENLABS_KEY_ENV: "test-secret"}):
+            song = continue_song(score, clip, client=FakeMusicHTTP(mp3_seconds()),
+                                 folder=os.path.join(folder, "songs"))
+        with patch.object(C, "CACHE_DIR", folder):
+            app.enter_summary()
+        assert app.song_jobs.status == "done"
+        assert os.path.samefile(app.song_jobs.result.path, song.path)
+        assert app.song_jobs.fingerprint == score.fingerprint
 
 
 def test_rejection_invalid_output_and_missing_key():
@@ -262,6 +280,7 @@ if __name__ == "__main__":
     test_http_request_construction()
     test_http_rejects_invalid_key()
     test_success_and_explicit_retry()
+    test_app_restores_saved_song_after_restart()
     test_rejection_invalid_output_and_missing_key()
     test_ui_requires_second_click()
     print("ok")

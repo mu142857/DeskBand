@@ -44,7 +44,7 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 ## Requirements
 
 - Apple Silicon Mac with Logic Pro or GarageBand sound library installed (the samples are read from `/Library/Application Support/Logic` and `/Library/Application Support/GarageBand`).
-- Python 3.11 (`/Library/Frameworks/Python.framework/Versions/3.11`).
+- Python 3.11 (the project uses only its `.venv` for packages).
 - A webcam.
 
 Camera frames use their original orientation and DeskBand shows the entire frame supplied by the device, including with iPhone Continuity Camera. The image is fitted inside the window without cropping. For a mirrored selfie-style preview, set `MIRROR_CAMERA = True` in `deskband/config.py`. Detection boxes and saved photos use the same orientation as the preview. If Continuity Camera itself is zoomed, use the macOS Video menu to turn off Center Stage, set Zoom to 1×, and choose the iPhone Main camera.
@@ -52,8 +52,8 @@ Camera frames use their original orientation and DeskBand shows the entire frame
 ## Setup
 
 ```bash
-cd ~/Desktop/DeskBand
-/Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
+cd ~/Desktop/Coding/HackTheNorth/DeskBand
+python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
@@ -74,6 +74,8 @@ unset DESKBAND_KEY
 Put a working key in the ignored `cache/elevenlabs_api_key` file when you are ready; this project has no `local.env` file or parser. Keep the key file readable only by your user (`chmod 600 cache/elevenlabs_api_key`). `tools/run_app.sh` and the rebuilt `DeskBand.app` load it into the app process; no system environment change is needed. An existing `ELEVENLABS_API_KEY` process variable takes precedence. For Gemini in Finder, start the app from a terminal with that variable set or use `launchctl setenv GEMINI_API_KEY ...` once per login.
 
 All Python packages are installed in `.venv`; the ElevenLabs and Gemini calls use standard-library HTTPS and need no SDK. Never commit API keys. Rendered loop WAVs are in the ignored `cache/exports/` directory, and generated MP3s plus job state are in ignored `cache/songs/`. A selected headphones part requires existing voice takes in `cache/vocal/` before local export. Music upload and generation can both use paid credits, and upload screening can reject a source; verify your rights to the samples before confirming. The app does not retry a possibly charged composition request automatically.
+
+The ElevenLabs continuation uses `music_v2_5` and requires Music API access on the account. The current team's key authenticated on the user endpoint but the Music endpoint returned `paid_plan_required` on 2026-09-19. Local loop rendering, playback, and file reveal still work without Music access. Once a full song has been generated, its saved MP3 is found again on the Collected page after restarting DeskBand when the same arrangement is selected; no network request is needed to play it.
 
 The first run downloads the YOLO-World weights (`yolov8l-worldv2.pt`, ~90 MB; the 25 MB `yolov8s-worldv2.pt` is used if the large one is missing) and the CLIP text encoder (~340 MB), and macOS asks for camera access.
 
@@ -112,6 +114,8 @@ tools/build_app.sh
 ```
 
 which writes `dist/DeskBand.app`: a small native launcher (`tools/launcher.c`) that runs the project with its own `.venv`. It has to be native so macOS attributes the camera permission to DeskBand.
+
+For the presentation sequence, timing notes, and offline fallback, see [DEMO_RUNBOOK.md](DEMO_RUNBOOK.md).
 
 ## Tools
 

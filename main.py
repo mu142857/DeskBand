@@ -21,7 +21,7 @@ from deskband import config as C
 from deskband import ui
 from deskband.cloud import Describer
 from deskband.clip import ClipPlayer
-from deskband.eleven_music import continue_song
+from deskband.eleven_music import continue_song, load_saved_song
 from deskband.export import render_loop
 from deskband.arrangement import build_snapshot
 from deskband.music import Composer
@@ -209,6 +209,13 @@ class App:
         self.confirm_upload = False
         self.song_notice = ""
         self.apply_parts()
+        if not self.song_jobs.busy:
+            saved = load_saved_song(self.current_summary())
+            if saved is not None:
+                self.song_jobs.status = "done"
+                self.song_jobs.result = saved
+                self.song_jobs.fingerprint = saved.fingerprint
+                self.song_jobs.message = "Saved song ready"
 
     def leave_summary(self):
         if self.state == SUMMARY:
