@@ -77,6 +77,8 @@ No Ethernet cable or external USB-to-TTL module is used. J12 contains the
 board's FT2232 USB-JTAG/UART bridge, so one data-capable Micro-USB cable carries
 the 115200 8-N-1 serial link (and can also power/program the board).
 
+### From microSD
+
 1. Format a microSD card as FAT32 and copy `fpga/build/BOOT.BIN` to its root.
 2. Insert it into J4 and place the JP5 mode jumper across the two pins labelled
    `SD` (the leftmost pair when reading the board label normally).
@@ -87,11 +89,28 @@ the 115200 8-N-1 serial link (and can also power/program the board).
 5. On macOS, locate the serial port with `ls /dev/cu.usbserial-*`. A charge-only
    cable will power the board but will not create this device.
 
+### From QSPI (no microSD required)
+
+The image was programmed to the Zybo's 16 MiB Winbond QSPI and read-back
+verified on 2026-09-19. To reproduce the write while JP5 is in `JTAG` mode:
+
+```bash
+source /path/to/Vitis/2025.2/settings64.sh
+program_flash -f fpga/build/BOOT.BIN -offset 0 \
+  -flash_type qspi-x4-single \
+  -fsbl fpga/build/vitis_workspace/deskband_platform/zynq_fsbl/build/fsbl.elf \
+  -verify
+```
+
+After programming completes, turn the board **off**, move JP5 to the pair
+labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
+`DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
+
 Before starting DeskBand, verify the physical board path by itself:
 
 ```bash
 .venv/bin/pip install pyserial
-.venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
+PYTHONPATH=. .venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
 ```
 
 It checks the firmware/PL identity, all 16 sequential hardware events and their
