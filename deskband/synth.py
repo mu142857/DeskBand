@@ -5,6 +5,7 @@ Nothing here blocks; the callback only slices preloaded arrays."""
 import os
 import threading
 import time as _time
+from collections import deque
 
 import numpy as np
 import sounddevice as sd
@@ -207,6 +208,15 @@ class Engine:
         self.parts["sfx"].target = 1.0
         self.pending_sfx = []        # (buffer, gain), started on the next 8th note
         self.sfx_cache = {}
+        self.fpga_mode = False
+        self.fpga_lookahead_steps = 2
+        self.fpga_input = deque()       # main/network thread appends; callback drains
+        self.fpga_pending = deque()     # (sample position, tick, event mask, active mask)
+        self.fpga_origin_tick = None
+        self.fpga_origin_sample = None
+        self.fpga_controls = (tuple([255] * 7), tuple([0] * 7))
+        self.fpga_track_names = tuple(C.INSTRUMENTS)
+        self.fpga_track_index = {name: track for track, name in enumerate(self.fpga_track_names)}
 
     # -- loading (background thread; parts become audible as they land)
     def load_instruments(self, log=print):
@@ -244,8 +254,14 @@ class Engine:
         log(f"[sampler] all loaded in {_time.time() - t0:.1f}s")
 
     def set_bpm(self, bpm):
+        old_step_len = self.step_len
         self.bpm = float(min(max(bpm, 60), 180))
         self.step_len = int(round(60 / self.bpm / C.STEPS_PER_BEAT * SR))
+        if self.fpga_mode and self.step_len != old_step_len:
+            self.fpga_input.clear()
+            self.fpga_pending.clear()
+            self.fpga_origin_tick = None
+            self.fpga_origin_sample = None
 
     def play_file(self, path, gain=0.6):
         """Queue a sound file to start on the next 8th note (so even a spoken
@@ -261,6 +277,33 @@ class Engine:
 
     def set_active(self, name, active):
         self.parts[name].target = 1.0 if active else 0.0
+
+    def set_fpga_mode(self, enabled, lookahead_steps=2):
+        """Select the external hardware conductor. A small fixed playback
+        delay absorbs UART/UDP jitter while preserving FPGA event spacing."""
+        enabled = bool(enabled)
+        lookahead_steps = min(max(int(lookahead_steps), 1), 8)
+        if enabled == self.fpga_mode and lookahead_steps == self.fpga_lookahead_steps:
+            return
+        self.fpga_mode = enabled
+        self.fpga_lookahead_steps = lookahead_steps
+        self.fpga_input.clear()
+        self.fpga_pending.clear()
+        self.fpga_origin_tick = None
+        self.fpga_origin_sample = None
+        if not self.fpga_mode:
+            self.next_step_at = self.pos
+
+    def queue_fpga_event(self, tick, step, event_mask, active_mask):
+        if self.fpga_mode:
+            self.fpga_input.append((int(tick), int(step), int(event_mask) & 0x7f,
+                                    int(active_mask) & 0x7f))
+
+    def set_fpga_controls(self, levels, lfos):
+        if len(levels) != 7 or len(lfos) != 7:
+            raise ValueError("FPGA controls require seven envelope and seven LFO values")
+        self.fpga_controls = (tuple(min(max(int(v), 0), 255) for v in levels),
+                              tuple(min(max(int(v), 0), 255) for v in lfos))
 
     def warm_up(self):
         """First calls into numpy/scipy are slow; pay for them before audio runs."""
@@ -314,26 +357,55 @@ class Engine:
     def _callback(self, out, frames, time_info, status):
         t0 = _time.perf_counter()
         end = self.pos + frames
-        while self.next_step_at < end:
-            offset = self.next_step_at - self.pos
-            for ev in self.composer.step(self.step):
-                self._trigger(ev, offset)
-            if self.step % 2 == 0 and self.pending_sfx:           # 8th-note grid
-                pending, self.pending_sfx = self.pending_sfx, []
-                for buf, gain in pending:
-                    v = SampleVoice(buf, 1.0, gain, 0, release_s=0.05)
-                    v.part, v.offset = self.parts["sfx"], offset
-                    self.voices.append(v)
-            self.step += 1
-            self.next_step_at += self.step_len
+        if self.fpga_mode:
+            while self.fpga_input:
+                tick, step, event_mask, active_mask = self.fpga_input.popleft()
+                if self.fpga_origin_tick is None:
+                    self.fpga_origin_tick = tick
+                    self.fpga_origin_sample = self.pos + self.fpga_lookahead_steps * self.step_len
+                at = self.fpga_origin_sample + (tick - self.fpga_origin_tick) * self.step_len
+                self.fpga_pending.append((at, tick, event_mask, active_mask))
+            while self.fpga_pending and self.fpga_pending[0][0] < end:
+                at, tick, event_mask, active_mask = self.fpga_pending.popleft()
+                offset = max(0, at - self.pos)
+                allowed = event_mask & active_mask
+                for ev in self.composer.step(tick):
+                    track = self.fpga_track_index.get(ev[0], -1)
+                    if track >= 0 and (allowed & (1 << track)):
+                        self._trigger(ev, offset)
+                if tick % 2 == 0 and self.pending_sfx:
+                    pending, self.pending_sfx = self.pending_sfx, []
+                    for buf, gain in pending:
+                        v = SampleVoice(buf, 1.0, gain, 0, release_s=0.05)
+                        v.part, v.offset = self.parts["sfx"], offset
+                        self.voices.append(v)
+                self.step = tick + 1
+        else:
+            while self.next_step_at < end:
+                offset = self.next_step_at - self.pos
+                for ev in self.composer.step(self.step):
+                    self._trigger(ev, offset)
+                if self.step % 2 == 0 and self.pending_sfx:       # 8th-note grid
+                    pending, self.pending_sfx = self.pending_sfx, []
+                    for buf, gain in pending:
+                        v = SampleVoice(buf, 1.0, gain, 0, release_s=0.05)
+                        v.part, v.offset = self.parts["sfx"], offset
+                        self.voices.append(v)
+                self.step += 1
+                self.next_step_at += self.step_len
         # part gains: one linear ramp per block, ~0.5 s fade
         ramp = np.linspace(0, 1, frames, dtype=np.float32)[:, None]
         gains, sends = {}, {}
+        control_levels, control_lfos = self.fpga_controls
         for p in self.parts.values():
             g0 = p.gain
             g1 = g0 + (p.target - g0) * min(1.0, frames / (0.5 * SR))
             p.gain = g1
-            g = (g0 + (g1 - g0) * ramp) * p.level
+            control_gain = 1.0
+            track = self.fpga_track_index.get(p.name)
+            if self.fpga_mode and track is not None:
+                control_gain = (control_levels[track] / 255.0) * (1.0 - control_lfos[track] / 255.0)
+            g = (g0 + (g1 - g0) * ramp) * p.level * control_gain
             gains[p.name] = g
             sends[p.name] = g[:, 0] * p.send
         dry = np.zeros((frames, 2), np.float32)

@@ -29,6 +29,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 | `.app` 一键启动 + 摄像头权限 | 完成 |
 | 物体识别 | **能用但不稳，是当前最大的未决问题**，见第 2 节和第 9 节 |
 | 外部控制接口（给硬件和 AI 用的 UDP 口） | 完成，有测试、有模拟器，见第 10 节 |
+| Zybo Z7-20 FPGA 实时指挥器（Hank） | **逻辑、固件、Mac 桥、bitstream、BOOT.BIN 已完成并自动验证；只差真机 UART + Mac 音频联调**，见 `fpga/README.md` |
 | "拿起来晃动 → 演奏变密变亮"的交互 | **没做**（拍照模式下物体是定格的，这个交互需要重新设计，见第 15 节） |
 
 **分工**
@@ -589,10 +590,14 @@ python3 tools/remote_sim.py
 - 先确认的事：胸牌是什么芯片、能不能刷固件、有没有 WiFi、有什么外设（屏、LED、按键）。
 
 ### 11.2 Zybo 控制台（不对应具体奖项，但决定主奖评委对硬件的印象）
-- 按键和开关控制播放：一个键 = `toggle`（拍照/重拍）；七个开关 = 七个声部的强制开关（`part` 指令，开 = `on:true`，关 = `on:null` 交还给照片）；或者用开关选预设风格（`style` 指令，预设放在 `styles/`，桥接脚本读文件发出去）。
-- LED 跑步进位置：16 步对应一排 LED，用状态包里的 `step`；或者 4 颗 LED 对应 4 拍。
-- demo 开场先按 Zybo 的键启动，让评委第一眼看到的就是硬件。
-- Zybo 走 UART → Mac 上的串口桥 → UDP。PL 端只需要做按键消抖和一个 UART 收发，逻辑都在桥接脚本里，风险低。
+
+> 2026-09-19 Hank 更新：原来的“PL 只做按键消抖”方案已被完整的 FPGA 实时音乐引擎取代。
+
+- PL 端拥有 100 MHz 主时钟、可编程 BPM/十六分音符时钟、七轨 16-step sequencer、step/beat/bar 量化、事件 FIFO、七路 envelope 和七路 triangle LFO。
+- Cortex-A9 bare-metal 固件通过 AXI-Lite 控制 PL，并经 UART1/J12 和 Mac 双向通信。Mac 只保留视觉、作曲和音频合成；音符何时触发由 FPGA 决定。
+- BTN0 启停并拍照/重拍；四个 switch 二进制选择轨道；BTN1 下一拍 mute；BTN2 做硬件 fade；BTN3 开关硬件 LFO。运行时 LED 显示十六步位置。
+- RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过，并已生成 `fpga/build/BOOT.BIN`。
+- **剩余工作只有实机闭环验证**：把 `BOOT.BIN` 放到 FAT32 SD 卡，Zybo 设 SD boot；用一根可传数据的 Micro-USB 线连接 J12 `PROG/UART` 和 Mac（板载 FT2232 已经是 USB-UART，不需要另买 TTL 串口模块）；运行 DeskBand 及 `tools/zybo_bridge.py`，检查连续播放、按钮量化、fade/LFO 和长时间无 FIFO overflow。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot
 去展台借硬件：让台灯机器人跟着节奏点头、转向正在发声的物体。画面很出效果。先去问一句能不能借到，借到再决定做不做。
@@ -674,7 +679,7 @@ python3 tools/remote_sim.py
 
 1. **查清并修复"换大模型后笔认不出来"**（第 2.1 节，工具和样本照片都已就位，预计半小时内）。
 2. 在真实摄像头下验证眼镜、iPad、笔、书、瓶子的识别率，必要时换提示词或换物体。
-3. Hank：确认胸牌的硬件能力，对着 `tools/remote_sim.py` 开发。
+3. Hank：在 Zybo Z7-20 + Mac 上完成 `fpga/README.md` 的实机 UART/音频验收；FPGA、固件和 boot image 已完成。
 4. Richard：先做 ElevenLabs 的预生成音效 + `sfx`，再做 Gemini → `style`。
 5. 调试面板加上限幅前电平（`engine.pre_peak`）和限幅量（`engine.gain_reduction_db`）的显示，这两个值引擎里已经有了，只差画出来（`main.py` 的 `draw_debug`）。
 6. "晃动交互"：最初的设想是拿起物体摇晃 → 该声部变密、变亮。改成拍照模式后物体是定格的，这个交互没有了。可选的替代：定格演奏期间**继续看实时画面**，如果某个物体在实时画面里的移动速度大，就给它的声部加密度和亮度（`Pattern` 需要一个 `energy` 参数；`Vision.last_seen` 里有每个物体最新的框，前后两次的位移除以时间就是速度）。没时间就不做。

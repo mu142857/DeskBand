@@ -185,4 +185,5 @@ weights/
 *.pt
 *.wav
 *.icns
+vivado*.jou
 .DS_Store
