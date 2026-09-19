@@ -1,6 +1,6 @@
 DeskBand - object -> instrument -> sample files
 
-Tempo 140 BPM, chords Fmaj7 - Em7 - Dm7 - Cmaj7 (2 bars each), melody notes from C major pentatonic.
+Tempo 120 BPM, chords Fmaj7 - G - Em - Am (2 bars each), melody notes from C major pentatonic.
 
 [cup]  ->  Grand Piano   (voice: piano, register MIDI 60-84)
     Concert Grand Piano (88 notes, mf layer), unpacked by tools/exs_extract.py into /Users/jiamulin/Desktop/DeskBand/cache/concert_grand/
@@ -99,7 +99,7 @@ Tempo 140 BPM, chords Fmaj7 - Em7 - Dm7 - Cmaj7 (2 bars each), melody notes from
         50A-1GA2-G2.aif
         50A-1GA2-G3.aif
 
-[bottle]  ->  Double Bass   (voice: bass, register MIDI 28-43)
+[bottle]  ->  Double Bass   (voice: bass, register MIDI 36-47)
     dir:   /Library/Application Support/Logic/EXS Factory Samples/06 Pop Strings/Double Bass (Pizzicato)
     files: Cbs pizz f*.aif  (10 files)
         Cbs pizz f  0 e.aif

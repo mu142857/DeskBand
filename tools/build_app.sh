@@ -1,6 +1,6 @@
 #!/bin/bash
-# Build dist/DeskBand.app: a thin launcher that runs main.py with the project's
-# .venv. Double-click to start; macOS asks for camera access in the app's name.
+# Build dist/DeskBand.app: a small native launcher that runs main.py with the
+# project's .venv. Double-click to start; macOS asks for camera access in the app's name.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/dist/DeskBand.app"
@@ -33,18 +33,9 @@ cat > "$APP/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-cat > "$APP/Contents/MacOS/DeskBand" <<EOF
-#!/bin/bash
-# Launcher: run DeskBand from its project folder with the bundled venv.
-cd "$ROOT"
-export SSL_CERT_FILE="$ROOT/.venv/lib/python3.11/site-packages/certifi/cacert.pem"
-# A script-only bundle can be started under Rosetta by Finder; the venv's
-# packages are arm64-only, so force the native architecture.
-# No exec: this script must stay alive as the parent so macOS attributes the
-# camera request to DeskBand.app (whose Info.plist explains why) and not to Python.
-/usr/bin/arch -arm64 "$ROOT/.venv/bin/python" "$ROOT/main.py" >> "$ROOT/cache/deskband.log" 2>&1
-EOF
-chmod +x "$APP/Contents/MacOS/DeskBand"
+# Native launcher (see tools/launcher.c for why this cannot be a shell script).
+# arm64 only, so Finder never starts it under Rosetta.
+clang -arch arm64 -O2 -Wall -DROOT="\"$ROOT\"" -o "$APP/Contents/MacOS/DeskBand" "$ROOT/tools/launcher.c"
 mkdir -p "$ROOT/cache"
 # ad-hoc signature: gives the bundle a stable identity for the privacy database
 codesign --force --deep -s - "$APP" >/dev/null 2>&1 || true

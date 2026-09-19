@@ -1,7 +1,7 @@
 """Composer: turns the step clock into note events.
 
 Rules (after Mikutap):
-  * one chord per 2-bar phrase, Fmaj7 - Em7 - Dm7 - Cmaj7
+  * one chord per 2-bar phrase, Fmaj7 - G - Em - Am (IV - V - iii - vi)
   * melodic parts pick notes from the C major pentatonic, so any random
     choice fits; on accents they prefer the chord tones inside it
   * the rhythm skeleton is the 3-3-3-3-2-2 accent pattern (C.ACCENTS)
@@ -59,33 +59,57 @@ class Pattern:
 
 
 class Melody(Pattern):
-    """Piano: 6-9 notes per phrase, random walk through the pentatonic."""
-    count = (6, 9)
+    """Piano. One motif (a rhythm plus a contour over the pentatonic ladder) is
+    invented per trip round the chord loop and restated over each chord, so
+    the line repeats and answers itself instead of wandering. Notes on the
+    accents are pulled onto chord tones."""
+    count = (6, 8)
+
+    def __init__(self, name, spec):
+        super().__init__(name, spec)
+        self.motif = None
+        self.phrases_left = 0
+
+    def new_motif(self):
+        rng = self.rng
+        steps = sorted(self._pick(rng.randint(*self.count)))
+        if 0 not in steps:
+            steps[0] = 0                                   # always state the downbeat
+        contour = [0]
+        for _ in steps[1:]:
+            contour.append(contour[-1] + rng.choice([-2, -1, -1, 1, 1, 2]))
+        return steps, contour
 
     def plan(self, chord, nxt):
         self.bar = {}
         rng = self.rng
-        n = rng.randint(*self.count)
-        steps = sorted(self._pick(n))
-        chord_notes = in_range(chord.strong, self.lo, self.hi)
-        pent = in_range(C.PENTATONIC, self.lo, self.hi)
-        prev = self.prev
+        if self.phrases_left == 0:
+            self.motif = self.new_motif()
+            self.phrases_left = len(C.CHORDS)
+        self.phrases_left -= 1
+        steps, contour = self.motif
+        ladder = in_range(C.PENTATONIC, self.lo, self.hi)
+        strong = in_range(chord.strong, self.lo, self.hi)
+        centre = (self.lo + self.hi) // 2
+        anchor = min(strong, key=lambda m: abs(m - centre))      # chord tone near mid register
+        base = ladder.index(min(ladder, key=lambda m: abs(m - anchor)))
         for i, s in enumerate(steps):
-            pool = chord_notes if (s in ACC or rng.random() < 0.5) else pent
-            midi = rng.choice(nearest(pool, prev))
+            k = min(max(base + contour[i], 0), len(ladder) - 1)
+            midi = ladder[k]
+            if s in ACC:                                          # land accents on the chord
+                midi = min(strong, key=lambda m: abs(m - midi))
             nxt_s = steps[i + 1] if i + 1 < len(steps) else P
-            dur = max(nxt_s - s, 16)          # let it ring ~2 s: pentatonic notes never clash
-            vel = rng.uniform(0.75, 0.95) if s in ACC else rng.uniform(0.45, 0.7)
+            dur = max(nxt_s - s, 16)          # let it ring: pentatonic notes never clash
+            vel = rng.uniform(0.75, 0.9) if s in ACC else rng.uniform(0.5, 0.68)
             self.put(s, midi, vel, dur)
-            if s in ACC and rng.random() < 0.35:        # occasional 3rd/6th below
-                low = [m for m in chord_notes if 3 <= midi - m <= 9]
+            if s == 0:                                            # root underneath the downbeat
+                low = in_range([chord.root], self.lo - 12, self.lo)
                 if low:
-                    self.put(s, rng.choice(low), vel * 0.7, dur)
-            prev = midi
-        self.prev = prev
+                    self.put(s, low[-1], vel * 0.6, P)
+        self.prev = midi
 
     def _pick(self, n):
-        w = [x if s % 2 == 0 else x * 0.3 for s, x in enumerate(WEIGHT)]   # mostly 8ths
+        w = [x if s % 2 == 0 else x * 0.15 for s, x in enumerate(WEIGHT)]   # 8ths, rarely 16ths
         chosen = set()
         while len(chosen) < n:
             s = self.rng.choices(range(P), w)[0]
@@ -97,6 +121,19 @@ class Melody(Pattern):
 class Bells(Melody):
     """Glockenspiel: sparse, high, likes off-beats and quick pairs."""
     count = (2, 4)
+
+    def plan(self, chord, nxt):
+        self.bar = {}
+        rng = self.rng
+        steps = sorted(self._pick(rng.randint(*self.count)))
+        strong = in_range(chord.strong, self.lo, self.hi)
+        pent = in_range(C.PENTATONIC, self.lo, self.hi)
+        prev = self.prev
+        for s in steps:
+            pool = strong if rng.random() < 0.6 else pent
+            prev = rng.choice(nearest(pool, prev, 5))
+            self.put(s, prev, rng.uniform(0.5, 0.8), 16)
+        self.prev = prev
 
     def _pick(self, n):
         w = [1 if s in ACC else 4 if s % 2 == 0 else 1.5 for s in range(P)]
@@ -133,24 +170,18 @@ class Guitar(Pattern):
 
 
 class Bass(Pattern):
-    """Double bass: roots on the accents, a walk-up into the next chord."""
+    """Double bass: the chord root on every accent, nothing else. The register
+    (C1-B1) holds exactly one root per chord, high enough to be heard as a
+    pitch on small speakers."""
 
     def plan(self, chord, nxt):
         self.bar = {}
-        rng = self.rng
-        roots = in_range([chord.root], self.lo, self.hi)
-        fifth = in_range([(chord.root + 7) % 12], self.lo, self.hi)
-        root = roots[0] if rng.random() < 0.6 or len(roots) == 1 else roots[-1]
-        for s in (0, 12, 24):
-            self.put(s, root, 0.95, 6)
-        for s in (6, 18):
-            alt = fifth[0] if fifth and rng.random() < 0.5 else root
-            self.put(s, alt, 0.7, 6)
-        # step 28: lead into the next chord's root
-        nroots = in_range([nxt.root], self.lo, self.hi)
-        target = min(nroots, key=lambda m: abs(m - root)) if nroots else root
-        lead = target - 1 if rng.random() < 0.4 else (root if rng.random() < 0.5 else target)
-        self.put(28, max(self.lo, lead), 0.75, 4)
+        root = in_range([chord.root], self.lo, self.hi)[0]
+        acc = C.ACCENTS
+        for i, s in enumerate(acc):
+            nxt_s = acc[i + 1] if i + 1 < len(acc) else P
+            strong = s in (0, 12, 24)
+            self.put(s, root, 0.95 if strong else 0.7, nxt_s - s)
 
 
 class Drums(Pattern):
@@ -182,7 +213,8 @@ class Strings(Pattern):
 
     def plan(self, chord, nxt):
         self.bar = {}
-        root, third, seventh = chord.pcs[0], chord.pcs[1], chord.pcs[3]
+        root, third = chord.pcs[0], chord.pcs[1]
+        seventh = chord.pcs[3] if len(chord.pcs) > 3 else chord.pcs[2]   # triad: 5th on top
         lo_root = in_range([root], self.lo, self.lo + 11)[0]
         voicing = [lo_root]
         for pc in (seventh, third):

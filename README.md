@@ -25,7 +25,7 @@ The exact sample files behind each instrument are listed in [INSTRUMENTS.txt](IN
 ## How it works
 
 - **Vision:** YOLO-World (`ultralytics`) with the object names given as text prompts, so classes that are not in COCO (pen, lamp) work without training. Runs on Apple Silicon via `mps` in its own thread.
-- **Music:** a fixed chord loop (Fmaj7 – Em7 – Dm7 – Cmaj7, two bars each) at 140 BPM. Melodic parts only pick notes from the C major pentatonic scale, which fits every chord in the loop, so random choices always sound right. The rhythm skeleton is the 3-3-3-3-2-2 accent pattern borrowed from Mikutap. Everything is quantised to a 16th-note grid.
+- **Music:** a fixed chord loop (Fmaj7 – G – Em – Am, two bars each) at 120 BPM. The bass, the guitar's low string and the bottom voice of the strings always play the chord root; the piano invents one motif per trip round the loop and restates it over each chord. Melodic parts only pick notes from the C major pentatonic scale, which fits every chord in the loop, so random choices always sound right. The rhythm skeleton is the 3-3-3-3-2-2 accent pattern borrowed from Mikutap. Everything is quantised to a 16th-note grid.
 - **Audio:** a small engine on top of `sounddevice`. Real instruments are sample-based (Logic Pro / GarageBand factory content read in place from the Mac), the synth parts are generated, and everything runs through a Schroeder hall reverb. The audio callback never blocks on vision; a slow frame only delays the picture.
 - **UI:** one window. Desaturated duotone image, colour kept inside detected objects, thin rounded outlines, SF Pro labels, a frosted card listing the band, and a shutter button. Press `space` (or click the shutter) to shoot, `space` again to retake.
 
