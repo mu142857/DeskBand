@@ -1,0 +1,6 @@
+the_ROM_image:
+{
+  [bootloader] fpga/build/vitis_workspace/deskband_platform/zynq_fsbl/build/fsbl.elf
+  fpga/build/vivado_project/deskband_zybo.runs/impl_1/system_wrapper.bit
+  fpga/build/vitis_workspace/deskband_firmware/build/deskband_firmware.elf
+}

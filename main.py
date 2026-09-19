@@ -121,6 +121,14 @@ class App:
             self.composer.request_style(msg["chords"])
             if msg.get("bpm"):
                 self.engine.set_bpm(msg["bpm"])
+        elif cmd == "fpga_mode":
+            if msg.get("bpm"):
+                self.engine.set_bpm(msg["bpm"])
+            self.engine.set_fpga_mode(msg.get("on", True), msg.get("lookahead_steps", 2))
+        elif cmd == "fpga_event":
+            self.engine.queue_fpga_event(msg["tick"], msg["step"], msg["events"], msg["active"])
+        elif cmd == "fpga_controls":
+            self.engine.set_fpga_controls(msg["levels"], msg["lfos"])
 
     def process_commands(self):
         while not self.remote.commands.empty():
