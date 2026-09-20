@@ -15,9 +15,9 @@ sixteenth notes of lookahead.
 
 The current source revision includes automatic hardware rhythm generation,
 eighth-only/mixed-grid switching, four-tap hardware tempo, and compatibility
-with the shelf/stage software. The previous image was programmed into QSPI and
-read-back verified on 2026-09-19. The new image identified below has not yet
-been flashed; Hank must program it once before Mac testing.
+with the shelf/stage software. The final image identified below was programmed
+into QSPI and fully read-back verified on 2026-09-19. Cold-boot and Mac audio
+acceptance remain to be run.
 The Mac-side task is to run that smoke test, then listen to the full Mac/Zybo
 audio loop and make only evidence-driven integration corrections.
 
@@ -64,10 +64,9 @@ The first application run downloads YOLO-World and CLIP weights. Internet is
 needed for that first run, and macOS must be allowed to use the camera and
 audio output.
 
-Do not assume the current QSPI contents are compatible. First have Hank program
-the checked-in `BOOT.BIN` using the QSPI procedure below and confirm its smoke
-test. Then, with power off, put JP5 on the pair labelled `QSPI`; put JP6 on
-`USB` if J12 supplies power. Connect J12
+The current QSPI contents are the final checked-in `BOOT.BIN`. With power off,
+confirm JP5 is on the pair labelled `QSPI`; put JP6 on `USB` if J12 supplies
+power. Connect J12
 `PROG/UART` to the Mac using a data-capable Micro-USB cable, power on and check
 that the blue `DONE` LED lights. No SD card, Ethernet, Vivado, Vitis or external
 TTL-UART adapter is needed on the Mac.
@@ -225,11 +224,10 @@ For SD boot:
 6. On macOS, run `ls /dev/cu.usbserial-*`. If there is no device, first suspect
    a charge-only cable. UART traffic also flashes LD10/LD11.
 
-Hank programmed and read-back verified an older image in the board's 16 MiB
-Winbond QSPI on 2026-09-19. It does not contain this final BTN2/BTN3 behavior.
-Program the current 4,213,904-byte image with the command below; only after it
-passes verification should the powered-off board be moved from `JTAG` to
-`QSPI`. Never move JP5 while powered.
+Hank programmed the final 4,213,904-byte image into the board's 16 MiB Winbond
+QSPI on 2026-09-19. The complete image passed byte-for-byte read-back
+verification. The hardware tool reported QSPI boot mode during programming.
+Never move JP5 while powered.
 
 On Hank's Vivado/Vitis laptop, attach J12 to WSL, leave JP5 on `JTAG`, and run
 from the repository root:
@@ -242,7 +240,7 @@ program_flash -f fpga/build/BOOT.BIN -offset 0 \
   -verify
 ```
 
-After `Program/Verify Operation successful`, turn the board off, move JP5 to
+After `Verify Operation successful`, turn the board off, confirm JP5 is on
 `QSPI`, and power it back on. The Mac only needs J12 after that; it does not
 need Vivado, Vitis, an SD card, or Ethernet.
 

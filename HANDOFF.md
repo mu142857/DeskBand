@@ -644,8 +644,8 @@ python3 tools/remote_sim.py
 - RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过（setup WNS +0.032 ns、hold WHS +0.028 ns、0 unrouted nets），并已生成 4,213,904-byte `fpga/build/BOOT.BIN`。兼容新版 shelf UI 的固件不再在 BTN0/BTN1 上重复修改 transport/mask，因此拍照不会重启音乐小节。
 - **旧版 2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过。
 - 新版 PL ID 是 `44420102`，`tools/zybo_smoke.py` 会检查 32 个 event：第一小节必须等于 base pattern，第二小节必须逐位等于主机镜像的 LFSR/Euclidean 安全网格结果，并继续检查 envelope/LFO。
-- 新版 `BOOT.BIN` SHA-256：`482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427`。2026-09-19 已完成 bitstream、固件和 boot image 构建，但这个最终 BTN2/BTN3 镜像尚未写入 QSPI；板上的旧镜像曾回读验证成功，不能当作新版已验证。
-- **剩余工作**：断电后把 JP5 从 JTAG 移到 QSPI，冷启动并通过新版 smoke test；拿到 Mac 后运行 DeskBand（会自动启动 `tools/zybo_bridge.py`），检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
+- 新版 `BOOT.BIN` SHA-256：`482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427`。2026-09-19 已写入 Zybo 的 16 MiB Winbond QSPI，全部 4,213,904 bytes 逐块回读验证成功；烧写工具同时报告当前 boot mode 为 QSPI。
+- **剩余工作**：断电后确认 JP5 在 QSPI（不要带电移动），冷启动并通过新版 smoke test；拿到 Mac 后运行 DeskBand（会自动启动 `tools/zybo_bridge.py`），检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot
 去展台借硬件：让台灯机器人跟着节奏点头、转向正在发声的物体。画面很出效果。先去问一句能不能借到，借到再决定做不做。

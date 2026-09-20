@@ -108,9 +108,9 @@ the 115200 8-N-1 serial link (and can also power/program the board).
 
 ### From QSPI (no microSD required)
 
-An earlier automatic-bar image was programmed to the Zybo's 16 MiB Winbond
-QSPI and fully read-back verified on 2026-09-19. The BTN2 grid / BTN3 tap-tempo
-image below is newer and **must be programmed once** with JP5 in `JTAG` mode:
+The final BTN2 grid / BTN3 tap-tempo image was programmed to the Zybo's 16 MiB
+Winbond QSPI and fully read-back verified on 2026-09-19. To reprogram it later,
+use:
 
 ```bash
 source /path/to/Vitis/2025.2/settings64.sh
@@ -126,8 +126,8 @@ labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 
 Current image SHA-256: `482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427`
 (4,213,904 bytes, PL ID `44420102`). This exact image was built and verified
-in software on 2026-09-19, but has not yet been written to QSPI or tested on
-the physical board.
+in software, written to QSPI, and fully read-back verified on 2026-09-19.
+Cold-boot smoke testing is still required.
 
 Before starting DeskBand, verify the physical board path by itself:
 
