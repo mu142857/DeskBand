@@ -12,6 +12,7 @@ from PIL import Image, ImageFont, ImageDraw
 from . import config as C
 
 SF_FONT = "/System/Library/Fonts/SFNS.ttf"
+DESIGN_W, DESIGN_H = 1280, 720
 WHITE = np.array((255, 255, 255), np.float32)
 TONE_DARK = np.array((30, 27, 26), np.float32)      # BGR, warm near-black
 TONE_LIGHT = np.array((236, 234, 230), np.float32)
@@ -77,27 +78,34 @@ def text(img, s, x, y, size, alpha=1.0, weight="Regular", color=WHITE, align="le
     """Draw s with its top-left at (x, y). Returns the advance width."""
     if not s:
         return 0
-    a, l, t = text_mask(s, size, weight)
+    sx, sy = canvas_scale(img)
+    a, l, t = text_mask(s, max(1, round(size * min(sx, sy))), weight)
     h, w = a.shape
     width = w + l
+    px = x * sx
     if align == "right":
-        x -= width
+        px -= width
     elif align == "center":
-        x -= width / 2
-    x0, y0 = int(round(x)) + l, int(round(y)) + t
+        px -= width / 2
+    x0, y0 = int(round(px)) + l, int(round(y * sy)) + t
     H, W = img.shape[:2]
     xa, ya, xb, yb = max(x0, 0), max(y0, 0), min(x0 + w, W), min(y0 + h, H)
     if xb > xa and yb > ya:
         aa = a[ya - y0:yb - y0, xa - x0:xb - x0, None] * alpha
         roi = img[ya:yb, xa:xb]
         roi[:] = (color * aa + roi * (1 - aa)).astype(np.uint8)
-    return width
+    return width / sx
 
 
 # ----------------------------------------------------------- shapes ----
 
-def _blend(img, mask, color, alpha, x0, y0):
-    """Alpha-blend `color` where `mask` (float 0..1) says, placed at x0,y0."""
+def canvas_scale(img):
+    """Scale from the fixed layout grid to the current render resolution."""
+    return img.shape[1] / DESIGN_W, img.shape[0] / DESIGN_H
+
+
+def _blend_pixels(img, mask, color, alpha, x0, y0):
+    """Alpha-blend an already scaled mask at physical pixel coordinates."""
     h, w = mask.shape
     H, W = img.shape[:2]
     xa, ya, xb, yb = max(x0, 0), max(y0, 0), min(x0 + w, W), min(y0 + h, H)
@@ -106,6 +114,14 @@ def _blend(img, mask, color, alpha, x0, y0):
     a = mask[ya - y0:yb - y0, xa - x0:xb - x0, None] * alpha
     roi = img[ya:yb, xa:xb]
     roi[:] = (color * a + roi * (1 - a)).astype(np.uint8)
+
+
+def _blend(img, mask, color, alpha, x0, y0):
+    sx, sy = canvas_scale(img)
+    if sx != 1 or sy != 1:
+        mask = cv2.resize(mask, (max(1, round(mask.shape[1] * sx)),
+                                 max(1, round(mask.shape[0] * sy))), interpolation=cv2.INTER_LINEAR)
+    _blend_pixels(img, mask, color, alpha, round(x0 * sx), round(y0 * sy))
 
 
 def rounded_mask(w, h, r):
@@ -120,6 +136,13 @@ def rounded_mask(w, h, r):
 
 def outline(img, x0, y0, x1, y1, r, alpha, thickness=1, color=WHITE):
     """1px rounded rectangle outline, anti-aliased, alpha blended."""
+    sx, sy = canvas_scale(img)
+    _outline_pixels(img, round(x0 * sx), round(y0 * sy), round(x1 * sx), round(y1 * sy),
+                    max(1, round(r * min(sx, sy))), alpha,
+                    max(1, round(thickness * min(sx, sy))), color)
+
+
+def _outline_pixels(img, x0, y0, x1, y1, r, alpha, thickness=1, color=WHITE):
     w, h = x1 - x0, y1 - y0
     if w < 4 or h < 4:
         return
@@ -139,14 +162,20 @@ def outline(img, x0, y0, x1, y1, r, alpha, thickness=1, color=WHITE):
     band = r + pad + 1
     Hm, Wm = m.shape
     ox, oy = x0 - pad, y0 - pad
-    _blend(img, m[:band], color, alpha, ox, oy)
-    _blend(img, m[Hm - band:], color, alpha, ox, oy + Hm - band)
-    _blend(img, m[band:Hm - band, :band], color, alpha, ox, oy + band)
-    _blend(img, m[band:Hm - band, Wm - band:], color, alpha, ox + Wm - band, oy + band)
+    _blend_pixels(img, m[:band], color, alpha, ox, oy)
+    _blend_pixels(img, m[Hm - band:], color, alpha, ox, oy + Hm - band)
+    _blend_pixels(img, m[band:Hm - band, :band], color, alpha, ox, oy + band)
+    _blend_pixels(img, m[band:Hm - band, Wm - band:], color, alpha, ox + Wm - band, oy + band)
 
 
 def frosted(img, x0, y0, x1, y1, r=14, darken=0.45, blur=21):
     """Frosted-glass card: blur the region, darken it, keep rounded corners."""
+    sx, sy = canvas_scale(img)
+    _frosted_pixels(img, round(x0 * sx), round(y0 * sy), round(x1 * sx), round(y1 * sy),
+                    max(1, round(r * min(sx, sy))), darken, blur * min(sx, sy))
+
+
+def _frosted_pixels(img, x0, y0, x1, y1, r=14, darken=0.45, blur=21):
     H, W = img.shape[:2]
     x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, W), min(y1, H)
     if x1 - x0 < 4 or y1 - y0 < 4:
@@ -159,24 +188,52 @@ def frosted(img, x0, y0, x1, y1, r=14, darken=0.45, blur=21):
     soft = (soft.astype(np.float32) * (1 - darken) + TONE_DARK * darken * 0.6).astype(np.uint8)
     m = rounded_mask(x1 - x0, y1 - y0, r).astype(np.float32)[:, :, None] / 255.0
     roi[:] = (soft * m + roi * (1 - m)).astype(np.uint8)
-    outline(img, x0, y0, x1, y1, r, 0.18)
+    _outline_pixels(img, x0, y0, x1, y1, r, 0.18)
 
 
 def circle(img, cx, cy, radius, alpha, thickness=2, color=WHITE):
+    sx, sy = canvas_scale(img)
+    cx, cy = cx * sx, cy * sy
+    radius *= min(sx, sy)
+    thickness = -1 if thickness < 0 else max(1, round(thickness * min(sx, sy)))
     pad = int(radius) + max(thickness, 1) + 2
     layer = np.zeros((2 * pad + 1, 2 * pad + 1), np.uint8)
     cv2.circle(layer, (pad, pad), int(radius), 255, thickness, cv2.LINE_AA)
-    _blend(img, layer.astype(np.float32) / 255.0, color, alpha, int(cx) - pad, int(cy) - pad)
+    _blend_pixels(img, layer.astype(np.float32) / 255.0, color, alpha, int(cx) - pad, int(cy) - pad)
 
 
 def polygon(img, points, alpha, color=WHITE):
     """Filled, anti-aliased polygon."""
-    pts = np.array(points, np.int32)
+    sx, sy = canvas_scale(img)
+    pts = np.round(np.asarray(points, np.float32) * (sx, sy)).astype(np.int32)
     x0, y0 = pts.min(axis=0) - 2
     x1, y1 = pts.max(axis=0) + 3
     layer = np.zeros((y1 - y0, x1 - x0), np.uint8)
     cv2.fillPoly(layer, [pts - (x0, y0)], 255, cv2.LINE_AA)
-    _blend(img, layer.astype(np.float32) / 255.0, color, alpha, int(x0), int(y0))
+    _blend_pixels(img, layer.astype(np.float32) / 255.0, color, alpha, int(x0), int(y0))
+
+
+def fill_rect(img, x0, y0, x1, y1, color):
+    sx, sy = canvas_scale(img)
+    cv2.rectangle(img, (round(x0 * sx), round(y0 * sy)),
+                  (round(x1 * sx) - 1, round(y1 * sy) - 1), color, -1)
+
+
+def line(img, x0, y0, x1, y1, color, thickness=1):
+    sx, sy = canvas_scale(img)
+    cv2.line(img, (round(x0 * sx), round(y0 * sy)),
+             (round(x1 * sx), round(y1 * sy)), color,
+             max(1, round(thickness * min(sx, sy))), cv2.LINE_AA)
+
+
+def paste(img, src, x0, y0, width, height):
+    """Place an opaque score strip using layout coordinates."""
+    sx, sy = canvas_scale(img)
+    px, py = round(x0 * sx), round(y0 * sy)
+    w, h = max(1, round(width * sx)), max(1, round(height * sy))
+    if src.shape[:2] != (h, w):
+        src = cv2.resize(src, (w, h), interpolation=cv2.INTER_LINEAR)
+    img[py:py + h, px:px + w] = src
 
 
 # ------------------------------------------------------------ base ----
@@ -209,6 +266,12 @@ def tint(bgr, color, strength=0.78):
 
 def picture(img, src, mask, x0, y0, alpha=1.0):
     """Alpha-blend a small picture (float32 BGR) through `mask` (float 0..1) at x0,y0."""
+    sx, sy = canvas_scale(img)
+    if sx != 1 or sy != 1:
+        size = (max(1, round(mask.shape[1] * sx)), max(1, round(mask.shape[0] * sy)))
+        mask = cv2.resize(mask, size, interpolation=cv2.INTER_LINEAR)
+        src = cv2.resize(src, size, interpolation=cv2.INTER_LINEAR)
+    x0, y0 = round(x0 * sx), round(y0 * sy)
     h, w = mask.shape
     H, W = img.shape[:2]
     xa, ya, xb, yb = max(x0, 0), max(y0, 0), min(x0 + w, W), min(y0 + h, H)
@@ -239,6 +302,9 @@ class Base:
 def keep_colour(out, frame, x0, y0, x1, y1, r, alpha, color):
     """Colour back inside a rounded box (the object 'lit up'), under the same
     filter as its shelf thumbnail (tint with `color`)."""
+    sx, sy = canvas_scale(out)
+    x0, y0, x1, y1 = round(x0 * sx), round(y0 * sy), round(x1 * sx), round(y1 * sy)
+    r = max(1, round(r * min(sx, sy)))
     w, h = x1 - x0, y1 - y0
     if w < 4 or h < 4:
         return

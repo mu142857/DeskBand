@@ -244,8 +244,8 @@ class Stage:
         if math_mode:
             ui._blend(out, self.field(), ui.WHITE, 0.12, x0, y0)
         else:
-            minor = np.zeros((H, W), np.float32)
-            major = np.zeros((H, W), np.float32)
+            minor = np.zeros((ui.DESIGN_H, ui.DESIGN_W), np.float32)
+            major = np.zeros((ui.DESIGN_H, ui.DESIGN_W), np.float32)
             for f in (0.25, 0.5, 0.75):
                 layer = major if f == 0.5 else minor
                 x, y = int(x0 + f * (x1 - x0)), int(y1 - f * (y1 - y0))
@@ -324,7 +324,7 @@ class Stage:
         if note is None and readout and entry.pos:
             x, y = entry.pos
             note = f"{loudness_db(y):+.0f} dB  ·  {complexity_word(x)}".replace("-", "−")
-        W = out.shape[1]
+        W = ui.DESIGN_W
         for s, dy, size, a, weight in ((entry.shown, 8, 14, 0.9, "Medium"), (note, 28, 12, 0.6, "Light")):
             if s:                                          # kept whole inside the window
                 half = ui.text_mask(s, size, weight)[0].shape[1] / 2

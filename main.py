@@ -31,10 +31,13 @@ from wavelens.stage import Stage
 from wavelens.summary import SummaryJobs, SummaryView, contains
 from wavelens.synth import Engine
 from wavelens.vision import Detection, Vision, echoes, merge_duplicates, open_camera
+from wavelens.window import content_size
 from wavelens.zybo import ZyboLink
 
 WINDOW = "WaveLens"
 W, H = 1280, 720
+MAX_CANVAS_SCALE = 1.25           # up to 1600x900; keep the audio thread comfortably fed
+INITIAL_WINDOW = (1440, 810)
 PREVIEW, SHOW, SUMMARY = "preview", "show", "summary"
 TILE, TILE_GAP, TILE_R = 72, 12, 14            # shelf slots, down the right edge
 CAPTION_W = 520                                 # Gemini's description, top left
@@ -42,16 +45,49 @@ TAP_TIMEOUT = 2.0                               # seconds without a tap before t
 WARN = np.array([90, 190, 255], np.float32)     # BGR amber: in the band, but not heard
 
 
-def fit_camera_frame(frame):
+class Viewport:
+    """Keep the 1280x720 interaction grid inside any window size."""
+
+    def __init__(self, width=W, height=H):
+        self.resize(width, height)
+
+    def resize(self, width, height):
+        self.width, self.height = max(1, int(width)), max(1, int(height))
+        fit = min(self.width / W, self.height / H)
+        self.fit_w, self.fit_h = max(1, round(W * fit)), max(1, round(H * fit))
+        self.left = (self.width - self.fit_w) // 2
+        self.top = (self.height - self.fit_h) // 2
+        render_scale = min(max(fit, 0.5), MAX_CANVAS_SCALE)
+        self.canvas_size = (max(1, round(W * render_scale)),
+                            max(1, round(H * render_scale)))
+
+    def to_logical(self, x, y):
+        return ((x - self.left) * W / self.fit_w,
+                (y - self.top) * H / self.fit_h)
+
+    def present(self, canvas):
+        if (canvas.shape[1], canvas.shape[0]) != (self.fit_w, self.fit_h):
+            interpolation = cv2.INTER_AREA if canvas.shape[1] > self.fit_w else cv2.INTER_LINEAR
+            canvas = cv2.resize(canvas, (self.fit_w, self.fit_h), interpolation=interpolation)
+        if (self.fit_w, self.fit_h) == (self.width, self.height):
+            return canvas
+        out = np.empty((self.height, self.width, 3), np.uint8)
+        out[:] = ui.TONE_DARK.astype(np.uint8)
+        out[self.top:self.top + self.fit_h, self.left:self.left + self.fit_w] = canvas
+        return out
+
+
+def fit_camera_frame(frame, target_width=W, target_height=H):
     """Fit the entire camera image in the window and return its box transform."""
     raw_h, raw_w = frame.shape[:2]
-    scale = min(W / raw_w, H / raw_h)
+    scale = min(target_width / raw_w, target_height / raw_h)
     width, height = round(raw_w * scale), round(raw_h * scale)
-    left, top = (W - width) // 2, (H - height) // 2
-    canvas = np.empty((H, W, 3), np.uint8)
+    left, top = (target_width - width) // 2, (target_height - height) // 2
+    canvas = np.empty((target_height, target_width, 3), np.uint8)
     canvas[:] = ui.TONE_DARK.astype(np.uint8)
     canvas[top:top + height, left:left + width] = cv2.resize(frame, (width, height))
-    return canvas, width / raw_w, height / raw_h, left, top
+    sx, sy = target_width / W, target_height / H
+    return canvas, width / raw_w / sx, height / raw_h / sy, left / sx, top / sy
 
 
 class Box:
@@ -70,7 +106,8 @@ class App:
         self.composer = Composer(motif_seeds={n: e.motif_seed for n, e in self.shelf.entries.items()})
         self.engine = Engine(self.composer)
         self.vision = Vision()
-        self.base = ui.Base(W, H)
+        self.viewport = Viewport()
+        self.base = ui.Base(*self.viewport.canvas_size)
         self.state = PREVIEW
         self.captured = None            # (frame, [Detection]) once shot
         self.preview_box = None         # one visible target, even while detections change
@@ -124,6 +161,19 @@ class App:
         self.apply_parts()              # restore the saved selection before audio starts
 
     # ------------------------------------------------------------ actions
+    def set_viewport(self, width, height):
+        if (width, height) == (self.viewport.width, self.viewport.height):
+            return
+        before = self.viewport.canvas_size
+        self.viewport.resize(width, height)
+        if self.viewport.canvas_size != before:
+            self.base = ui.Base(*self.viewport.canvas_size)
+            self.stage.bg = self.stage.bg_math = None
+
+    def on_display_mouse(self, event, x, y, flags, param):
+        lx, ly = self.viewport.to_logical(x, y)
+        self.on_mouse(event, round(lx), round(ly), flags, param)
+
     def shoot(self):
         frame, dets = self.vision.snapshot()
         if frame is None:
@@ -759,13 +809,13 @@ class App:
         if heard == target and not queued:
             ui.circle(out, cx, cy, r, a if heard else a - 0.15, thickness=-1 if heard else 1)
             ui.text(out, label, cx, ty, 15, a, "Medium", color=ui.TONE_DARK if heard else ui.WHITE, align="center")
-            hint = f"BTN2  ·  8TH MODE {'ON' if heard else 'OFF'}"
+            hint = f"g  ·  8ths {'on' if heard else 'off'}"
         else:
             blink = 0.5 + 0.5 * math.cos(4 * math.pi * time.time())
             ui.circle(out, cx, cy, r, a - 0.15, thickness=1)
             ui.circle(out, cx, cy, r - 1, 0.08 + 0.37 * blink, thickness=-1)
             ui.text(out, label, cx, ty, 15, a, "Medium", align="center")
-            hint = f"BTN2  ·  8TH MODE {'ON' if target else 'OFF'} NEXT BAR"
+            hint = "g  ·  8ths next"
         ui.text(out, hint, cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
 
     def why_silent(self, name):
@@ -964,7 +1014,8 @@ class App:
                 notice=self.song_notice,
                 description_pending=self.describing[0] if self.describing else None,
                 description_attempts=self.description_attempts,
-                has_gemini_key=bool(key(C.GEMINI_KEY_ENV)))
+                has_gemini_key=bool(key(C.GEMINI_KEY_ENV)),
+                canvas_size=self.viewport.canvas_size)
         if self.on_stage:
             out = self.stage.render()
             self.draw_zybo_light(out)
@@ -982,7 +1033,8 @@ class App:
         else:
             frame, dets = self.vision.snapshot()
         if frame is None:
-            out = np.zeros((H, W, 3), np.uint8)
+            canvas_w, canvas_h = self.viewport.canvas_size
+            out = np.zeros((canvas_h, canvas_w, 3), np.uint8)
             out[:] = ui.TONE_DARK.astype(np.uint8)
             msg = self.vision.error or "starting camera and model…"
             ui.text(out, msg, W // 2, H // 2 - 10, 18, 0.7, "Light", align="center")
@@ -991,7 +1043,8 @@ class App:
             self.draw_tempo(out)
             self.draw_finish_button(out)
             return out
-        frame, scale_x, scale_y, offset_x, offset_y = fit_camera_frame(frame)
+        frame, scale_x, scale_y, offset_x, offset_y = fit_camera_frame(
+            frame, *self.viewport.canvas_size)
         out = self.base.render(frame, dim=0.12 if self.state == PREVIEW else 0.0)
         if self.state == SHOW:
             for d in dets:
@@ -1124,8 +1177,10 @@ class App:
         self.engine.start()
         self.remote.start()
         self.zybo.start()                             # the FPGA conductor, whenever it is plugged in
-        cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
-        cv2.setMouseCallback(WINDOW, self.on_mouse)
+        cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
+        cv2.resizeWindow(WINDOW, *INITIAL_WINDOW)
+        self.set_viewport(*INITIAL_WINDOW)
+        cv2.setMouseCallback(WINDOW, self.on_display_mouse)
         camera_ok, next_try = False, 0.0
         try:
             while True:
@@ -1149,7 +1204,17 @@ class App:
                 if not self.vision.loading:      # loaded: the band comes in at bar one
                     self.start_band()
                 self.process_commands()
-                cv2.imshow(WINDOW, self.render(dt))
+                native_size = content_size(WINDOW)
+                if native_size:
+                    self.set_viewport(*native_size)
+                else:
+                    try:
+                        _, _, view_w, view_h = cv2.getWindowImageRect(WINDOW)
+                        if view_w > 0 and view_h > 0:
+                            self.set_viewport(view_w, view_h)
+                    except cv2.error:
+                        pass
+                cv2.imshow(WINDOW, self.viewport.present(self.render(dt)))
                 wait = max(1, int(33 - (time.time() - t0) * 1000))
                 k = cv2.waitKey(wait) & 0xFF
                 if self.handle_key(k):

@@ -122,6 +122,7 @@ class SummaryJobs:
 class SummaryView:
     def __init__(self):
         self._snapshot = None
+        self._canvas_size = None
         self._strips = {}
         self._thumb_mask = ui.rounded_mask(66, 66, 10).astype(np.float32) / 255.0
 
@@ -142,11 +143,14 @@ class SummaryView:
                 return action, None
         return None, None
 
-    def _prepare(self, snapshot):
-        if snapshot is self._snapshot:
+    def _prepare(self, snapshot, canvas_size):
+        if snapshot is self._snapshot and canvas_size == self._canvas_size:
             return
         self._snapshot = snapshot
-        self._strips = {item.name: score_strip(item, snapshot.bars, width=200, height=48)
+        self._canvas_size = canvas_size
+        sx, sy = canvas_size[0] / ui.DESIGN_W, canvas_size[1] / ui.DESIGN_H
+        self._strips = {item.name: score_strip(item, snapshot.bars,
+                                              width=round(200 * sx), height=round(48 * sy))
                         for item in snapshot.items}
 
     @staticmethod
@@ -175,11 +179,12 @@ class SummaryView:
                clip_playing=False, can_render=False, can_play=False, can_reveal=False,
                can_extend=False, song_playing=False, confirm_upload=False,
                has_music_key=False, notice="", description_pending=None,
-               description_attempts=(), has_gemini_key=False):
-        self._prepare(snapshot)
-        out = np.empty((720, 1280, 3), np.uint8)
+               description_attempts=(), has_gemini_key=False,
+               canvas_size=(ui.DESIGN_W, ui.DESIGN_H)):
+        self._prepare(snapshot, canvas_size)
+        out = np.empty((canvas_size[1], canvas_size[0], 3), np.uint8)
         out[:] = ui.TONE_DARK.astype(np.uint8)
-        cv2.rectangle(out, (0, 0), (1279, 126), (27, 25, 24), -1)
+        ui.fill_rect(out, 0, 0, 1280, 127, (27, 25, 24))
         ui.text(out, "Collections", 28, 23, 30, 0.98, "Semibold")
         selected = len(snapshot.selected)
         ui.text(out, f"{len(snapshot.items)} saved  ·  {selected} in this song", 30, 69, 17, 0.72, "Regular")
@@ -196,8 +201,8 @@ class SummaryView:
         for index, item in enumerate(snapshot.items):
             x0, y0, x1, y1 = card_rect(index)
             hover = contains((x0, y0, x1, y1), *mouse)
-            cv2.rectangle(out, (x0, y0), (x1 - 1, y1 - 1),
-                          (43, 39, 37) if hover else (35, 32, 30), -1)
+            ui.fill_rect(out, x0, y0, x1, y1,
+                         (43, 39, 37) if hover else (35, 32, 30))
             ui.outline(out, x0, y0, x1, y1, 12, 0.38 if item.selected else 0.16)
             entry = shelf.entries[item.name]
             thumb = cv2.resize(entry.thumb, (66, 66), interpolation=cv2.INTER_AREA)
@@ -225,7 +230,7 @@ class SummaryView:
             label = "BEAT GRID" if item.kind == "rhythm" else "MELODY"
             ui.text(out, label, x0 + 275, y0 + 11, 11, 0.45, "Medium")
             strip = self._strips[item.name]
-            out[y0 + 34:y0 + 82, x0 + 275:x0 + 475] = strip
+            ui.paste(out, strip, x0 + 275, y0 + 34, 200, 48)
             ui.text(out, "In this song", x0 + 502, y0 + 14, 12,
                     0.75 if item.selected else 0.43, "Medium")
             ui.circle(out, x0 + 543, y0 + 64, 15,
@@ -237,7 +242,7 @@ class SummaryView:
         if described is not None:
             self._description_panel(out, *described)
 
-        cv2.line(out, (28, 607), (1252, 607), (75, 69, 64), 1)
+        ui.line(out, 28, 607, 1252, 607, (75, 69, 64))
         ready = jobs.result is not None and jobs.status == "done" and jobs.fingerprint == snapshot.fingerprint
         song_busy = song_jobs.busy if song_jobs is not None else False
         busy = jobs.busy or song_busy
