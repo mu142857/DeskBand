@@ -705,6 +705,25 @@ class App:
             hint = "space  ·  retake"
         ui.text(out, hint, cx, cy + r + 10, 13, 0.55, "Light", align="center")
 
+    def draw_zybo_light(self, out):
+        """Beside the title: what the Zybo is doing. Unlit, no board answered on
+        USB; steady, it is attached but the Mac is still keeping time; lit and
+        beating once a bar, the board's clock is conducting the music."""
+        cx, cy = 150, 31
+        if not self.zybo.status.startswith("connected"):
+            ui.circle(out, cx, cy, 4, 0.22, thickness=1)
+            ui.text(out, "zybo", cx + 12, cy - 7, 13, 0.28, "Light")
+        elif not self.engine.fpga_mode:
+            ui.circle(out, cx, cy, 4, 0.70, thickness=-1)
+            ui.text(out, "zybo", cx + 12, cy - 7, 13, 0.55, "Light")
+        else:
+            into, view = self.engine.bar_now()
+            beat = math.exp(-into / 0.18) if view and self.on else 0.0
+            ui.circle(out, cx, cy, 4, min(1.0, 0.72 + 0.28 * beat), thickness=-1)
+            if beat > 0.02:                       # the downbeat, the way the stage lights its edge
+                ui.circle(out, cx, cy, 4 + 5 * beat, 0.4 * beat, thickness=1)
+            ui.text(out, "zybo", cx + 12, cy - 7, 13, 0.9, "Light")
+
     def draw_finish_button(self, out):
         x0, y0, x1, y1 = self.finish_button
         hover = contains(self.finish_button, *self.mouse)
@@ -738,6 +757,7 @@ class App:
                 notice=self.song_notice)
         if self.on_stage:
             out = self.stage.render()
+            self.draw_zybo_light(out)
             self.draw_math_button(out)
             self.draw_finish_button(out)
             self.draw_random_button(out)
@@ -755,6 +775,7 @@ class App:
             msg = self.vision.error or "starting camera and model…"
             ui.text(out, msg, W // 2, H // 2 - 10, 18, 0.7, "Light", align="center")
             ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+            self.draw_zybo_light(out)
             self.draw_finish_button(out)
             return out
         frame, scale_x, scale_y, offset_x, offset_y = fit_camera_frame(frame)
@@ -773,6 +794,7 @@ class App:
             desk = self.draw_preview(out, frame, dets, dt, scale_x, scale_y,
                                      offset_x, offset_y)
         ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+        self.draw_zybo_light(out)
         if self.state == PREVIEW:
             ui.text(out, "shoot an object to add it to the band", 28, 52, 15, 0.5, "Light")
         self.draw_card(out, desk)

@@ -1,9 +1,13 @@
 import os
 import sys
+import tempfile
+import types
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from deskband import config as C
 from deskband.zybo import probe, uart_candidates
+from main import App
 
 
 class FakeSerial:
@@ -52,7 +56,48 @@ def test_probe():
     assert not probe(fake, "/dev/missing", 0.2)
 
 
+LIGHT = (slice(22, 40), slice(138, 196))      # the dot and its label, clear of the title
+BAR = types.SimpleNamespace(math=False)
+
+
+def light(app):
+    """Mean brightness of the status light in the rendered frame."""
+    return float(app.render(0.033)[LIGHT].mean())
+
+
+def test_status_light():
+    """Unlit without a board, steady once it answers, brightest on the downbeat."""
+    folder = tempfile.TemporaryDirectory()
+    old_folder, C.SHELF_DIR = C.SHELF_DIR, folder.name
+    try:
+        app = App()
+        app.on = {"cup"}
+        app.engine.bar_now = lambda: (1.2, BAR)          # between downbeats
+
+        app.zybo.status = "looking for board"
+        away = light(app)
+        app.zybo.status = "connected cu.usbserial-210351BDF9941"
+        attached = light(app)
+        app.engine.fpga_mode = True
+        conducting = light(app)
+        app.engine.bar_now = lambda: (0.0, BAR)
+        downbeat = light(app)
+        assert away < attached < conducting < downbeat, (away, attached, conducting, downbeat)
+
+        app.enter_summary()                              # the Collections page has its own header
+        app.zybo.status = "looking for board"
+        app.engine.fpga_mode = False
+        off = light(app)
+        app.zybo.status = "connected cu.usbserial-210351BDF9941"
+        app.engine.fpga_mode = True
+        assert light(app) == off                         # no light reaches that screen
+    finally:
+        C.SHELF_DIR = old_folder
+        folder.cleanup()
+
+
 if __name__ == "__main__":
     test_uart_candidates()
     test_probe()
+    test_status_light()
     print("ok")
