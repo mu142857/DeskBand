@@ -38,6 +38,8 @@ W, H = 1280, 720
 PREVIEW, SHOW, SUMMARY = "preview", "show", "summary"
 TILE, TILE_GAP, TILE_R = 72, 12, 14            # shelf slots, down the right edge
 CAPTION_W = 520                                 # Gemini's description, top left
+TAP_TIMEOUT = 2.0                               # seconds without a tap before the count starts again
+WARN = np.array([90, 190, 255], np.float32)     # BGR amber: in the band, but not heard
 
 
 def fit_camera_frame(frame):
@@ -82,6 +84,9 @@ class App:
         self.view_button = (W // 2 - 168, H - 64, 19)   # camera <-> stage
         self.finish_button = (930, 634, 1126, 678)
         self.random_button = (W // 2 + 168, H - 64, 19)  # deal the stage again (the stage only)
+        self.grid_button = (W // 2 + 252, H - 64, 19)    # 8ths only <-> 8ths and 16ths (the board's BTN2)
+        self.tempo_pill = (W // 2 - 165, 18, W // 2 + 165, 58)   # click to tap the tempo (the board's BTN3)
+        self.taps = []                  # time.monotonic() of the taps so far, at most three
         self.on_stage = False
         self.summary_return_state = PREVIEW
         self.summary_view = SummaryView()
@@ -104,14 +109,16 @@ class App:
         self.manual = {}                # part -> True/False, forced from the remote port
         self.band = set()               # parts switched on
         self.on = set()                 # parts sounding now: the band, unless paused
+        self.on_since = {}              # part -> engine.pos when it last joined `on`
         self.dock_x = W - 28 - TILE
         self.dock_y = 28                # eight slots fit above the bottom margin
         self.tile_mask = ui.rounded_mask(TILE, TILE, TILE_R).astype(np.float32) / 255.0
         self.stage = Stage(self, 132, 100, self.dock_x - 56, H - 136)   # the plane: loudness x complexity
         self.fpga_bar = None            # live hardware composition telemetry
         self.remote = Remote(self.state_dict)
-        self.describer = Describer()    # Gemini's description of the current photo (display only)
+        self.describer = Describer()    # Gemini's description of the current photo
         self.caption = (None, [])       # (text, wrapped lines)
+        self.describing = None          # (instrument, Gemini job) still waiting for its words
         self.zybo = ZyboLink(on_lost=lambda: self.remote.commands.put({"cmd": "fpga_mode", "on": False}))
         self.apply_parts()              # restore the saved selection before audio starts
 
@@ -130,14 +137,32 @@ class App:
         self.captured = (frame.copy(), dets)
         self.save_frame(frame, "shot")
         self.describer.request(frame)
+        self.describing = None
         self.state = SHOW
         self.flash = 1.0
         for d in sorted(dets, key=lambda d: d.conf):       # best box of each object last, so it wins
             if entry := self.shelf.add(d.name, d.shown, d.conf, frame, d.box):
                 self.composer.set_motif_seed(d.name, entry.motif_seed)
                 self.shelf.select(d.name, True)
+                self.describing = (d.name, self.describer.job)
         self.start_band()
         self.apply_parts()
+
+    def file_description(self):
+        """Gemini answers a second or two after the shutter. When the words for
+        the photo that filed an object arrive, keep them on the shelf with it,
+        so the Collections page can still show them long afterwards."""
+        if self.describing is None:
+            return
+        name, job = self.describing
+        current, status, text = self.describer.latest()
+        if job != current:                     # a newer photo: those words are not this object's
+            self.describing = None
+        elif status == "done" and text:
+            self.shelf.describe(name, text)
+            self.describing = None
+        elif status in ("error", "off", None):
+            self.describing = None
 
     def pick(self, dets):
         """Choose one object, keeping the current target when it is still plausible.
@@ -167,7 +192,9 @@ class App:
         """Band = the instruments selected on the shelf, plus/minus anything forced remotely."""
         selected = self.shelf.selected()
         self.band = {n for n in C.INSTRUMENTS if self.manual.get(n, n in selected)}
-        self.on = self.band if self.playing and self.state != SUMMARY else set()
+        on = self.band if self.playing and self.state != SUMMARY else set()
+        self.on_since = {n: self.on_since.get(n, self.engine.pos) for n in on}
+        self.on = on
         self.stage.settle()                     # newcomers get a spot on the stage...
         self.stage.apply()                      # ...and every spot sets a loudness and a complexity
         for name in C.INSTRUMENTS:
@@ -190,6 +217,28 @@ class App:
     def math_mode(self, on=None):
         """Math mode for the melodic parts (music.Sequence); heard from the next bar."""
         self.composer.set_math(on)
+
+    def grid_mode(self, on=None):
+        """Eighth-only rhythm grid on / off (None flips it), from the next bar:
+        the board's BTN2, and the same thing on the Mac's own clock."""
+        self.composer.set_eighths(on)
+
+    def tap(self):
+        """Four taps a beat apart set the tempo, the way the board's BTN3 does:
+        the three gaps are averaged, and anything outside 60-180 BPM is held to
+        that range. A pause of over two seconds starts the count again."""
+        now = time.monotonic()
+        if self.taps and now - self.taps[-1] > TAP_TIMEOUT:
+            self.taps = []
+        self.taps.append(now)
+        if len(self.taps) == 4:
+            beat = (self.taps[-1] - self.taps[0]) / 3
+            self.taps = []
+            self.set_bpm(60.0 / max(beat, 1e-3))
+
+    def set_bpm(self, bpm):
+        """Whole BPM, 60-180: what the board can be told, so both clocks agree."""
+        self.engine.set_bpm(round(min(max(float(bpm), 60), 180)))
 
     def show_stage(self, on=None):
         """Camera view <-> the stage (None flips). The band plays on either way."""
@@ -356,6 +405,7 @@ class App:
             "detected": sorted({d.shown for d in dets}),
             "playing": self.playing,
             "math": self.composer.math,
+            "eighths": self.eighths_heard(),
             "description": self.describer.text if self.describer.status == "done" else None,
             "saved": self.shelf.order(),                                    # top of the shelf first
             "selected": [n for n in self.shelf.order() if self.shelf.entries[n].selected],
@@ -393,8 +443,12 @@ class App:
             self.show_stage(msg.get("stage"))
         elif cmd == "sfx" and os.path.isfile(str(msg.get("file"))):
             self.engine.play_file(msg["file"], msg.get("gain", 0.6))
+        elif cmd == "grid":
+            self.grid_mode(msg.get("eighths"))
+        elif cmd == "tap":
+            self.tap()
         elif cmd == "bpm":
-            self.engine.set_bpm(msg.get("value", C.BPM))
+            self.set_bpm(msg.get("value", C.BPM))
         elif cmd == "style":
             self.composer.request_style(msg["chords"])
             if msg.get("bpm"):
@@ -411,6 +465,9 @@ class App:
         elif cmd == "fpga_controls":
             self.engine.set_fpga_controls(msg["levels"], msg["lfos"])
         elif cmd == "fpga_bar":
+            eighths = bool(msg.get("eighths"))
+            if self.fpga_bar is None or self.fpga_bar["eighths"] != eighths:
+                self.composer.set_eighths(eighths)         # BTN2 moves the on-screen button too
             self.fpga_bar = {
                 "bar": int(msg.get("bar", 0)),
                 "energy": min(max(int(msg.get("energy", 1)), 0), 2),
@@ -488,6 +545,16 @@ class App:
                 self.play()
             elif self.over(self.math_button, x, y):
                 self.math_mode()
+            elif self.over(self.grid_button, x, y):
+                self.grid_mode()
+            elif contains(self.tempo_pill, x, y):
+                x0, _, x1, _ = self.tempo_pill
+                if x < x0 + 40:
+                    self.set_bpm(self.engine.bpm - 2)
+                elif x > x1 - 40:
+                    self.set_bpm(self.engine.bpm + 2)
+                else:
+                    self.tap()
             elif self.on_stage and self.over(self.random_button, x, y):
                 self.stage.shuffle()
             elif self.slot_at(x, y):
@@ -575,7 +642,16 @@ class App:
                 ui.circle(out, x0 + 26, y + 10, 4, 0.65, thickness=1, color=c)
             dim = 1.0 if playing else 0.55
             ui.text(out, shown, x0 + 42, y, 16, 0.9 * dim, "Regular")
-            ui.text(out, C.INSTRUMENTS[name]["label"], x1 - 20, y, 16, 0.6 * dim, "Light", align="right")
+            reason = self.why_silent(name)
+            if reason:                                   # in the band, and yet not heard
+                ui.text(out, reason, x1 - 20, y + 2, 14, 0.95, "Regular", color=WARN, align="right")
+            else:
+                ui.text(out, C.INSTRUMENTS[name]["label"], x1 - 20, y, 16, 0.6 * dim, "Light", align="right")
+            if playing and self.engine.fpga_mode and name in self.engine.fpga_track_index:
+                wide = int(round(60 * self.engine.fpga_gain(name)))      # the board's envelope x LFO
+                ui._blend(out, np.ones((2, 60), np.float32), ui.WHITE, 0.18, x0 + 42, y + 24)
+                if wide:
+                    ui._blend(out, np.ones((2, wide), np.float32), c, 0.9, x0 + 42, y + 24)
             y += 30
 
     def draw_dock(self, out):
@@ -641,6 +717,58 @@ class App:
             hint = "m  ·  next bar"
         ui.text(out, hint, cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
 
+    def eighths_heard(self):
+        """Is the bar being heard on the eighth-only grid (here or on the board)?"""
+        view = self.engine.bar_now()[1]
+        board = self.engine.fpga_mode and self.fpga_bar is not None and self.fpga_bar["eighths"]
+        return bool(board or (view is not None and view.eighths))
+
+    def draw_grid_button(self, out):
+        """Right of the row: the rhythm grid, lit while only 8ths are heard. Like
+        math mode it changes on a bar line, and pulses until then."""
+        cx, cy, r = self.grid_button
+        a = 0.95 if self.over(self.grid_button, *self.mouse) else 0.75
+        heard, want = self.eighths_heard(), self.composer.eighths
+        board = self.fpga_bar if self.engine.fpga_mode else None
+        label = "8" if (heard if heard == want else want) else "16"
+        mask, _, top = ui.text_mask(label, 15, "Medium")
+        ty = cy - top - mask.shape[0] / 2
+        if heard == want and not (board and board["grid_queued"]):
+            ui.circle(out, cx, cy, r, a if heard else a - 0.15, thickness=-1 if heard else 1)
+            ui.text(out, label, cx, ty, 15, a, "Medium", color=ui.TONE_DARK if heard else ui.WHITE, align="center")
+            hint = "g  ·  8ths only" if heard else "g  ·  8ths + 16ths"
+        else:
+            blink = 0.5 + 0.5 * math.cos(4 * math.pi * time.time())
+            ui.circle(out, cx, cy, r, a - 0.15, thickness=1)
+            ui.circle(out, cx, cy, r - 1, 0.08 + 0.37 * blink, thickness=-1)
+            ui.text(out, label, cx, ty, 15, a, "Medium", align="center")
+            hint = "8ths on the board  ·  BTN2" if board and board["eighths"] and not want else "g  ·  next bar"
+        ui.text(out, hint, cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
+
+    def why_silent(self, name):
+        """None while a part of the band can be heard; else, in a few words, the
+        reason it cannot. Hardware is checked first: those are the ones nothing
+        else on screen would show."""
+        e = self.engine
+        if name not in self.on:
+            return None
+        if e.fpga_mode and name in e.fpga_track_index:
+            if time.monotonic() - e.fpga_heard > 1.0:
+                return "no clock from the board"
+            if e.fpga_gain(name) < 0.05:
+                return "board level at 0"
+        reason = e.can_sound(C.INSTRUMENTS[name]["voice"])
+        if reason:
+            return reason
+        if not e.transport:
+            return "waiting to start"
+        if e.parts[name].trim_to < 0.08:
+            return "turned down on the stage"
+        last = max(e.hits.get(name, 0), self.on_since.get(name, e.pos))
+        if e.pos - last > 2.5 * C.STEPS_PER_BAR * e.step_len:
+            return "board sends it no notes" if e.fpga_mode and name in e.fpga_track_index else "no notes"
+        return None
+
     def draw_random_button(self, out):
         """Right of the play button, on the stage only: deal the band a new
         arrangement (a die, three pips)."""
@@ -670,20 +798,58 @@ class App:
                 13, 0.55, "Light", align="center")
 
     def draw_tempo(self, out):
-        """Persistent clock-source/BPM readout; the dot flashes on each beat."""
+        """Persistent clock-source/BPM readout; the dot flashes on each beat.
+        Click it four times, a beat apart, to set the tempo (`t`, the board's
+        BTN3); its ends step the tempo down and up (`-` / `=`). Under it, what
+        the board's bar generator is doing, or why nothing is being heard."""
         e = self.engine
-        x0, y0, x1, y1 = W // 2 - 90, 18, W // 2 + 90, 58
+        x0, y0, x1, y1 = self.tempo_pill
+        hover = contains(self.tempo_pill, *self.mouse)
         ui.frosted(out, x0, y0, x1, y1, r=18)
         heard = max(0, e.pos - int(e.latency * C.SAMPLE_RATE))
         beat_samples = max(1, e.step_len * C.STEPS_PER_BEAT)
         phase = (heard % beat_samples) / beat_samples
         pulse = math.exp(-7.0 * phase)
-        ui.circle(out, x0 + 22, (y0 + y1) // 2, 4,
-                  0.35 + 0.65 * pulse, thickness=-1)
-        bpm = f"{e.bpm:.0f}" if abs(e.bpm - round(e.bpm)) < 0.05 else f"{e.bpm:.1f}"
-        source = "FPGA" if e.fpga_mode else "MAC"
-        ui.text(out, f"{source}  ·  {bpm} BPM", x0 + 38, y0 + 9,
-                17, 0.9, "Medium")
+        cy = (y0 + y1) // 2
+        if self.taps and time.monotonic() - self.taps[-1] > TAP_TIMEOUT:
+            self.taps = []
+        for dx, a in ((22, x0 <= self.mouse[0] < x0 + 40), (-22, x1 - 40 < self.mouse[0] <= x1)):
+            x = (x0 if dx > 0 else x1) + dx
+            a = 0.95 if hover and a else 0.5
+            ui._blend(out, np.ones((1, 9), np.float32), ui.WHITE, a, x - 4, cy)
+            if dx < 0:
+                ui._blend(out, np.ones((9, 1), np.float32), ui.WHITE, a, x, cy - 4)
+        if self.taps:                             # four dots: the taps so far
+            for i in range(4):
+                ui.circle(out, x0 + 58 + 14 * i, cy, 3.5, 0.95 if i < len(self.taps) else 0.3,
+                          thickness=-1 if i < len(self.taps) else 1)
+            ui.text(out, "tap the beat", x0 + 118, y0 + 11, 15, 0.9, "Medium")
+        else:
+            ui.circle(out, x0 + 56, cy, 4, 0.35 + 0.65 * pulse, thickness=-1)
+            bpm = f"{e.bpm:.0f}" if abs(e.bpm - round(e.bpm)) < 0.05 else f"{e.bpm:.1f}"
+            source = "FPGA" if e.fpga_mode else "MAC"
+            ui.text(out, f"{source}  ·  {bpm} BPM", x0 + 72, y0 + 9, 17, 0.9, "Medium")
+        tx0, tx1 = x1 - 108, x1 - 44                  # the tap key, drawn as a key so it is found
+        over_tap = hover and x0 + 40 <= self.mouse[0] <= x1 - 40
+        ui.outline(out, tx0, y0 + 8, tx1, y1 - 8, 9, 0.95 if over_tap else 0.55)
+        ui.text(out, "TAP", (tx0 + tx1) // 2, y0 + 13, 13, 0.95 if over_tap else 0.75, "Medium", align="center")
+        if hover:
+            note = "click TAP four times on the beat  ·  − + change it by 2"
+        elif self.taps:
+            note = f"{4 - len(self.taps)} more"
+        elif not self.band:
+            note = ""
+        elif not self.playing:
+            note = "paused"
+        elif e.fpga_mode and time.monotonic() - e.fpga_heard > 1.0:
+            note = "waiting for the board's clock"
+        elif e.fpga_mode and self.fpga_bar is not None:
+            f = self.fpga_bar
+            note = (f"bar {f['bar'] + 1}  ·  {('sparse', 'normal', 'full')[f['energy']]}"
+                    f"{'  ·  fill' if f['fill'] else ''}")
+        else:
+            note = ""
+        ui.text(out, note, W // 2, y1 + 6, 13, 0.55, "Light", align="center")
 
     def draw_caption(self, out):
         """Top left, under the title: what Gemini sees in the photo."""
@@ -751,6 +917,7 @@ class App:
                 "Light", align="center")
 
     def render(self, dt):
+        self.file_description()
         if self.state == SUMMARY:
             self.summary_jobs.poll()
             self.song_jobs.poll()
@@ -776,6 +943,7 @@ class App:
             self.draw_zybo_light(out)
             self.draw_tempo(out)
             self.draw_math_button(out)
+            self.draw_grid_button(out)
             self.draw_finish_button(out)
             self.draw_random_button(out)
             self.flash = 0.0                    # a photo taken from the remote port: no flash here
@@ -821,6 +989,7 @@ class App:
         self.draw_shutter(out)
         self.draw_play_button(out)
         self.draw_math_button(out)
+        self.draw_grid_button(out)
         self.draw_view_button(out)
         self.draw_finish_button(out)
         if self.state == SHOW:
@@ -889,6 +1058,14 @@ class App:
             self.play()
         elif k == ord("m"):
             self.math_mode()
+        elif k == ord("g"):
+            self.grid_mode()
+        elif k == ord("t"):
+            self.tap()
+        elif k in (ord("-"), ord("_")):
+            self.set_bpm(self.engine.bpm - 2)
+        elif k in (ord("="), ord("+")):
+            self.set_bpm(self.engine.bpm + 2)
         elif k == ord("r") and self.on_stage:
             self.stage.shuffle()
         elif k == 9:

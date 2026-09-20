@@ -3,11 +3,24 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.fpga_protocol import (command_envelope, command_lfo, command_mask,
+from deskband.fpga_protocol import (LineBuffer, command_envelope, command_lfo, command_mask,
                                     command_pattern, command_tempo,
                                     command_variation, parse_fpga_line)
 from deskband.remote import COMMANDS
 from tools.zybo_bridge import button_effects, transport_effects
+
+
+def test_line_buffer():
+    """The UART arrives in bursts that stop mid-record (seen on the real board:
+    'EV 904 8 01 1D' then ' 0\\r\\n'). No piece may be parsed, no record lost."""
+    lines = LineBuffer()
+    got = []
+    for burst in (b"EV 904 8 01 1D", b" 0\r\nEV ", b"910 14 09 1D 0\r\nBTN 8 8 0 ", b"0\r\n", b"\r\n", b"TAP 114\r\nE"):
+        got += lines.feed(burst)
+    assert [parse_fpga_line(raw).kind for raw in got] == ["EV", "EV", "BTN", "TAP"]
+    assert parse_fpga_line(got[0]).fields == (904, 8, 0x01, 0x1D, 0)
+    assert lines.pending == b"E"                         # still waiting for the rest
+    assert lines.feed(b"x" * 5000) == [] and lines.pending == b""      # noise cannot pile up
 
 
 def test_fpga_protocol():
@@ -56,5 +69,6 @@ def test_fpga_protocol():
 
 
 if __name__ == "__main__":
+    test_line_buffer()
     test_fpga_protocol()
     print("PASS: Mac/Zybo protocol codec")

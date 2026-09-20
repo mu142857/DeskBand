@@ -34,7 +34,8 @@ def crop_square(frame, box, margin=1.15):
 
 class Entry:
     def __init__(self, name, shown, conf, thumb, saved_at=None, *, instrument=None,
-                 motif_version=MOTIF_VERSION, motif_seed=None, selected=False, pos=None):
+                 motif_version=MOTIF_VERSION, motif_seed=None, selected=False, pos=None,
+                 description=None):
         self.name, self.shown, self.conf, self.thumb = name, shown, conf, thumb
         self.saved_at = time.time() if saved_at is None else saved_at
         self.pos = tuple(pos) if pos else None
@@ -42,6 +43,7 @@ class Entry:
         self.motif_version = motif_version
         self.motif_seed = new_seed() if motif_seed is None else motif_seed
         self.selected = selected
+        self.description = description or None   # Gemini on the photo that first filed it
         self.tile = None             # drawing cache, owned by the UI
 
 
@@ -84,13 +86,18 @@ class Shelf:
                 seed = meta.get("motif_seed")
                 if not isinstance(seed, int) or seed < 0:
                     seed = new_seed()
-                migrated |= any(k not in meta for k in ("instrument", "motif_version", "motif_seed", "selected"))
+                description = meta.get("description")
+                if not isinstance(description, str) or not description.strip():
+                    description = None
+                migrated |= any(k not in meta for k in ("instrument", "motif_version", "motif_seed",
+                                                        "selected", "description"))
                 migrated |= (meta.get("instrument") != name or
                              meta.get("motif_version") != version or meta.get("motif_seed") != seed)
                 self.entries[name] = Entry(name, meta.get("shown", name), meta.get("conf", 0.0),
                                            thumb, meta.get("saved_at"), instrument=name,
                                            motif_version=version, motif_seed=seed,
-                                           selected=bool(meta.get("selected", False)), pos=meta.get("pos"))
+                                           selected=bool(meta.get("selected", False)), pos=meta.get("pos"),
+                                           description=description)
         if migrated:
             self._save_index()
 
@@ -99,6 +106,7 @@ class Shelf:
         index = {n: dict(shown=e.shown, conf=round(e.conf, 3), saved_at=e.saved_at,
                          instrument=e.instrument, motif_version=e.motif_version,
                          motif_seed=e.motif_seed, selected=e.selected,
+                         description=e.description,
                          pos=[round(v, 4) for v in e.pos] if e.pos else None)
                  for n, e in self.entries.items()}
         fd, pending = tempfile.mkstemp(prefix=".shelf-", suffix=".json", dir=self.folder)
@@ -127,7 +135,8 @@ class Shelf:
                       motif_version=old.motif_version if old else MOTIF_VERSION,
                       motif_seed=new_seed(old.motif_seed if old else None),
                       selected=old.selected if old else False,
-                      pos=old.pos if old else None)
+                      pos=old.pos if old else None,
+                      description=old.description if old else None)
         self.entries[name] = entry
         try:                                   # a full disk must not stop the show
             os.makedirs(self.folder, exist_ok=True)
@@ -136,6 +145,17 @@ class Shelf:
         except OSError as e:
             print("shelf not saved:", repr(e), flush=True)
         return entry
+
+    def describe(self, name, text):
+        """File what Gemini said about the photo. The first description stays:
+        re-shooting an object keeps the words from when it was first collected."""
+        entry = self.entries.get(name)
+        text = " ".join(str(text).split())
+        if entry is None or entry.description or not text:
+            return False
+        entry.description = text
+        self._save_index()
+        return True
 
     def remove(self, name):
         if self.entries.pop(name, None) is None:

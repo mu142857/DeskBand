@@ -141,9 +141,42 @@ def test_render_state_and_stale_clip():
         app.summary_action("play")           # unavailable after a sound-changing selection
 
 
+def test_description_is_kept_and_shown():
+    """Gemini answers after the shutter; the words reach the object that photo
+    filed, and the Collections card shows them, in full while hovered."""
+    words = ("A white ceramic mug with a matte glaze and a small chip on the rim, "
+             "half full of black coffee.")
+    with tempfile.TemporaryDirectory() as folder:
+        app = make_app(folder, ("cup", "pen"))
+        app.enter_summary()
+        plain = app.render(0.033)
+
+        app.describing = ("cup", app.describer.job)          # the photo that filed the cup
+        app.describer.status, app.describer.text = "done", words
+        app.file_description()
+        assert app.describing is None
+        assert app.shelf.entries["cup"].description == words
+
+        app.describing = ("pen", app.describer.job - 1)      # an older photo: not these words
+        app.file_description()
+        assert app.describing is None and app.shelf.entries["pen"].description is None
+
+        x0, y0, x1, y1 = card_rect(app.shelf.order().index("cup"))
+        box = (slice(y0 + 66, y0 + 92), slice(x0 + 94, x0 + 265))
+        shown = app.render(0.033)
+        assert shown[box].max() > plain[box].max() + 20      # two lines of it, under the labels
+        assert np.array_equal(shown[y0 + 17:y0 + 83, x0 + 16:x0 + 82],
+                              plain[y0 + 17:y0 + 83, x0 + 16:x0 + 82])   # thumbnail untouched
+
+        app.mouse = ((x0 + x1) // 2, (y0 + y1) // 2)         # the whole description, on hover
+        panel = (slice(y1 + 10, y1 + 40), slice(x0 + 94, x0 + 400))
+        assert abs(float(app.render(0.033)[panel].mean()) - float(shown[panel].mean())) > 3
+
+
 if __name__ == "__main__":
     test_layout_and_empty_state()
     test_navigation_and_cards()
     test_job_updates_are_nonblocking()
     test_render_state_and_stale_clip()
+    test_description_is_kept_and_shown()
     print("ok")

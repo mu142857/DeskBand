@@ -15,7 +15,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.fpga_protocol import (command_mask, command_tempo,
+from deskband.fpga_protocol import (LineBuffer, command_mask, command_tempo,
                                     command_variation, parse_fpga_line)
 from deskband import config as C
 
@@ -88,6 +88,7 @@ def main():
     current_bpm = None
     current_run = None
     last_subscribe = 0.0
+    lines = LineBuffer()
 
     def serial_command(command):
         ser.write((command + "\n").encode("ascii"))
@@ -111,8 +112,9 @@ def main():
                                           **({"bpm": current_bpm} if current_bpm else {})})
                 last_subscribe = now
 
-            raw = ser.readline()
-            if raw:
+            # Whole lines only: see LineBuffer. read() returns after 5 ms at the latest,
+            # so UDP state packets below are still serviced promptly.
+            for raw in lines.feed(ser.read(ser.in_waiting or 1)):
                 try:
                     message = parse_fpga_line(raw)
                 except ValueError as error:
@@ -147,6 +149,11 @@ def main():
                 elif message and message.kind == "TAP":
                     bpm, = message.fields
                     send_json(udp, address, {"cmd": "bpm", "value": bpm})
+                    # The PL keeps the period it measured (say 119.6 BPM) while DeskBand
+                    # takes the rounded figure. Left alone, the two clocks slide apart and
+                    # notes start landing late. State the tempo again from DeskBand's next
+                    # state packet so the board runs at exactly the BPM the Mac plays.
+                    current_bpm = None
                     print(f"[zybo] four-tap tempo={bpm} BPM")
                 elif message and message.kind in {"ERR", "FATAL"}:
                     print("[zybo]", raw.decode(errors="replace").strip())

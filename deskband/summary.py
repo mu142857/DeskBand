@@ -24,6 +24,8 @@ BUTTONS = {
 }
 CONFIRM_UPLOAD = (376, 430, 660, 480)
 CANCEL_UPLOAD = (680, 430, 904, 480)
+DESC = (94, 66, 171, 14, 2)             # x, y and width in the card, line height, lines shown
+HOVER_W = 420                           # the whole description, while the pointer rests on a card
 
 
 def duration_seconds(snapshot):
@@ -48,6 +50,14 @@ def fit_text(value, size, width):
     while value and ui.text_mask(value + "…", size)[0].shape[1] > width:
         value = value[:-1]
     return value + "…"
+
+
+def fit_lines(value, size, width, lines):
+    """Wrap to at most `lines`; the last one ends in … when there is more to read."""
+    wrapped = ui.wrap(value, size, width)
+    if len(wrapped) > lines:
+        wrapped = wrapped[:lines - 1] + [fit_text(" ".join(wrapped[lines - 1:]), size, width)]
+    return wrapped
 
 
 class SummaryJobs:
@@ -129,6 +139,18 @@ class SummaryView:
                         for item in snapshot.items}
 
     @staticmethod
+    def _description_panel(out, x0, y0, y1, text):
+        """What Gemini said about the photo, in full, beside the card it belongs to."""
+        lines = fit_lines(text, 14, HOVER_W - 36, 5)
+        wide = max(ui.text_mask(line, 14)[0].shape[1] for line in lines) + 36
+        high = 26 + 20 * len(lines)
+        x = min(max(x0 + DESC[0] - 16, 8), 1280 - wide - 8)
+        y = y1 - 10 if y1 - 10 + high <= 600 else max(y0 + 10 - high, 132)   # attached to its own card
+        ui.frosted(out, x, y, x + wide, y + high, r=12)
+        for row, line in enumerate(lines):
+            ui.text(out, line, x + 18, y + 13 + 20 * row, 14, 0.92, "Regular")
+
+    @staticmethod
     def _button(out, rect, label, enabled, hovered=False):
         x0, y0, x1, y1 = rect
         radius = (y1 - y0) // 2 - 1
@@ -154,6 +176,7 @@ class SummaryView:
         ui.text(out, fit_text(detail + chords, 16, 1100), 30, 101, 16, 0.62, "Light")
         self._button(out, BACK, "Back to collecting", True, contains(BACK, *mouse))
 
+        described = None                     # the hovered card's words, drawn over the rest
         if not snapshot.items:
             ui.text(out, "Nothing collected yet", 640, 292, 27, 0.9, "Medium", align="center")
             ui.text(out, "Go back and photograph an object to start your band.",
@@ -171,6 +194,12 @@ class SummaryView:
             ui.text(out, fit_text(item.shown, 19, 165), x0 + 94, y0 + 16, 19, 0.96, "Medium")
             ui.text(out, fit_text(item.instrument_label, 14, 165),
                     x0 + 94, y0 + 47, 14, 0.62, "Light")
+            if entry.description:
+                dx, dy, dw, line, rows = DESC
+                for row, text in enumerate(fit_lines(entry.description, 12, dw, rows)):
+                    ui.text(out, text, x0 + dx, y0 + dy + row * line, 12, 0.5, "Light")
+                if hover:
+                    described = (x0, y0, y1, entry.description)
             label = "BEAT GRID" if item.kind == "rhythm" else "MELODY"
             ui.text(out, label, x0 + 275, y0 + 11, 11, 0.45, "Medium")
             strip = self._strips[item.name]
@@ -182,6 +211,9 @@ class SummaryView:
             if item.selected:
                 ui.text(out, "✓", x0 + 543, y0 + 52, 17, 1.0, "Semibold",
                         color=ui.TONE_DARK, align="center")
+
+        if described is not None:
+            self._description_panel(out, *described)
 
         cv2.line(out, (28, 607), (1252, 607), (75, 69, 64), 1)
         ready = jobs.result is not None and jobs.status == "done" and jobs.fingerprint == snapshot.fingerprint

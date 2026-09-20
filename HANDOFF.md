@@ -62,7 +62,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 - **一个物体只算一次**：同一个东西被读成两个名字（杯子同时被认成 cup 和 bottle）或者同类的大框套小框（整个杯子 + 杯把），只保留置信度最高的那个框；笔放在书上这种“在里面但框差很多”的情况两个都保留。逻辑在 `deskband/vision.py` 的 `same_thing()`。
 - `0`：全部静音，但保存的东西都还在（换下一位评委时用）。
 - 右键点槽，或鼠标悬停在槽上按 `x`：删除这个槽。
-- 存在 `cache/shelf/`（每个槽一张 jpg + `shelf.json`），**重启后还在，选择状态也会恢复**（恢复的乐队等加载完才出声，见 5 的第 1 条）。按 `0` 可清空当前选择。这个目录不进 git（缩略图里可能有人脸）。
+- 存在 `cache/shelf/`（每个槽一张 jpg + `shelf.json`，`shelf.json` 里的 `description` 是拍下它时 Gemini 写的描述），**重启后还在，选择状态也会恢复**（恢复的乐队等加载完才出声，见 5 的第 1 条）。按 `0` 可清空当前选择。这个目录不进 git（缩略图里可能有人脸）。
 - 代码：`deskband/shelf.py`（存取），`main.py` 的 `draw_dock / slot_at / select / forget / silence`。
 
 **物体 → 乐器**（定义在 `deskband/config.py` 的 `INSTRUMENTS`）
@@ -224,6 +224,8 @@ tools/build_app.sh
 | 点击乐器架上的缩略图，或 `1`–`8`（从上往下数） | 开关一件已保存的乐器 |
 | `p` / 回车 / 点快门右边的小圆钮 | 演奏 / 暂停（总开关，选择保留） |
 | `m` / 点快门左边的 φ 钮 | 数学旋律模式开 / 关（点亮 = 开），从下一小节生效，见 7.2 |
+| `g` / 点 Collections 左边的 8/16 钮 | 节奏网格：只用八分 ↔ 八分 + 十六分，从下一小节生效（切换前闪烁）。等同于 Zybo 的 BTN2；板子上按 BTN2，这个钮也跟着变。没连板子时由 Mac 自己的音序器去掉奇数十六分位置的音（不会把一个声部删空） |
+| `t` / 点顶部中间的速度胶囊 | 敲击定速：按拍子敲四下，取三个间隔的平均，等同于 BTN3。快于 180 记为 180，慢于 60 记为 60；两秒不敲就重新计数。胶囊两端的 − / +（键盘 `-` / `=`）每次 ±2 BPM。连着板子时新速度经桥接自动同步给 FPGA |
 | `tab` / 点最左边的钮 | 摄像头画面 ↔ 舞台（stage）。舞台是一个平面：纵轴响度、横轴复杂度。把右边乐器架上的缩略图拖进去 = 加入乐队，把圆形的 token 拖出平面（或右键）= 移出乐队；在平面里拖动就是调响度和复杂度。舞台上按空格回到摄像头。见 7.2 末尾 |
 | `r` / 点最右边的骰子钮（只在舞台上有） | 重新随机分配台上所有乐器的位置，响度和复杂度一起洗牌，见 7.2 末尾 |
 | `0` | 乐器架全部取消选择，保存的东西不丢 |
@@ -232,6 +234,8 @@ tools/build_app.sh
 | `d` | 调试面板开关 |
 | `f` | 全屏开关 |
 | `q` 或 `Esc` | 退出 |
+
+**选中了却没声音**：Band 卡片里，在乐队中但听不到的乐器，右侧会用琥珀色写出原因：`loading samples` / `samples missing`（采样）、`no clock from the board`（FPGA 模式下一秒没收到 tick）、`board level at 0`（板子的包络 × LFO 把它压到 0）、`board sends it no notes` / `no notes`（两个半小节没触发过音）、`turned down on the stage`、`waiting to start`。FPGA 模式下每行名字下面还有一条细线，显示板子给这一轨的电平。速度胶囊下面的小字显示 `paused`、`waiting for the board's clock`，或板子当前小节的 `bar N · sparse/normal/full`。判断逻辑在 `main.py` 的 `why_silent()`。
 
 **调试面板各行的含义**
 1. `display` 界面帧率；`camera` 摄像头帧率；`detector <模型名>` 识别帧率和单帧耗时；`audio` 音频回调占用的时间比例（超过 80% 才需要担心）；`xruns` 音频丢块次数（应该一直是 0）。
@@ -295,7 +299,7 @@ tools/build_app.sh
 | `deskband/ui.py` | ~200 | 绘图原语：双色调底图、保留彩色区域、细线圆角框、SF Pro 文字、毛玻璃卡片、乐器架的颜色滤镜 |
 | `deskband/remote.py` | ~110 | UDP/JSON 远程端口 |
 | `deskband/stage.py` | ~400 | 舞台：响度 × 复杂度平面，拖放、随机落位与随机发牌、math 模式的背景和节奏环、位置 → 引擎增益和作曲复杂度 |
-| `deskband/cloud.py` | ~120 | Gemini 看照片写描述（后台线程，只显示）、ElevenLabs 生成音效；只用 urllib，key 只从环境变量读 |
+| `deskband/cloud.py` | ~120 | Gemini 看照片写描述（后台线程，回来后存进货架条目）、ElevenLabs 生成音效；只用 urllib，key 只从环境变量读 |
 | `deskband/vocals.py` | ~110 | 人声采样：ElevenLabs 生成 → 测音高 → 微调到半音 → keymap |
 | `tools/exs_extract.py` | ~770 | 把 Logic 的"打包"采样器乐器（.exs + consolidated .caf）解成一个音一个 wav |
 | `tools/make_kings_cross.py` | | 国王十字：五个弦乐声部叠成合奏 |
@@ -493,7 +497,9 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 | `{"cmd":"silence"}` | 乐器架全部关掉，保存的东西不丢（等同于按 `0`） |
 | `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop mouth` |
 | `{"cmd":"sfx","file":"/绝对路径.wav","gain":0.6}` | 播放一个声音文件。**会等到下一个八分音符才响**（和 Mikutap 一样，所以永远在拍子上），经过混响和限幅器。支持 wav/aiff/flac 等 libsndfile 能读的格式，最长 20 秒，任意采样率。文件必须在**运行 DeskBand 的那台 Mac 上** |
-| `{"cmd":"bpm","value":110}` | 改速度，60–180，立即生效 |
+| `{"cmd":"bpm","value":110}` | 改速度，取整；超出 60–180 的按 60 / 180 算，立即生效 |
+| `{"cmd":"tap"}` | 敲击定速的一下，等同于 `t` / BTN3：连续四下（间隔不超过 2 秒）定出速度 |
+| `{"cmd":"grid","eighths":true}` | 节奏网格：只用八分 / 八分 + 十六分，等同于 `g` / BTN2。不带（或 `null`）= 切换，从下一小节生效。状态包里的 `eighths` 是此刻听到的网格 |
 | `{"cmd":"style","chords":[...],"bpm":120}` | 换和弦循环，**在当前循环走完、回到开头时**生效，所以永远落在强拍上。格式见 10.4 |
 | `{"cmd":"state"}` | 回一个状态包 |
 | `{"cmd":"subscribe","hz":20}` | 之后 10 秒内以指定频率（1–60Hz）向发送方推状态包。要持续接收就每隔几秒重发一次 |
@@ -659,7 +665,7 @@ python3 tools/remote_sim.py
 
 ## 12. AI / 音乐 API 线（Richard）
 
-> 已接入 DeskBand 本体：ElevenLabs 人声乐器（mouth 张嘴，见 7.2）和 Gemini 照片描述（定格时显示在标题下面，只显示、不影响音乐），key 用环境变量 `ELEVENLABS_API_KEY` / `GEMINI_API_KEY`。下面是最初的分工计划。
+> 已接入 DeskBand 本体：ElevenLabs 人声乐器（mouth 张嘴，见 7.2）和 Gemini 照片描述（定格时显示在标题下面，回来后一并存进货架，Collections 页卡片上还能看到；不影响音乐），key 用环境变量 `ELEVENLABS_API_KEY` / `GEMINI_API_KEY`。下面是最初的分工计划。
 
 优先级：**ElevenLabs > Gemini > OMNI**，Baseten 可选。所有 API key 放环境变量，脚本放 `tools/` 或新建 `integrations/`，不要碰 `deskband/` 里的音频代码，全部通过第 10 节的 UDP 指令接入。
 

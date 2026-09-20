@@ -92,7 +92,25 @@ def test_fpga_engine():
     assert engine.next_step_at == engine.pos
 
 
+def test_lost_bar_line():
+    """A tick lost between the board and the engine must not skip the bar line,
+    or the chord would not move on and the old bar would play again."""
+    composer = FakeComposer()
+    engine = Engine(composer)
+    engine.set_bpm(120)
+    engine.start_transport()
+    engine.set_active("cup", True)
+    engine._trigger = lambda event, offset: None
+    engine.set_fpga_mode(True, lookahead_steps=2)
+    for tick in (13, 14, 15, 17, 18):                      # 16, the downbeat, never arrives
+        engine.queue_fpga_event(tick, tick % 16, 0x01, 0x01)
+        blocks(engine, 6)
+    blocks(engine, 30)
+    assert composer.steps == [13, 14, 15, 16, 17, 18]
+
+
 if __name__ == "__main__":
+    test_lost_bar_line()
     test_silent_until_started()
     test_fpga_engine()
     print("PASS: FPGA-to-audio lookahead scheduling")

@@ -9,6 +9,27 @@ class FpgaMessage:
     fields: tuple
 
 
+class LineBuffer:
+    """Reassemble the UART byte stream into whole lines.
+
+    USB serial adapters hand bytes over in bursts that end wherever they end,
+    often in the middle of a record. A timed readline() returns such a piece as
+    if it were a line; both halves then fail to parse and the record (a step of
+    the beat clock) is lost. Feed whatever has arrived; only lines that have
+    actually been terminated come back, the rest waits for the next burst."""
+
+    def __init__(self, limit=4096):
+        self.pending = b""
+        self.limit = limit
+
+    def feed(self, data):
+        self.pending += data
+        *lines, self.pending = self.pending.split(b"\n")
+        if len(self.pending) > self.limit:          # noise with no newline: do not grow forever
+            self.pending = b""
+        return [line for line in lines if line.strip()]
+
+
 def parse_fpga_line(line):
     if isinstance(line, bytes):
         line = line.decode("ascii", "strict")

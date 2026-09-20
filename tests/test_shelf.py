@@ -45,6 +45,31 @@ def test_shelf():
     assert set(Shelf(folder, NAMES).entries) == {"cell phone"}
 
 
+def test_description():
+    """Gemini's words are filed with the object and survive a restart; the first
+    description stays even when the same object is shot again."""
+    folder = tempfile.mkdtemp(prefix="deskband_shelf_")
+    frame = np.zeros((720, 1280, 3), np.uint8)
+    shelf = Shelf(folder, NAMES)
+
+    assert shelf.describe("cup", "a mug") is False            # nothing saved there yet
+    shelf.add("cup", "mug", 0.7, frame, [500, 200, 700, 400])
+    assert shelf.entries["cup"].description is None
+    assert shelf.describe("cup", "  A white ceramic mug.\n ") is True
+    assert shelf.entries["cup"].description == "A white ceramic mug."
+    assert shelf.describe("cup", "A blue enamel mug.") is False    # the first one stays
+    assert shelf.describe("cup", "   ") is False
+
+    shelf.add("cup", "cup", 0.9, frame, [500, 200, 700, 400])      # re-shot: new photo, same words
+    assert shelf.entries["cup"].description == "A white ceramic mug."
+
+    again = Shelf(folder, NAMES)
+    assert again.entries["cup"].description == "A white ceramic mug."
+    again.add("pen", "pen", 0.6, frame, [10, 10, 90, 200])         # nothing said about this one
+    assert Shelf(folder, NAMES).entries["pen"].description is None
+
+
 if __name__ == "__main__":
     test_shelf()
+    test_description()
     print("ok")

@@ -57,7 +57,7 @@ def test_probe():
 
 
 LIGHT = (slice(22, 40), slice(138, 196))      # the dot and its label, clear of the title
-BAR = types.SimpleNamespace(math=False)
+BAR = types.SimpleNamespace(math=False, eighths=False)
 
 
 def light(app):

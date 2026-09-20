@@ -94,6 +94,11 @@ class Describer:
         if api_key:
             threading.Thread(target=self._run, args=(job, frame.copy(), api_key), daemon=True).start()
 
+    def latest(self):
+        """(job, status, text) read together, so a caller never mixes two photos."""
+        with self._lock:
+            return self.job, self.status, self.text
+
     def clear(self):
         with self._lock:
             self.job += 1

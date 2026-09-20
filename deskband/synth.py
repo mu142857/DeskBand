@@ -214,9 +214,11 @@ class Engine:
         self.fpga_mode = False
         self.fpga_lookahead_steps = 2
         self.fpga_input = deque()       # main/network thread appends; callback drains
-        self.fpga_pending = deque()     # (sample position, tick, event mask, active mask)
+        self.fpga_pending = deque()     # (sample position, tick, event mask, active mask, fresh start)
         self.fpga_origin_tick = None
         self.fpga_origin_sample = None
+        self.fpga_slack = 0.0           # smoothed lookahead left when a tick arrives, samples
+        self.fpga_heard = 0.0           # time.monotonic() of the board's last tick (for the UI)
         self.fpga_controls = (tuple([255] * 7), tuple([0] * 7))
         self.fpga_track_names = tuple(C.FPGA_TRACKS)
         self.fpga_track_index = {name: track for track, name in enumerate(self.fpga_track_names)}
@@ -317,6 +319,7 @@ class Engine:
 
     def queue_fpga_event(self, tick, step, event_mask, active_mask):
         if self.fpga_mode:
+            self.fpga_heard = _time.monotonic()
             self.fpga_input.append((int(tick), int(step), int(event_mask) & 0x7f,
                                     int(active_mask) & 0x7f))
 
@@ -325,6 +328,24 @@ class Engine:
             raise ValueError("FPGA controls require seven envelope and seven LFO values")
         self.fpga_controls = (tuple(min(max(int(v), 0), 255) for v in levels),
                               tuple(min(max(int(v), 0), 255) for v in lfos))
+
+    def fpga_gain(self, name):
+        """0..1: what the board's envelope and LFO leave of this part (1.0 on the Mac's clock)."""
+        track = self.fpga_track_index.get(name)
+        if not self.fpga_mode or track is None:
+            return 1.0
+        levels, lfos = self.fpga_controls
+        return (levels[track] / 255.0) * (1.0 - lfos[track] / 255.0)
+
+    def can_sound(self, kind):
+        """None if this voice's samples are in; else why a note of it would be silent."""
+        if kind in ("arp", "keys", "sub"):
+            return None
+        if kind not in self.loaded:
+            return "loading samples"
+        if kind == "drums":
+            return None if self.drums else "samples missing"
+        return None if self.keymaps[kind].ready else "samples missing"
 
     def warm_up(self):
         """First calls into numpy/scipy are slow; pay for them before audio runs."""
@@ -410,14 +431,39 @@ class Engine:
                 # First tick, or the transport was stopped / reset / restarted (pause,
                 # a new photo): the old mapping would put this tick in the past, so
                 # anchor again and keep the lookahead.
-                if at is None or tick <= self.fpga_origin_tick or at < self.pos - self.step_len:
+                target = self.fpga_lookahead_steps * self.step_len
+                anchored = at is None or tick <= self.fpga_origin_tick or at < self.pos - self.step_len
+                if anchored:
                     self.fpga_origin_tick = tick
-                    self.fpga_origin_sample = self.pos + self.fpga_lookahead_steps * self.step_len
+                    self.fpga_origin_sample = self.pos + target
+                    self.fpga_slack = float(target)
                     at = self.fpga_origin_sample
-                self.fpga_pending.append((at, tick, event_mask, active_mask))
+                else:
+                    # The board's crystal and the sound card's never agree exactly, and a
+                    # tapped tempo is only known to the nearest BPM, so the lookahead slowly
+                    # runs out (notes land late, out of time) or piles up (growing delay).
+                    # Follow the board: a slow servo on the smoothed slack. While the slack
+                    # is within a quarter step of its target the grid is left alone, exact
+                    # to the sample; beyond that it moves by at most 0.5% of a step per
+                    # step, far below what can be heard.
+                    self.fpga_slack += 0.02 * ((at - self.pos) - self.fpga_slack)
+                    error = target - self.fpga_slack
+                    dead = 0.25 * self.step_len
+                    if abs(error) > dead:
+                        nudge = 0.02 * (error - dead if error > 0 else error + dead)
+                        limit = 0.005 * self.step_len
+                        self.fpga_origin_sample += int(round(min(max(nudge, -limit), limit)))
+                        at = self.fpga_origin_sample + (tick - self.fpga_origin_tick) * self.step_len
+                self.fpga_pending.append((at, tick, event_mask, active_mask, anchored))
             while self.fpga_pending and self.fpga_pending[0][0] < end:
-                at, tick, event_mask, active_mask = self.fpga_pending.popleft()
+                at, tick, event_mask, active_mask, anchored = self.fpga_pending.popleft()
                 offset = max(0, at - self.pos)
+                # A tick lost on the way (not a fresh start) must not cost the composer a
+                # bar line: that is where the chord moves on and the next bar is written.
+                if not anchored and 0 < tick - self.step <= 4 * C.STEPS_PER_PHRASE:
+                    for missed in range(self.step, tick):
+                        if missed % C.STEPS_PER_PHRASE == 0:
+                            self.composer.step(missed)
                 allowed = event_mask & active_mask
                 written_tracks = 0
                 for ev in self.composer.step(tick):
