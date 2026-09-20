@@ -142,7 +142,7 @@ module tb_wavelens_axi_peripheral;
         repeat (4) @(negedge clk);
         resetn = 1'b1;
 
-        expect_read(8'h00, 32'h4442_0102);
+        expect_read(8'h00, 32'h4442_0103);
         axi_read(8'h18, value);
         if (value[27:24] != switches) $fatal(1, "switch state not exposed through AXI");
         expect_read(8'h08, 32'd12_500_000);

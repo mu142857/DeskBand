@@ -65,7 +65,7 @@ module wavelens_axi_peripheral #(
     output logic [3:0] leds
 );
 
-    localparam logic [31:0] ID_VERSION = 32'h4442_0102;
+    localparam logic [31:0] ID_VERSION = 32'h4442_0103;
     localparam int unsigned FIFO_PTR_WIDTH = $clog2(FIFO_DEPTH);
     localparam int unsigned FIFO_COUNT_WIDTH = $clog2(FIFO_DEPTH + 1);
     localparam logic [FIFO_COUNT_WIDTH-1:0] FIFO_CAPACITY = FIFO_COUNT_WIDTH'(FIFO_DEPTH);

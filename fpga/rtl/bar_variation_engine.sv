@@ -88,14 +88,14 @@ module bar_variation_engine #(
 
     function automatic logic [15:0] candidate_grid(
         input int unsigned track,
-        input logic [15:0] written,
         input logic eighths
     );
         // Eighth mode uses even sixteenth-note slots. Mixed mode adds the
         // second sixteenth of each beat (0x7777), producing syncopation while
-        // leaving the fourth sixteenth clear. Bass and strings remain anchors.
+        // leaving the fourth sixteenth clear. Every track uses the selected
+        // grid so stage complexity and rhythmic variation can affect bass and
+        // strings as well as the melodic parts.
         unique case (track)
-            2, 4:    candidate_grid = written;
             5:       candidate_grid = eighths ? 16'h5554 : 16'h7776;
             default: candidate_grid = eighths ? 16'h5555 : 16'h7777;
         endcase
@@ -116,7 +116,7 @@ module bar_variation_engine #(
             logic [15:0] candidates;
 
             random_dense = random_state[track] ^ random_state[track + 7];
-            candidates = candidate_grid(track, base_patterns[track], eighth_only);
+            candidates = candidate_grid(track, eighth_only);
 
             unique case (energy)
                 ENERGY_SPARSE: numerator = random_dense ? 3'd2 : 3'd1; // 1/4 or 1/2
@@ -133,9 +133,7 @@ module bar_variation_engine #(
                 endcase
             end
 
-            // Bass is the harmonic anchor and strings have only a downbeat;
-            // keep both stable while the other five parts breathe around them.
-            if (track == 2 || track == 4 || fill_active || bar_index == 0)
+            if (fill_active || bar_index == 0)
                 numerator = 3'd4;
 
             generated_patterns[track] = euclidean_subset(
@@ -149,7 +147,7 @@ module bar_variation_engine #(
 
             // Eighth-only is a global performance guarantee, including any
             // pattern retained by the optional lock mechanism.
-            if (enable && eighth_only && track != 2 && track != 4)
+            if (enable && eighth_only)
                 generated_patterns[track] &= 16'h5555;
         end
     end

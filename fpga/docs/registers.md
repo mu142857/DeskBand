@@ -6,7 +6,7 @@ This document fixes that boundary before the AXI wrapper is implemented.
 
 | Offset | Name | Direction | Meaning |
 |---:|---|---|---|
-| `0x00` | `ID_VERSION` | RO | `0x44420102` (`DB`, major 1, minor 2) |
+| `0x00` | `ID_VERSION` | RO | `0x44420103` (`DB`, major 1, minor 3) |
 | `0x04` | `CONTROL` | RW/pulse | bit 0 run, bit 1 transport reset |
 | `0x08` | `CYCLES_PER_STEP` | RW | FPGA clocks per sixteenth note |
 | `0x0C` | `ABSOLUTE_TICK` | RO | Tick currently being scheduled |
@@ -59,8 +59,9 @@ On later bars a maximal-length 16-bit LFSR selects phase and 1/4, 1/2, 3/4, or
 full density. Seven parallel modulo-four Bresenham accumulators place onsets on
 safe eighth-only or mixed eighth/sixteenth candidate grids. The Mac supplies a
 nearby chord-safe note when hardware creates an onset outside the written
-pattern. Step zero is protected; bass (track 2) and strings (track 4) remain
-harmonic anchors. BTN2 grid changes commit atomically at bar boundaries.
+pattern. Step zero is protected, and all seven tracks—including bass and
+strings—participate in density and grid changes. BTN2 grid changes commit
+atomically at bar boundaries.
 
 BTN3 tap tempo uses the 100 MHz fabric counter. Four presses produce three
 validated intervals; hardware divides their sum by twelve to obtain the

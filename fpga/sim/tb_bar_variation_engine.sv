@@ -40,11 +40,9 @@ module tb_bar_variation_engine;
 
     function automatic logic [15:0] candidate_grid(
         input integer track,
-        input logic [15:0] written,
         input logic eighths
     );
         case (track)
-            2, 4:    candidate_grid = written;
             5:       candidate_grid = eighths ? 16'h5554 : 16'h7776;
             default: candidate_grid = eighths ? 16'h5555 : 16'h7777;
         endcase
@@ -105,26 +103,28 @@ module tb_bar_variation_engine;
             $fatal(1, "bar edge did not advance PRNG and bar index");
         if (generated_patterns[0] != 16'h5253 ||
             generated_patterns[1] != 16'h7357 ||
-            generated_patterns[2] != 16'h1041 ||
+            generated_patterns[2] != 16'h5673 ||
             generated_patterns[3] != 16'h2105 ||
-            generated_patterns[4] != 16'h0001 ||
+            generated_patterns[4] != 16'h5673 ||
             generated_patterns[5] != 16'h3566 ||
             generated_patterns[6] != 16'h7357)
             $fatal(1, "first generated bar changed from the reference model");
         for (int track = 0; track < NUM_TRACKS; track++) begin
             if ((generated_patterns[track] &
-                 ~candidate_grid(track, base_patterns[track], 1'b0)) != 0)
+                 ~candidate_grid(track, 1'b0)) != 0)
                 $fatal(1, "generator created a trigger outside the safe grid");
             if (base_patterns[track][0] && !generated_patterns[track][0])
                 $fatal(1, "generator removed a protected downbeat");
         end
-        if (((generated_patterns[3] & ~base_patterns[3]) |
+        if (((generated_patterns[2] & ~base_patterns[2]) |
+             (generated_patterns[3] & ~base_patterns[3]) |
+             (generated_patterns[4] & ~base_patterns[4]) |
              (generated_patterns[5] & ~base_patterns[5]) |
              (generated_patterns[6] & ~base_patterns[6])) == 0)
             $fatal(1, "generator did not create new rhythmic onsets");
-        if (generated_patterns[2] != base_patterns[2] ||
-            generated_patterns[4] != base_patterns[4])
-            $fatal(1, "bass or strings anchor was modified");
+        if (generated_patterns[2] == base_patterns[2] ||
+            generated_patterns[4] == base_patterns[4])
+            $fatal(1, "bass or strings was excluded from variation");
         if (generated_patterns == base_patterns)
             $fatal(1, "normal energy did not produce any variation");
 
@@ -157,7 +157,7 @@ module tb_bar_variation_engine;
             $fatal(1, "energy change did not commit at the bar edge");
         for (int track = 0; track < NUM_TRACKS; track++) begin
             if (track != 3 && generated_patterns[track] !=
-                              candidate_grid(track, base_patterns[track], 1'b0))
+                              candidate_grid(track, 1'b0))
                 $fatal(1, "full energy did not restore all available hits");
         end
 
@@ -175,7 +175,7 @@ module tb_bar_variation_engine;
             $fatal(1, "fill did not activate for the queued bar");
         for (int track = 0; track < NUM_TRACKS; track++) begin
             if (track != 3 && generated_patterns[track] !=
-                              candidate_grid(track, base_patterns[track], 1'b0))
+                              candidate_grid(track, 1'b0))
                 $fatal(1, "fill bar was not full density");
         end
         pulse_bar();
@@ -195,7 +195,7 @@ module tb_bar_variation_engine;
         if (!eighth_only || eighth_pending)
             $fatal(1, "eighth-note mode did not commit on the bar edge");
         for (int track = 0; track < NUM_TRACKS; track++) begin
-            if (track != 2 && track != 4 && (generated_patterns[track] & 16'haaaa) != 0)
+            if ((generated_patterns[track] & 16'haaaa) != 0)
                 $fatal(1, "eighth-note mode emitted a sixteenth-note onset");
         end
         pulse_eighth();

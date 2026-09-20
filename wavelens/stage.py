@@ -6,9 +6,10 @@ thumbnail from the shelf into it to bring that instrument in, drag its token
 out again (or right-click it) to take it out. Where each one stands is kept on
 the shelf (Entry.pos), so it comes back to the same place, after a restart too.
 Loudness follows the hand at once; complexity is heard from the next bar line.
-In math mode the grid gives way to a golden-angle field and every computed
-part wears a ring of the bar's 16ths with its onsets joined up, both from the
-bar line where math mode is first heard.
+In math mode the grid gives way to a golden-angle field and every active part
+wears a ring of the bar's 16ths with its actual onsets joined up, both from the
+bar line where math mode is first heard. Stable anchor parts such as bass and
+strings keep their written music, but their rhythm is still visualized.
 Drawing only; the App owns the shelf, the band and the buttons."""
 
 import math
@@ -310,7 +311,10 @@ class Stage:
         r = self.size // 2
         g = self.app.glow(name)
         entry = self.app.shelf.entries[name]
-        ring = self.mix * alpha if name in self.app.composer.computed else 0.0
+        # The ring visualizes what is sounding, not only which parts receive a
+        # newly computed melody. Bass, drums, and strings therefore show their
+        # stable written onsets alongside the changing mathematical parts.
+        ring = self.mix * alpha
         if ring > 0.01:
             self.draw_ring(out, name, cx, cy, ring)
         ui.picture(out, self.tile(name), self.mask, int(cx) - r, int(cy) - r, alpha)

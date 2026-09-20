@@ -47,7 +47,8 @@ modulo-four phase accumulators to place an evenly spaced quarter, half, three
 quarters, or full set of onsets on safe musical grids. Those grids are wider
 than the written patterns, so hardware can create new rhythmic onsets. The Mac
 maps each new onset to a nearby chord-safe note, or a quiet hi-hat for drums.
-Downbeats are protected and bass/strings remain stable.
+Downbeats are protected, while all seven tracks participate in the generated
+density and rhythm-grid changes.
 
 The bridge sends BTN0/BTN1 to WaveLens as shutter/Math commands. BTN2 is
 committed by the PL at a bar boundary. The persistent Mac status bar shows
@@ -127,11 +128,12 @@ After programming completes, turn the board **off**, move JP5 to the pair
 labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 `DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
 
-Checked-in image SHA-256: `6d58d4ebe8d79879745ebccd348c1d496fc426708812df4ecae1db099a4164ae`
-(4,213,904 bytes, PL ID `44420102`). It passed RTL simulation, lint, firmware
-tests, complete implementation/DRC, and timing at 100 MHz. It was written to
-QSPI and every byte was read back successfully on 2026-09-19. Cold-boot smoke
-testing after moving JP5 from JTAG to QSPI is still required.
+Checked-in image SHA-256: `44d8e603b8ac3c4516b99f09784cfd5e7a92d547ec4638118e88e4f0f401cd12`
+(4,213,904 bytes, PL ID `44420103`). It passed RTL simulation, lint, firmware
+tests, complete implementation/DRC, and timing at 100 MHz (setup WNS +0.043 ns,
+hold WHS +0.034 ns, zero routing errors). This newly built image still needs to
+be written to QSPI and cold-boot smoke tested; the board's previously verified
+QSPI image has PL ID `44420102` and does not vary bass or strings.
 
 Before starting WaveLens, verify the physical board path by itself:
 

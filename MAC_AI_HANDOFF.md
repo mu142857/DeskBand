@@ -65,9 +65,10 @@ The first application run downloads YOLO-World and CLIP weights. Internet is
 needed for that first run, and macOS must be allowed to use the camera and
 audio output.
 
-The current QSPI contents match the checked-in `BOOT.BIN`. With power off,
-confirm JP5 is on the pair labelled `QSPI`; put JP6 on `USB` if J12 supplies
-power. Connect J12
+The checked-in `BOOT.BIN` has PL ID `44420103`. A board that still reports
+`44420102` contains the preceding image and must be programmed with the new
+file before running this handoff's smoke test. With power off, confirm JP5 is
+on the pair labelled `QSPI`; put JP6 on `USB` if J12 supplies power. Connect J12
 `PROG/UART` to the Mac using a data-capable Micro-USB cable, power on and check
 that the blue `DONE` LED lights. No SD card, Ethernet, Vivado, Vitis or external
 TTL-UART adapter is needed on the Mac.
@@ -80,7 +81,7 @@ ls /dev/cu.usbserial-*
 
 The UART is normally the FTDI `B` channel. If two ports appear and the suffix
 is not clear, run the smoke test against each; the UART port is the one that
-returns `PONG` and ID `44420102`.
+returns `PONG` and ID `44420103`.
 
 From the repository root, prove the board before starting WaveLens:
 
@@ -157,7 +158,8 @@ automatically: hardware chooses a musically bounded density and LFSR-derived
 phase, then places onsets on safe eighth/sixteenth grids. These grids are wider
 than the written patterns, so hardware can add rhythmic notes; the Mac maps new
 onsets to nearby chord-safe pitches or quiet hi-hats. It protects downbeats,
-keeps bass/strings stable, and commits BTN2 grid changes at a bar edge.
+varies all seven tracks including bass and strings, and commits BTN2 grid
+changes at a bar edge.
 
 The Zynq Cortex-A9 bare-metal firmware parses line-oriented UART commands,
 drives those AXI registers, drains the event FIFO and emits `EV`, `CV` and
@@ -194,7 +196,7 @@ to distribute. Other files below `fpga/build/` remain ignored and reproducible.
 Its expected SHA-256 is:
 
 ```
-6d58d4ebe8d79879745ebccd348c1d496fc426708812df4ecae1db099a4164ae
+44d8e603b8ac3c4516b99f09784cfd5e7a92d547ec4638118e88e4f0f401cd12
 ```
 
 It targets the **Zybo Z7-20**, not the Z7-10.
@@ -270,7 +272,7 @@ Expected final output:
 PASS: UART, PL ID, generated bars, sequencer, envelope, and LFO
 ```
 
-The test requires PL ID `44420102`, receives 32 events (the exact opening bar
+The test requires PL ID `44420103`, receives 32 events (the exact opening bar
 plus a generated second bar), checks their track masks against a host mirror of
 the LFSR/math, observes at least three LFO values, and requires
 the track-0 envelope to reach zero. Its `finally` block disables that LFO,
