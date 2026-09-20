@@ -730,19 +730,21 @@ class App:
         a = 0.95 if self.over(self.grid_button, *self.mouse) else 0.75
         heard, want = self.eighths_heard(), self.composer.eighths
         board = self.fpga_bar if self.engine.fpga_mode else None
-        label = "8" if (heard if heard == want else want) else "16"
+        queued = bool(board and board["grid_queued"])
+        target = (not board["eighths"]) if queued else want
+        label = "8" if target else "16"
         mask, _, top = ui.text_mask(label, 15, "Medium")
         ty = cy - top - mask.shape[0] / 2
-        if heard == want and not (board and board["grid_queued"]):
+        if heard == target and not queued:
             ui.circle(out, cx, cy, r, a if heard else a - 0.15, thickness=-1 if heard else 1)
             ui.text(out, label, cx, ty, 15, a, "Medium", color=ui.TONE_DARK if heard else ui.WHITE, align="center")
-            hint = "g  ·  8ths only" if heard else "g  ·  8ths + 16ths"
+            hint = f"BTN2  ·  8TH MODE {'ON' if heard else 'OFF'}"
         else:
             blink = 0.5 + 0.5 * math.cos(4 * math.pi * time.time())
             ui.circle(out, cx, cy, r, a - 0.15, thickness=1)
             ui.circle(out, cx, cy, r - 1, 0.08 + 0.37 * blink, thickness=-1)
             ui.text(out, label, cx, ty, 15, a, "Medium", align="center")
-            hint = "8ths on the board  ·  BTN2" if board and board["eighths"] and not want else "g  ·  next bar"
+            hint = f"BTN2  ·  8TH MODE {'ON' if target else 'OFF'} NEXT BAR"
         ui.text(out, hint, cx, cy + self.shutter[2] + 10, 13, 0.55, "Light", align="center")
 
     def why_silent(self, name):

@@ -14,10 +14,11 @@ to the Mac, which schedules them at exact audio-sample offsets with two
 sixteenth notes of lookahead.
 
 The current source revision includes automatic hardware rhythm generation,
-eighth-only/mixed-grid switching, four-tap hardware tempo, and compatibility
-with the shelf/stage software. The final image identified below was programmed
-into QSPI and fully read-back verified on 2026-09-19. Cold-boot and Mac audio
-acceptance remain to be run.
+eighth-only/mixed-grid switching, four-tap hardware tempo, BTN3 hold-to-reset,
+and compatibility with the shelf/stage software. The image identified below
+has passed implementation and timing, was programmed into QSPI, and was fully
+read-back verified on 2026-09-19. Cold-boot and Mac audio acceptance remain to
+be run.
 The Mac-side task is to run that smoke test, then listen to the full Mac/Zybo
 audio loop and make only evidence-driven integration corrections.
 
@@ -64,7 +65,7 @@ The first application run downloads YOLO-World and CLIP weights. Internet is
 needed for that first run, and macOS must be allowed to use the camera and
 audio output.
 
-The current QSPI contents are the final checked-in `BOOT.BIN`. With power off,
+The current QSPI contents match the checked-in `BOOT.BIN`. With power off,
 confirm JP5 is on the pair labelled `QSPI`; put JP6 on `USB` if J12 supplies
 power. Connect J12
 `PROG/UART` to the Mac using a data-capable Micro-USB cable, power on and check
@@ -193,7 +194,7 @@ to distribute. Other files below `fpga/build/` remain ignored and reproducible.
 Its expected SHA-256 is:
 
 ```
-482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427
+6d58d4ebe8d79879745ebccd348c1d496fc426708812df4ecae1db099a4164ae
 ```
 
 It targets the **Zybo Z7-20**, not the Z7-10.
@@ -318,7 +319,8 @@ Physical controls:
   onsets; the queued change commits on the next bar.
 - BTN3: tap exactly four times at the desired quarter-note pulse. The FPGA
   averages the three intervals, clamps to 60–180 BPM, changes its clock, and
-  sends the BPM to the Mac audio scheduler.
+  sends the BPM to the Mac audio scheduler. Hold BTN3 for 1.5 seconds to clear
+  a partial tap gesture and reset both FPGA and Mac to the default 120 BPM.
 - WaveLens's `p` key, on-screen button, and remote `play` command pause and
   resume the whole band.
 - LEDs: switches while stopped; low four bits of the step while running.
@@ -335,10 +337,12 @@ Record the result of every item rather than changing several layers at once:
 4. BTN0 again returns to the camera and the music keeps looping; a second photo
    of another object adds it to the band.
 5. Verify BTN1 toggles `math on/off` and takes musical effect at the next bar.
-6. Press BTN2 and verify the overlay changes from `8th+16th` to `8th` at the
-   next bar; press again and verify mixed timing returns.
+6. Press BTN2 and verify the persistent status first shows `8TH MODE · ON
+   NEXT BAR`, then `8TH MODE · ON` at the next bar. Press again and verify
+   the corresponding `OFF NEXT BAR` and `OFF` states.
 7. Tap BTN3 four times at a steady pulse and verify the terminal reports the
    measured BPM, both FPGA and Mac adopt it, and the music remains aligned.
+   Then hold BTN3 for 1.5 seconds and verify both return to 120 BPM.
 8. Spacebar and the on-screen shutter behave like BTN0; music continues after
    retaking the photo.
 9. Change BPM through the existing remote/UI path and verify board events and

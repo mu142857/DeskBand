@@ -66,7 +66,9 @@ BTN3 tap tempo uses the 100 MHz fabric counter. Four presses produce three
 validated intervals; hardware divides their sum by twelve to obtain the
 sixteenth-note period and clamps it to the 60–180 BPM range. Bit 8 of
 `TAP_STATUS` tells firmware to publish the new tempo and is cleared by writing
-one to that bit.
+one to that bit. Holding BTN3 for 150,000,000 fabric cycles (1.5 seconds)
+cancels any partial tap sequence, restores `CYCLES_PER_STEP` to 12,500,000
+(120 BPM), and sets the same applied bit so firmware publishes the reset.
 
 The AXI wrapper must use clock-domain crossing FIFOs if its AXI clock differs
 from the timing core clock. The first implementation should use one shared

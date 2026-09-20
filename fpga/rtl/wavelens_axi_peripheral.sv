@@ -13,7 +13,8 @@ module wavelens_axi_peripheral #(
     parameter int unsigned TAP_MIN_INTERVAL_CYCLES = 20_000_000,
     parameter int unsigned TAP_MAX_INTERVAL_CYCLES = 200_000_000,
     parameter int unsigned TAP_MIN_STEP_CYCLES = 8_333_333,
-    parameter int unsigned TAP_MAX_STEP_CYCLES = 25_000_000
+    parameter int unsigned TAP_MAX_STEP_CYCLES = 25_000_000,
+    parameter int unsigned BUTTON_HOLD_CYCLES = 150_000_000
 ) (
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 S_AXI_ACLK CLK",
        X_INTERFACE_PARAMETER = "XIL_INTERFACENAME S_AXI_ACLK, ASSOCIATED_BUSIF S_AXI, ASSOCIATED_RESET s_axi_aresetn, FREQ_HZ 100000000" *)
@@ -95,6 +96,10 @@ module wavelens_axi_peripheral #(
     localparam logic [31:0] TAP_MAX_INTERVAL = 32'(TAP_MAX_INTERVAL_CYCLES);
     localparam logic [31:0] TAP_STEP_MIN = 32'(TAP_MIN_STEP_CYCLES);
     localparam logic [31:0] TAP_STEP_MAX = 32'(TAP_MAX_STEP_CYCLES);
+    localparam logic [31:0] DEFAULT_CYCLES_PER_STEP = 32'd12_500_000;
+    localparam int unsigned BUTTON_HOLD_COUNTER_WIDTH = $clog2(BUTTON_HOLD_CYCLES + 1);
+    localparam logic [BUTTON_HOLD_COUNTER_WIDTH-1:0] BUTTON_HOLD_LAST =
+        BUTTON_HOLD_COUNTER_WIDTH'(BUTTON_HOLD_CYCLES - 1);
 
     logic rst;
     assign rst = !s_axi_aresetn;
@@ -228,6 +233,8 @@ module wavelens_axi_peripheral #(
     logic tap_divider_done;
     logic [31:0] tap_divider_numerator;
     logic [31:0] tap_divider_quotient;
+    logic [BUTTON_HOLD_COUNTER_WIDTH-1:0] button3_hold_counter;
+    logic button3_hold_applied;
 
     assign tap_interval = tap_cycle_counter - tap_last_cycle;
 
@@ -263,7 +270,7 @@ module wavelens_axi_peripheral #(
             run                  <= 1'b0;
             transport_reset      <= 1'b0;
             variation_enable     <= 1'b1;
-            cycles_per_step      <= 32'd12_500_000;
+            cycles_per_step      <= DEFAULT_CYCLES_PER_STEP;
             request_valid        <= 1'b0;
             requested_mask       <= 7'd0;
             request_quantization <= 2'd0;
@@ -284,6 +291,8 @@ module wavelens_axi_peripheral #(
             tap_applied        <= 1'b0;
             tap_divider_start  <= 1'b0;
             tap_divider_numerator <= 32'd0;
+            button3_hold_counter <= '0;
+            button3_hold_applied <= 1'b0;
             patterns[0]          <= 16'h5551;
             patterns[1]          <= 16'h5555;
             patterns[2]          <= 16'h1041;
@@ -377,6 +386,24 @@ module wavelens_axi_peripheral #(
             if (tap_divider_done) begin
                 cycles_per_step <= clamp_tap_step(tap_divider_quotient);
                 tap_applied <= 1'b1;
+            end
+
+            // Keep four short BTN3 presses as tap tempo, but make a deliberate
+            // hold an unambiguous return to the 120 BPM demo tempo. Reusing the
+            // applied flag makes firmware publish TAP 120 to the Mac as well.
+            if (!button_state[3]) begin
+                button3_hold_counter <= '0;
+                button3_hold_applied <= 1'b0;
+            end else if (!button3_hold_applied) begin
+                if (button3_hold_counter == BUTTON_HOLD_LAST) begin
+                    cycles_per_step <= DEFAULT_CYCLES_PER_STEP;
+                    tap_count <= 2'd0;
+                    tap_interval_sum <= 32'd0;
+                    tap_applied <= 1'b1;
+                    button3_hold_applied <= 1'b1;
+                end else begin
+                    button3_hold_counter <= button3_hold_counter + 1'b1;
+                end
             end
         end
     end

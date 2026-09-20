@@ -646,11 +646,11 @@ python3 tools/remote_sim.py
 
 - PL 端拥有 100 MHz 主时钟、可编程 BPM/十六分音符时钟、七轨 16-step sequencer、事件 FIFO、envelope/LFO、16-bit maximal LFSR、七路无除法 Euclidean/Bresenham generator，以及四击 tap-tempo 计时器。发生器可在安全网格上新增节奏点；Mac 为新增点选择相邻的和弦安全音高，鼓使用轻 hi-hat。下拍保留，bass/strings 固定。
 - Cortex-A9 bare-metal 固件通过 AXI-Lite 控制 PL，并经 UART1/J12 和 Mac 双向通信。Mac 只保留视觉、作曲和音频合成；音符何时触发由 FPGA 决定。
-- BTN0 拍照/重拍；BTN1 切换 Mac Math 模式；BTN2 在下一小节切换 mixed 8th/16th 与 eighth-only；BTN3 按目标四分拍速度敲四次，FPGA 平均三个间隔并把 60–180 BPM 结果同步给 Mac。SW3 不再改变按钮含义。运行时 LED 显示十六步位置。
-- RTL、AXI、固件协议和 Mac 协议测试均已通过；完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过（setup WNS +0.032 ns、hold WHS +0.028 ns、0 unrouted nets），并已生成 4,213,904-byte `fpga/build/BOOT.BIN`。兼容新版 shelf UI 的固件不再在 BTN0/BTN1 上重复修改 transport/mask，因此拍照不会重启音乐小节。
+- BTN0 拍照/重拍；BTN1 切换 Mac Math 模式；BTN2 在下一小节切换 mixed 8th/16th 与 eighth-only；BTN3 按目标四分拍速度敲四次，FPGA 平均三个间隔并把 60–180 BPM 结果同步给 Mac；长按 BTN3 1.5 秒会清除未完成的 tap 并将 FPGA 和 Mac 的所有乐器重置为默认 120 BPM。SW3 不再改变按钮含义。运行时 LED 显示十六步位置。
+- RTL、AXI、固件协议和 Mac 协议测试均已通过；包含 BTN3 长按复位的完整 Zybo implementation 在 100 MHz 下 timing/DRC 通过（setup WNS +0.152 ns、hold WHS +0.016 ns、0 unrouted nets），并已生成 4,213,904-byte `fpga/build/BOOT.BIN`。兼容新版 shelf UI 的固件不再在 BTN0/BTN1 上重复修改 transport/mask，因此拍照不会重启音乐小节。
 - **旧版 2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过。
 - 新版 PL ID 是 `44420102`，`tools/zybo_smoke.py` 会检查 32 个 event：第一小节必须等于 base pattern，第二小节必须逐位等于主机镜像的 LFSR/Euclidean 安全网格结果，并继续检查 envelope/LFO。
-- 新版 `BOOT.BIN` SHA-256：`482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427`。2026-09-19 已写入 Zybo 的 16 MiB Winbond QSPI，全部 4,213,904 bytes 逐块回读验证成功；烧写工具同时报告当前 boot mode 为 QSPI。
+- 当前仓库新版 `BOOT.BIN` SHA-256：`6d58d4ebe8d79879745ebccd348c1d496fc426708812df4ecae1db099a4164ae`。2026-09-19 已写入 Zybo 的 16 MiB Winbond QSPI，全部 4,213,904 bytes 逐块回读验证成功；烧写时 boot mode 为 JTAG。该镜像包含 BTN3 长按复位功能，仍需断电把 JP5 移到 QSPI 后做冷启动 smoke test。
 - **剩余工作**：断电后确认 JP5 在 QSPI（不要带电移动），冷启动并通过新版 smoke test；拿到 Mac 后运行 WaveLens（会自动启动 `tools/zybo_bridge.py`），检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot

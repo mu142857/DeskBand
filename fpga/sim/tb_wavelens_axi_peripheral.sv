@@ -35,7 +35,8 @@ module tb_wavelens_axi_peripheral;
         .TAP_MIN_INTERVAL_CYCLES(8),
         .TAP_MAX_INTERVAL_CYCLES(100),
         .TAP_MIN_STEP_CYCLES(1),
-        .TAP_MAX_STEP_CYCLES(100)
+        .TAP_MAX_STEP_CYCLES(100),
+        .BUTTON_HOLD_CYCLES(20)
     ) dut (
         .s_axi_aclk(clk),
         .s_axi_aresetn(resetn),
@@ -248,7 +249,20 @@ module tb_wavelens_axi_peripheral;
         axi_write(8'hB8, 32'h0000_0100);
         expect_read(8'hB8, 32'd0);
 
-        $display("PASS: AXI, FIFO, buttons, tap tempo, and core integration");
+        // Holding the same fourth button is a separate gesture: it abandons
+        // any partial tap sequence and restores the global default of 120 BPM.
+        raw_buttons[3] = 1'b1;
+        repeat (32) @(negedge clk);
+        axi_read(8'hB8, value);
+        if (!value[8] || value[1:0] != 0)
+            $fatal(1, "BTN3 hold did not publish a clean default-tempo update");
+        expect_read(8'h08, 32'd12_500_000);
+        raw_buttons[3] = 1'b0;
+        repeat (8) @(negedge clk);
+        axi_write(8'hB8, 32'h0000_0100);
+        expect_read(8'hB8, 32'd0);
+
+        $display("PASS: AXI, FIFO, buttons, tap/hold tempo, and core integration");
         $finish;
     end
 

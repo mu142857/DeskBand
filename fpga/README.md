@@ -39,7 +39,7 @@ The buttons have one fixed meaning; the switches do not change their layer:
 | BTN0 | WaveLens shutter: photo/retake |
 | BTN1 | toggle the Mac's Math melody mode at the next bar |
 | BTN2 | toggle generated rhythm between mixed 8th/16th and eighth-only at the next bar |
-| BTN3 | tap four times at quarter-note speed to set BPM |
+| BTN3 | tap four times at quarter-note speed to set BPM; hold 1.5 seconds to reset to 120 BPM |
 
 Automatic variation is the default base behavior; no button press is needed.
 The FPGA advances a repeatable 16-bit LFSR once per bar and uses parallel
@@ -50,11 +50,15 @@ maps each new onset to a nearby chord-safe note, or a quiet hi-hat for drums.
 Downbeats are protected and bass/strings remain stable.
 
 The bridge sends BTN0/BTN1 to WaveLens as shutter/Math commands. BTN2 is
-committed by the PL at a bar boundary. BTN3 is measured entirely against the
+committed by the PL at a bar boundary. The persistent Mac status bar shows
+`8TH MODE · OFF/ON`, including `ON NEXT BAR` or `OFF NEXT BAR` while a BTN2
+change is queued. BTN3 is measured entirely against the
 100 MHz FPGA clock: four valid taps provide three intervals, their average is
 converted to a sixteenth-note period, clamped to 60–180 BPM, and reported to
-the Mac so its sample scheduler adopts the same tempo. Retaking a photo does
-not restart the musical clock.
+the Mac so its sample scheduler adopts the same tempo. Holding BTN3 for 1.5
+seconds clears any partial tap gesture, restores the 120 BPM hardware divider,
+and reports 120 BPM to the Mac so every instrument resets together. Retaking a
+photo does not restart the musical clock.
 
 While stopped, the four LEDs mirror the switches. While running, they display
 the low four bits of the 16-step position.
@@ -108,9 +112,8 @@ the 115200 8-N-1 serial link (and can also power/program the board).
 
 ### From QSPI (no microSD required)
 
-The final BTN2 grid / BTN3 tap-tempo image was programmed to the Zybo's 16 MiB
-Winbond QSPI and fully read-back verified on 2026-09-19. To reprogram it later,
-use:
+The checked-in BTN2 grid / BTN3 tap-tempo and hold-reset image is programmed in
+the Zybo's 16 MiB Winbond QSPI. To reprogram it later, use:
 
 ```bash
 source /path/to/Vitis/2025.2/settings64.sh
@@ -124,10 +127,11 @@ After programming completes, turn the board **off**, move JP5 to the pair
 labelled `QSPI`, and turn it back on. Never move JP5 while powered. The blue
 `DONE` LED should light and UART should emit `READY DESKBAND 1.0`.
 
-Current image SHA-256: `482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427`
-(4,213,904 bytes, PL ID `44420102`). This exact image was built and verified
-in software, written to QSPI, and fully read-back verified on 2026-09-19.
-Cold-boot smoke testing is still required.
+Checked-in image SHA-256: `6d58d4ebe8d79879745ebccd348c1d496fc426708812df4ecae1db099a4164ae`
+(4,213,904 bytes, PL ID `44420102`). It passed RTL simulation, lint, firmware
+tests, complete implementation/DRC, and timing at 100 MHz. It was written to
+QSPI and every byte was read back successfully on 2026-09-19. Cold-boot smoke
+testing after moving JP5 from JTAG to QSPI is still required.
 
 Before starting WaveLens, verify the physical board path by itself:
 
