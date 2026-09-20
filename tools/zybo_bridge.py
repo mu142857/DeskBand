@@ -17,8 +17,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from deskband.fpga_protocol import (command_mask, command_tempo,
                                     command_variation, parse_fpga_line)
+from deskband import config as C
 
-TRACKS = ("cup", "pen", "bottle", "book", "glasses", "cell phone", "laptop")
+TRACKS = tuple(C.FPGA_TRACKS)
 
 
 def button_effects(pressed):
@@ -29,6 +30,35 @@ def button_effects(pressed):
     if pressed & 2:
         commands.append({"cmd": "math"})
     return commands
+
+
+def transport_effects(parts, current_mask, current_run):
+    """Return serial commands and state for one DeskBand state packet.
+
+    A transport reset clears the PL's pending and applied masks, so a new run
+    must send RESET before MASK. Parts without a hardware track (currently the
+    mouth/baritone sax) still need the FPGA clock, even though their mask is 0.
+    """
+    parts = parts or {}
+    mask = 0
+    for track, name in enumerate(TRACKS):
+        if parts.get(name, {}).get("on"):
+            mask |= 1 << track
+    run = any(part.get("on") for part in parts.values()
+              if isinstance(part, dict))
+
+    commands = []
+    if run != current_run:
+        if run:
+            commands.extend(("RESET", command_mask(mask, "BEAT"), "START"))
+        else:
+            commands.append("STOP")
+        current_mask = mask
+        current_run = run
+    elif run and mask != current_mask:
+        commands.append(command_mask(mask, "BEAT"))
+        current_mask = mask
+    return commands, current_mask, current_run
 
 
 def send_json(sock, address, message):
@@ -133,22 +163,10 @@ def main():
                 bpm = int(round(packet.get("bpm", 120)))
                 if bpm != current_bpm:
                     serial_command(command_tempo(bpm)); current_bpm = bpm
-                # The band lives on DeskBand's shelf and plays in preview too, so the
-                # transport follows "is anything sounding", not the photo mode:
-                # parts[x].on is already false for everything while paused.
-                mask = 0
-                for track, name in enumerate(TRACKS):
-                    if packet.get("parts", {}).get(name, {}).get("on"):
-                        mask |= 1 << track
-                if mask != current_mask:
-                    serial_command(command_mask(mask, "BEAT")); current_mask = mask
-                run = mask != 0
-                if run != current_run:
-                    if run:
-                        serial_command("RESET"); serial_command("START")
-                    else:
-                        serial_command("STOP")
-                    current_run = run
+                commands, current_mask, current_run = transport_effects(
+                    packet.get("parts", {}), current_mask, current_run)
+                for command in commands:
+                    serial_command(command)
             time.sleep(0.001)
     except KeyboardInterrupt:
         print("\n[zybo] stopping")

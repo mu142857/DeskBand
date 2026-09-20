@@ -7,7 +7,7 @@ from deskband.fpga_protocol import (command_envelope, command_lfo, command_mask,
                                     command_pattern, command_tempo,
                                     command_variation, parse_fpga_line)
 from deskband.remote import COMMANDS
-from tools.zybo_bridge import button_effects
+from tools.zybo_bridge import button_effects, transport_effects
 
 
 def test_fpga_protocol():
@@ -30,6 +30,22 @@ def test_fpga_protocol():
     assert button_effects(1) == [{"cmd": "toggle"}]
     assert button_effects(2) == [{"cmd": "math"}]
     assert button_effects(3) == [{"cmd": "toggle"}, {"cmd": "math"}]
+
+    # RESET clears pending/applied masks, so MASK must follow it on startup.
+    commands, mask, run = transport_effects({"cup": {"on": True}}, None, False)
+    assert commands == ["RESET", "MASK 01 BEAT", "START"]
+    assert mask == 1 and run is True
+
+    # The eighth software instrument has no mask bit but still needs FPGA ticks.
+    commands, mask, run = transport_effects({"mouth": {"on": True}}, 0, False)
+    assert commands == ["RESET", "MASK 00 BEAT", "START"]
+    assert mask == 0 and run is True
+
+    commands, mask, run = transport_effects(
+        {"cup": {"on": True}, "pen": {"on": True}}, 1, True)
+    assert commands == ["MASK 03 BEAT"] and mask == 3 and run is True
+    commands, mask, run = transport_effects({"cup": {"on": False}}, mask, run)
+    assert commands == ["STOP"] and run is False
     for malformed in ("", "EV 1 2", "CV " + " ".join(["256"] * 14),
                       "BAR -1 1 01 0 0 1 1234", "WHAT 1"):
         try:
