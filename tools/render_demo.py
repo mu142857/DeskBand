@@ -10,9 +10,9 @@ import soundfile as sf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.music import Composer
-from deskband.synth import Engine
+from wavelens import config as C
+from wavelens.music import Composer
+from wavelens.synth import Engine
 
 # object entering at each phrase (2 bars); None = nothing new
 SCRIPT = [None, "cup", "pen", "bottle", "book", "lamp", "cell phone", "laptop",

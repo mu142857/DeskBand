@@ -2,7 +2,7 @@
 """
 make_bari_sax.py - per-note samples of Logic Pro's Studio Horns "Studio Baritone
 Sax": one mono WAV per sampled root (every whole tone, 36..78, C3 = 60) plus
-keymap.json, the folder deskband/sampler.py reads as the "sax" voice.
+keymap.json, the folder wavelens/sampler.py reads as the "sax" voice.
 
     make_bari_sax.py [--out cache/bari_sax] [--velocity 96] [--seconds 4]
 

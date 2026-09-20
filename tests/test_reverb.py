@@ -7,8 +7,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.fx import Reverb
+from wavelens import config as C
+from wavelens.fx import Reverb
 
 
 def reference(x):

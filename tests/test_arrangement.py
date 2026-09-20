@@ -12,13 +12,13 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.arrangement import build_snapshot
-from deskband.music import Composer, NoteEvent, score_cycle
-from deskband.motifs import MOTIF_VERSION, default_seed
-from deskband.shelf import Shelf
-from deskband.synth import Engine
-from deskband.score_view import score_strip
+from wavelens import config as C
+from wavelens.arrangement import build_snapshot
+from wavelens.music import Composer, NoteEvent, score_cycle
+from wavelens.motifs import MOTIF_VERSION, default_seed
+from wavelens.shelf import Shelf
+from wavelens.synth import Engine
+from wavelens.score_view import score_strip
 
 
 def photo():
@@ -112,7 +112,7 @@ def test_motif_score_repeats_and_matches_live_composer():
     assert short_cycles[0] == short_cycles[1]
 
     # Python's hash randomization must not change the motif in a new process.
-    source = "from deskband.music import Composer, score_cycle; c=Composer(); print(repr(score_cycle(c.active_chords, ['cup'])[:12]))"
+    source = "from wavelens.music import Composer, score_cycle; c=Composer(); print(repr(score_cycle(c.active_chords, ['cup'])[:12]))"
     outputs = []
     for value in ("1", "999"):
         env = dict(os.environ, PYTHONHASHSEED=value)

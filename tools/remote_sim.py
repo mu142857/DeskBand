@@ -1,4 +1,4 @@
-"""A stand-in for DeskBand's remote port: same UDP/JSON protocol, no camera,
+"""A stand-in for WaveLens's remote port: same UDP/JSON protocol, no camera,
 no audio, no dependencies (plain python3 on any OS). Use it to develop a
 badge, an FPGA console, a lamp robot or an AI script without the real app.
 
@@ -38,7 +38,7 @@ def state():
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(("0.0.0.0", PORT))
 sock.settimeout(0.01)
-print(f"DeskBand simulator on udp://0.0.0.0:{PORT}")
+print(f"WaveLens simulator on udp://0.0.0.0:{PORT}")
 while True:
     try:
         data, addr = sock.recvfrom(65535)

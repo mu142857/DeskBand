@@ -2,7 +2,7 @@
 
 // Verilog module-reference shell for Vivado IP Integrator. Vivado 2025.2 does
 // not accept a SystemVerilog file as a block-design module-reference top.
-module deskband_axi_ip (
+module wavelens_axi_ip (
     (* X_INTERFACE_INFO = "xilinx.com:signal:clock:1.0 S_AXI_ACLK CLK",
        X_INTERFACE_PARAMETER = "XIL_INTERFACENAME S_AXI_ACLK, ASSOCIATED_BUSIF S_AXI, ASSOCIATED_RESET s_axi_aresetn, FREQ_HZ 100000000" *)
     input wire s_axi_aclk,
@@ -35,7 +35,7 @@ module deskband_axi_ip (
     output wire [3:0] leds
 );
 
-    deskband_axi_peripheral core (
+    wavelens_axi_peripheral core (
         .s_axi_aclk(s_axi_aclk), .s_axi_aresetn(s_axi_aresetn),
         .s_axi_awaddr(s_axi_awaddr), .s_axi_awvalid(s_axi_awvalid), .s_axi_awready(s_axi_awready),
         .s_axi_wdata(s_axi_wdata), .s_axi_wstrb(s_axi_wstrb), .s_axi_wvalid(s_axi_wvalid), .s_axi_wready(s_axi_wready),

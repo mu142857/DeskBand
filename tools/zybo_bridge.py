@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bridge the Zybo Z7-20 hardware conductor to DeskBand over localhost UDP.
+"""Bridge the Zybo Z7-20 hardware conductor to WaveLens over localhost UDP.
 
 Install pyserial in the Mac virtual environment, then run:
   .venv/bin/pip install pyserial
@@ -15,9 +15,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.fpga_protocol import (LineBuffer, command_mask, command_tempo,
+from wavelens.fpga_protocol import (LineBuffer, command_mask, command_tempo,
                                     command_variation, parse_fpga_line)
-from deskband import config as C
+from wavelens import config as C
 
 TRACKS = tuple(C.FPGA_TRACKS)
 
@@ -33,7 +33,7 @@ def button_effects(pressed):
 
 
 def transport_effects(parts, current_mask, current_run):
-    """Return serial commands and state for one DeskBand state packet.
+    """Return serial commands and state for one WaveLens state packet.
 
     A transport reset clears the PL's pending and applied masks, so a new run
     must send RESET before MASK. Parts without a hardware track (currently the
@@ -101,7 +101,7 @@ def main():
     serial_command(command_variation(True))
     send_json(udp, address, {"cmd": "fpga_mode", "on": True,
                               "lookahead_steps": args.lookahead})
-    print(f"[zybo] {args.port} @ {args.baud}; DeskBand udp://{args.host}:{args.udp_port}")
+    print(f"[zybo] {args.port} @ {args.baud}; WaveLens udp://{args.host}:{args.udp_port}")
     try:
         while True:
             now = time.monotonic()
@@ -149,9 +149,9 @@ def main():
                 elif message and message.kind == "TAP":
                     bpm, = message.fields
                     send_json(udp, address, {"cmd": "bpm", "value": bpm})
-                    # The PL keeps the period it measured (say 119.6 BPM) while DeskBand
+                    # The PL keeps the period it measured (say 119.6 BPM) while WaveLens
                     # takes the rounded figure. Left alone, the two clocks slide apart and
-                    # notes start landing late. State the tempo again from DeskBand's next
+                    # notes start landing late. State the tempo again from WaveLens's next
                     # state packet so the board runs at exactly the BPM the Mac plays.
                     current_bpm = None
                     print(f"[zybo] four-tap tempo={bpm} BPM")

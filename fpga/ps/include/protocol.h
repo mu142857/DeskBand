@@ -1,5 +1,5 @@
-#ifndef DESKBAND_PROTOCOL_H
-#define DESKBAND_PROTOCOL_H
+#ifndef WAVELENS_PROTOCOL_H
+#define WAVELENS_PROTOCOL_H
 
 #include <stdint.h>
 

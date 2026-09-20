@@ -14,8 +14,8 @@ import soundfile as sf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import cloud, sampler, vocals
-from deskband import config as C
+from wavelens import cloud, sampler, vocals
+from wavelens import config as C
 
 SR = C.SAMPLE_RATE
 
@@ -34,7 +34,7 @@ def sung(midi, seconds=3.0, wobble=0.0, sr=44100):
 
 
 def test_vocals():
-    C.VOCAL_DIR = tempfile.mkdtemp(prefix="deskband_vocal_")
+    C.VOCAL_DIR = tempfile.mkdtemp(prefix="wavelens_vocal_")
     os.environ[C.ELEVENLABS_KEY_ENV] = "test"
     takes = iter([sung(63.3), sung(66, wobble=3.0), sung(70.8)])      # steady, wandering, steady
     cloud.sound = lambda prompt, seconds, api_key: next(takes)
@@ -50,7 +50,7 @@ def test_vocals():
     assert list(vocals.load(log=lambda s: None).keys) == [63, 71]
 
     # no key: nothing is made, nothing breaks
-    C.VOCAL_DIR = tempfile.mkdtemp(prefix="deskband_vocal_")
+    C.VOCAL_DIR = tempfile.mkdtemp(prefix="wavelens_vocal_")
     del os.environ[C.ELEVENLABS_KEY_ENV]
     assert vocals.load(log=lambda s: None) is None
 

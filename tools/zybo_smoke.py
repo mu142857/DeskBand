@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Physical Zybo UART/FPGA smoke test, independent of the DeskBand app."""
+"""Physical Zybo UART/FPGA smoke test, independent of the WaveLens app."""
 
 import argparse
 import os
@@ -8,7 +8,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.fpga_protocol import parse_fpga_line
+from wavelens.fpga_protocol import parse_fpga_line
 
 
 PATTERNS = (0x5551, 0x5555, 0x1041, 0x5555, 0x0001, 0x4444, 0x4924)

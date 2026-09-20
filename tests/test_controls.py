@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cv2
 
 import main
-from deskband import config as C
-from deskband.music import Composer, P
+from wavelens import config as C
+from wavelens.music import Composer, P
 from main import App
 
 

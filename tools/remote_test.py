@@ -1,4 +1,4 @@
-"""Talk to a running DeskBand over its UDP port. Examples:
+"""Talk to a running WaveLens over its UDP port. Examples:
 
   remote_test.py ping
   remote_test.py shoot | retake | toggle | silence
@@ -18,7 +18,7 @@ import socket
 import sys
 import time
 
-HOST, PORT = os.environ.get("DESKBAND_HOST", "127.0.0.1"), int(os.environ.get("DESKBAND_PORT", 9000))
+HOST, PORT = os.environ.get("WAVELENS_HOST", "127.0.0.1"), int(os.environ.get("WAVELENS_PORT", 9000))
 
 
 def ask(sock, obj):
@@ -68,4 +68,4 @@ if __name__ == "__main__":
     try:
         main(sys.argv[1:])
     except (socket.timeout, TimeoutError):
-        sys.exit(f"no answer from udp://{HOST}:{PORT}: is DeskBand (or tools/remote_sim.py) running there?")
+        sys.exit(f"no answer from udp://{HOST}:{PORT}: is WaveLens (or tools/remote_sim.py) running there?")

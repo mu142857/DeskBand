@@ -1,4 +1,4 @@
-DeskBand 乐器对照表
+WaveLens 乐器对照表
 ============================================================
 
 速度 120 BPM，每个和弦 1 小节，循环：
@@ -14,7 +14,7 @@ DeskBand 乐器对照表
     摄像头认这些词：cup / mug
     在 Logic 里：Logic 音色库 → 钢琴 → 音乐厅大钢琴
     原始音色库：/Library/Application Support/Logic/EXS Factory Samples/Studio Piano/Concert Grand Piano/
-    程序实际读：/Users/jiamulin/Desktop/DeskBand/cache/concert_grand_soft/   （88 个音，一个音一个 wav，由 tools/exs_extract.py 从上面的打包文件里解出来）
+    程序实际读：/Users/jiamulin/Desktop/WaveLens/cache/concert_grand_soft/   （88 个音，一个音一个 wav，由 tools/exs_extract.py 从上面的打包文件里解出来）
 
 【笔 pen】 → 古典原声吉他 Classical Acoustic Guitar
     摄像头认这些词：pen / pencil / marker
@@ -38,7 +38,7 @@ DeskBand 乐器对照表
     摄像头认这些词：glasses / eyeglasses / sunglasses
     在 Logic 里：Logic 音色库 → 录音室弦乐 → Section Instruments → 国王十字
     原始音色库：/Library/Application Support/Logic/EXS Factory Samples/Studio Strings/   （小提琴1、小提琴2、中提琴、大提琴、低音提琴五个打包文件）
-    程序实际读：/Users/jiamulin/Desktop/DeskBand/cache/kings_cross/   （由 tools/make_kings_cross.py 把五个声部叠在一起解出来）
+    程序实际读：/Users/jiamulin/Desktop/WaveLens/cache/kings_cross/   （由 tools/make_kings_cross.py 把五个声部叠在一起解出来）
 
 【手机 cell phone】 → 铁琴 Glockenspiel
     摄像头认这些词：cell phone
@@ -48,15 +48,15 @@ DeskBand 乐器对照表
 
 【笔记本电脑 / 平板 laptop】 → 柔和电钢琴（程序合成，不用采样）
     摄像头认这些词：laptop / tablet / ipad
-    在 Logic 里：无，代码在 deskband/synth.py 里的 keys 音色
+    在 Logic 里：无，代码在 wavelens/synth.py 里的 keys 音色
     原始音色库：—
     程序实际读：—
 
 【张开的嘴 mouth】 → 录音室上低音萨克斯 Studio Baritone Sax（主旋律）
-    怎么认：MediaPipe 人脸关键点，最大的那张脸张着嘴拍照（deskband/face.py）
+    怎么认：MediaPipe 人脸关键点，最大的那张脸张着嘴拍照（wavelens/face.py）
     在 Logic 里：Logic 音色库 → 录音室管乐 → 单件乐器 → Studio Baritone Sax
     原始音色库：/Library/Application Support/Logic/EXS Factory Samples/Studio Horns/Studio Baritone Sax.caf
-    程序实际读：/Users/jiamulin/Desktop/DeskBand/cache/bari_sax/   （tools/make_bari_sax.py 抽出来的 22 个单音；现在有抽好的）
+    程序实际读：/Users/jiamulin/Desktop/WaveLens/cache/bari_sax/   （tools/make_bari_sax.py 抽出来的 22 个单音；现在有抽好的）
 
 二、想换音色，库里还有这些
 ------------------------------------------------------------
@@ -73,13 +73,13 @@ DeskBand 乐器对照表
 
 怎么换：这些都是 Logic 的打包音色（.exs + .caf）。先用工具解成一个音一个 wav：
     .venv/bin/python tools/exs_extract.py "<上面的 .exs 路径>" "<对应的采样文件夹>" cache/<名字> --velocity 45
-然后把 deskband/config.py 里的 CONCERT_GRAND（钢琴）或 KINGS_CROSS（弦乐）指到那个文件夹。
+然后把 wavelens/config.py 里的 CONCERT_GRAND（钢琴）或 KINGS_CROSS（弦乐）指到那个文件夹。
 --velocity 是力度层：45 左右是弱奏（朦胧），84 左右是中强。
 
 三、效果
 ------------------------------------------------------------
-    大厅混响（deskband/fx.py）：room 0.92，damp 0.45，预延迟 25 ms
+    大厅混响（wavelens/fx.py）：room 0.92，damp 0.45，预延迟 25 ms
     钢琴低通：3000 Hz（调低更闷、更远；0 = 关）
-    背景层：黑胶噪声 关，沙锤/rim 关，低音铺底 关（开关在 deskband/config.py 的 BACKING）
+    背景层：黑胶噪声 关，沙锤/rim 关，低音铺底 关（开关在 wavelens/config.py 的 BACKING）
 
 所有声音都来自这台 Mac 上 Logic Pro / GarageBand 自带的音色库，原地读取，不进代码仓库。

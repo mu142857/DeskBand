@@ -6,8 +6,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband import sampler
+from wavelens import config as C
+from wavelens import sampler
 
 
 def main():

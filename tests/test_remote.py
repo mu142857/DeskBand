@@ -12,10 +12,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
+from wavelens import config as C
 
 C.REMOTE_HOST, C.REMOTE_PORT = "127.0.0.1", 9055          # not the live app's port
-C.SHELF_DIR = tempfile.mkdtemp(prefix="deskband_shelf_")  # nor its saved instruments
+C.SHELF_DIR = tempfile.mkdtemp(prefix="wavelens_shelf_")  # nor its saved instruments
 
 import main as M                                           # noqa: E402
 import soundfile as sf                                     # noqa: E402
@@ -105,7 +105,7 @@ def test_remote():
     assert app.composer.chord_name in ("C", "F#dim")
 
     # one-shot sound: starts on an 8th note, goes through the engine
-    fd, path = tempfile.mkstemp(prefix="deskband_sfx_", suffix=".wav")
+    fd, path = tempfile.mkstemp(prefix="wavelens_sfx_", suffix=".wav")
     os.close(fd)
     sf.write(path, (np.sin(np.arange(4800) / 10) * 0.5).astype(np.float32), 48000)
     before = len(app.engine.voices)

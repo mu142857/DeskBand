@@ -69,9 +69,9 @@ INSTRUMENTS = {
                        detect=["cell phone"], tint="#4FBFA8"),
     "laptop":     dict(label="Soft Keys",        voice="keys",    lo=64, hi=88, level=0.30, send=0.55,
                        detect=["laptop", "tablet", "ipad"], tint="#A3C26A"),
-    # Not an object: an open mouth in the photo (deskband/face.py), so no text prompts.
+    # Not an object: an open mouth in the photo (wavelens/face.py), so no text prompts.
     # The lead line: a baritone sax is bright enough to carry a tune in the tenor register.
-    # (voice="vocal" instead gives the ElevenLabs "ooh" samples of deskband/vocals.py.)
+    # (voice="vocal" instead gives the ElevenLabs "ooh" samples of wavelens/vocals.py.)
     "mouth":      dict(label="Studio Baritone Sax", voice="sax",  lo=45, hi=64, level=0.24, send=0.35,
                        detect=[], tint="#D8BE5A"),
 }
@@ -167,7 +167,7 @@ MAKEUP = {0: 1.5, 1: 1.5, 2: 1.3, 3: 1.15}     # active parts -> gain, else 1.0
 CEILING = 0.89
 LIMITER_RELEASE_S = 0.5
 
-# --- the stage (tab): the band placed by hand on a plane (deskband/stage.py).
+# --- the stage (tab): the band placed by hand on a plane (wavelens/stage.py).
 # Up is loudness: the part's own level in the middle, STAGE_DB at the bottom
 # and top edges. Across is complexity: the middle band (STAGE_AS_WRITTEN) plays
 # the part as written, left of it notes drop away from the weakest beats first,
@@ -175,7 +175,7 @@ LIMITER_RELEASE_S = 0.5
 STAGE_DB = (-24.0, 9.0)
 STAGE_AS_WRITTEN = (0.4, 0.6)
 
-# --- remote control (deskband/remote.py): JSON over UDP for hardware and other programs
+# --- remote control (wavelens/remote.py): JSON over UDP for hardware and other programs
 REMOTE_HOST = "0.0.0.0"        # "127.0.0.1" to accept commands from this Mac only
 REMOTE_PORT = 9000
 REMOTE_STATE_HZ = 20
@@ -184,7 +184,7 @@ REMOTE_STATE_HZ = 20
 # without one the feature is simply off and everything else runs as before.
 GEMINI_KEY_ENV = "GEMINI_API_KEY"
 GEMINI_MODEL = "gemini-3.5-flash"
-GEMINI_PROMPT = ("This photo was taken by DeskBand, an app that turns the things on a desk into "
+GEMINI_PROMPT = ("This photo was taken by WaveLens, an app that turns the things on a desk into "
                  "instruments. In one or two short sentences (30 words at most), describe the main "
                  "object being shown to the camera: what it is, its colour and material, and anything "
                  "distinctive about it. Plain text, no markdown.")

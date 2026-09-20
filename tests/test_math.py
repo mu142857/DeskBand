@@ -6,8 +6,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.music import Composer, Sequence, euclid
+from wavelens import config as C
+from wavelens.music import Composer, Sequence, euclid
 
 MELODIC = ["cup", "pen", "laptop", "cell phone", "mouth"]
 BARS = 64

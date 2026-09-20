@@ -3,9 +3,9 @@ VERILATOR ?= verilator
 # cannot take build/BOOT.BIN with it: that image is in git and rebuilding it
 # needs Vivado and Vitis.
 BUILD_DIR := build/sim
-TIMING_TOP := tb_deskband_timing_core
+TIMING_TOP := tb_wavelens_timing_core
 BUTTON_TOP := tb_button_debounce
-AXI_TOP := tb_deskband_axi_peripheral
+AXI_TOP := tb_wavelens_axi_peripheral
 ENVELOPE_TOP := tb_level_envelope_bank
 LFO_TOP := tb_lfo_bank
 BAR_TOP := tb_bar_variation_engine
@@ -38,7 +38,7 @@ ps-test:
 		ps/src/protocol.c ps/tests/test_protocol.c -o $(BUILD_DIR)/ps_test/test_protocol
 	./$(BUILD_DIR)/ps_test/test_protocol
 
-$(BUILD_DIR)/timing/V$(TIMING_TOP): rtl/deskband_timing_core.sv sim/tb_deskband_timing_core.sv
+$(BUILD_DIR)/timing/V$(TIMING_TOP): rtl/wavelens_timing_core.sv sim/tb_wavelens_timing_core.sv
 	mkdir -p $(BUILD_DIR)/timing
 	$(VERILATOR) --binary --timing --assert -Wall -Wno-fatal \
 		--Mdir $(BUILD_DIR)/timing --top-module $(TIMING_TOP) $^
@@ -63,29 +63,29 @@ $(BUILD_DIR)/bar/V$(BAR_TOP): rtl/bar_variation_engine.sv sim/tb_bar_variation_e
 	$(VERILATOR) --binary --timing --assert -Wall -Wno-fatal \
 		--Mdir $(BUILD_DIR)/bar --top-module $(BAR_TOP) $^
 
-$(BUILD_DIR)/axi/V$(AXI_TOP): rtl/bar_variation_engine.sv rtl/deskband_timing_core.sv rtl/button_debounce.sv rtl/unsigned_divider.sv rtl/level_envelope_bank.sv rtl/lfo_bank.sv rtl/deskband_axi_peripheral.sv sim/tb_deskband_axi_peripheral.sv
+$(BUILD_DIR)/axi/V$(AXI_TOP): rtl/bar_variation_engine.sv rtl/wavelens_timing_core.sv rtl/button_debounce.sv rtl/unsigned_divider.sv rtl/level_envelope_bank.sv rtl/lfo_bank.sv rtl/wavelens_axi_peripheral.sv sim/tb_wavelens_axi_peripheral.sv
 	mkdir -p $(BUILD_DIR)/axi
 	$(VERILATOR) --binary --timing --assert -Wall -Wno-fatal \
 		--Mdir $(BUILD_DIR)/axi --top-module $(AXI_TOP) $^
 
 lint:
-	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module deskband_timing_core rtl/deskband_timing_core.sv
+	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module wavelens_timing_core rtl/wavelens_timing_core.sv
 	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module button_debounce rtl/button_debounce.sv
 	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module level_envelope_bank rtl/unsigned_divider.sv rtl/level_envelope_bank.sv
 	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module lfo_bank rtl/lfo_bank.sv
 	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module bar_variation_engine rtl/bar_variation_engine.sv
-	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module deskband_axi_peripheral \
-		rtl/bar_variation_engine.sv rtl/deskband_timing_core.sv rtl/button_debounce.sv rtl/unsigned_divider.sv rtl/level_envelope_bank.sv rtl/lfo_bank.sv rtl/deskband_axi_peripheral.sv
+	$(VERILATOR) --lint-only -Wall -Wno-fatal --top-module wavelens_axi_peripheral \
+		rtl/bar_variation_engine.sv rtl/wavelens_timing_core.sv rtl/button_debounce.sv rtl/unsigned_divider.sv rtl/level_envelope_bank.sv rtl/lfo_bank.sv rtl/wavelens_axi_peripheral.sv
 
 # Out-of-context synthesis for the exact Zynq-7020 device on the Zybo Z7-20.
 # Run this from a shell where Vivado's settings64.sh has been sourced.
 vivado-check:
-	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs deskband_timing_core
+	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs wavelens_timing_core
 	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs button_debounce
 	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs level_envelope_bank
 	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs lfo_bank
 	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs bar_variation_engine
-	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs deskband_axi_peripheral
+	vivado -mode batch -nolog -nojournal -source vivado/check_rtl.tcl -tclargs wavelens_axi_peripheral
 
 clean:
 	rm -rf $(BUILD_DIR)

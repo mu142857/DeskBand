@@ -1,7 +1,7 @@
-# Out-of-context synthesis check for one DeskBand RTL top.
+# Out-of-context synthesis check for one WaveLens RTL top.
 # Usage:
 #   vivado -mode batch -source fpga/vivado/check_rtl.tcl \
-#          -tclargs deskband_timing_core
+#          -tclargs wavelens_timing_core
 
 if {$argc != 1} {
     error "usage: check_rtl.tcl <top-module>"

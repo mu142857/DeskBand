@@ -10,10 +10,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.music import Composer, weight
-from deskband.shelf import Shelf
-from deskband.stage import Stage, complexity_word, loudness_db, loudness_gain
+from wavelens import config as C
+from wavelens.music import Composer, weight
+from wavelens.shelf import Shelf
+from wavelens.stage import Stage, complexity_word, loudness_db, loudness_gain
 
 BARS = 16
 P = C.STEPS_PER_BAR
@@ -74,7 +74,7 @@ class FakeApp:
 
 
 def stage_of(names):
-    app = FakeApp(tempfile.mkdtemp(prefix="deskband_stage_"), names)
+    app = FakeApp(tempfile.mkdtemp(prefix="wavelens_stage_"), names)
     app.stage = Stage(app, 132, 100, 1124, 584)                          # the App's own plane
     return app.stage
 
@@ -118,7 +118,7 @@ def test_shuffle():
 
 
 def test_placement_saved():
-    folder = tempfile.mkdtemp(prefix="deskband_stage_")
+    folder = tempfile.mkdtemp(prefix="wavelens_stage_")
     frame = np.zeros((720, 1280, 3), np.uint8)
     shelf = Shelf(folder, ["cup", "pen"])
     shelf.add("cup", "cup", 0.8, frame, [500, 200, 700, 400])

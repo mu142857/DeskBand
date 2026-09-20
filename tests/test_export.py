@@ -12,13 +12,13 @@ import soundfile as sf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.arrangement import build_snapshot
-from deskband.clip import ClipPlayer
-from deskband.export import render_loop
-from deskband.music import Composer
-from deskband.shelf import Entry, Shelf
-from deskband.synth import Engine
+from wavelens import config as C
+from wavelens.arrangement import build_snapshot
+from wavelens.clip import ClipPlayer
+from wavelens.export import render_loop
+from wavelens.music import Composer
+from wavelens.shelf import Entry, Shelf
+from wavelens.synth import Engine
 from main import App
 
 
@@ -183,7 +183,7 @@ def test_local_preview_uses_separate_output_stream():
     with tempfile.TemporaryDirectory() as folder:
         clip = render_loop(snapshot(folder, ("cup",)), folder=folder)
         player = ClipPlayer()
-        with patch("deskband.clip.sd.OutputStream", FakeStream):
+        with patch("wavelens.clip.sd.OutputStream", FakeStream):
             player(clip, True)
             assert player.playing
             out = np.empty((256, 2), np.float32)

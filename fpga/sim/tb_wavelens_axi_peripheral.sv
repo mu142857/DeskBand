@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_deskband_axi_peripheral;
+module tb_wavelens_axi_peripheral;
     localparam int FIFO_DEPTH = 4;
 
     logic clk = 1'b0;
@@ -28,7 +28,7 @@ module tb_deskband_axi_peripheral;
 
     always #5 clk <= ~clk;
 
-    deskband_axi_peripheral #(
+    wavelens_axi_peripheral #(
         .FIFO_DEPTH(FIFO_DEPTH),
         .BUTTON_STABLE_CYCLES(4),
         .CONTROL_UPDATE_CYCLES(4),

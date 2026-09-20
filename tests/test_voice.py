@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.synth import SampleVoice
+from wavelens.synth import SampleVoice
 
 
 def play(voice, total, block=1024, first_offset=0):

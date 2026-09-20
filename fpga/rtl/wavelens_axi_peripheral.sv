@@ -1,11 +1,11 @@
 `timescale 1ns/1ps
 
-// AXI4-Lite peripheral wrapping DeskBand's deterministic timing core.
+// AXI4-Lite peripheral wrapping WaveLens's deterministic timing core.
 //
 // This block is intended to connect directly to an AXI GP master from the
 // Zynq-7000 processing system. It deliberately keeps the UART in PS software:
 // the PL owns musical time and buffering, while the ARM owns packet parsing.
-module deskband_axi_peripheral #(
+module wavelens_axi_peripheral #(
     parameter int unsigned AXI_ADDR_WIDTH = 8,
     parameter int unsigned FIFO_DEPTH = 16,
     parameter int unsigned BUTTON_STABLE_CYCLES = 1_000_000,
@@ -423,7 +423,7 @@ module deskband_axi_peripheral #(
     );
 
     /* verilator lint_off PINCONNECTEMPTY */
-    deskband_timing_core timing_core (
+    wavelens_timing_core timing_core (
         .clk(s_axi_aclk),
         .rst(rst),
         .run(run),

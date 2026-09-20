@@ -1,5 +1,5 @@
 """Draw the app icon (dark rounded square, three lit objects on a desk line)
-and build DeskBand.icns with iconutil. Usage: make_icon.py out.icns"""
+and build WaveLens.icns with iconutil. Usage: make_icon.py out.icns"""
 
 import os
 import subprocess
@@ -41,7 +41,7 @@ def draw(size):
 
 def main(out):
     tmp = tempfile.mkdtemp()
-    iconset = os.path.join(tmp, "DeskBand.iconset")
+    iconset = os.path.join(tmp, "WaveLens.iconset")
     os.makedirs(iconset)
     for base in (16, 32, 128, 256, 512):
         draw(base).save(os.path.join(iconset, f"icon_{base}x{base}.png"))
@@ -68,4 +68,4 @@ def main(out):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "DeskBand.icns")
+    main(sys.argv[1] if len(sys.argv) > 1 else "WaveLens.icns")

@@ -1,5 +1,5 @@
-#ifndef DESKBAND_REGS_H
-#define DESKBAND_REGS_H
+#ifndef WAVELENS_REGS_H
+#define WAVELENS_REGS_H
 
 #include <stdint.h>
 

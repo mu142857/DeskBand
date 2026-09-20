@@ -112,7 +112,7 @@ def render_loop(snapshot, progress=lambda message: None, *, folder=None):
     frames = engine.step_len * C.STEPS_PER_BAR * snapshot.bars
     target = os.path.abspath(folder or os.path.join(C.CACHE_DIR, "exports"))
     os.makedirs(target, exist_ok=True)
-    name = f"deskband-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{snapshot.fingerprint[:10]}.wav"
+    name = f"wavelens-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{snapshot.fingerprint[:10]}.wav"
     path = os.path.join(target, name)
     fd, pending = tempfile.mkstemp(prefix=".render-", suffix=".wav", dir=target)
     os.close(fd)

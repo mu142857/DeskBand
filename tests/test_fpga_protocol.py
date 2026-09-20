@@ -3,10 +3,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.fpga_protocol import (LineBuffer, command_envelope, command_lfo, command_mask,
+from wavelens.fpga_protocol import (LineBuffer, command_envelope, command_lfo, command_mask,
                                     command_pattern, command_tempo,
                                     command_variation, parse_fpga_line)
-from deskband.remote import COMMANDS
+from wavelens.remote import COMMANDS
 from tools.zybo_bridge import button_effects, transport_effects
 
 

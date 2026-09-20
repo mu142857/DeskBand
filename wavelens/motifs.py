@@ -9,7 +9,7 @@ MOTIF_VERSION = 1
 
 def default_seed(name, version=MOTIF_VERSION):
     """Deterministic fallback for an unsaved part or an offline score."""
-    key = f"deskband:motif:{version}:{name}".encode("utf-8")
+    key = f"wavelens:motif:{version}:{name}".encode("utf-8")
     return int.from_bytes(hashlib.blake2b(key, digest_size=8).digest(), "big")
 
 

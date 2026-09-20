@@ -11,9 +11,9 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.shelf import Shelf
-from deskband.summary import BACK, BUTTONS, SummaryJobs, card_rect, duration_seconds
+from wavelens import config as C
+from wavelens.shelf import Shelf
+from wavelens.summary import BACK, BUTTONS, SummaryJobs, card_rect, duration_seconds
 from main import App, PREVIEW, SHOW, SUMMARY
 
 

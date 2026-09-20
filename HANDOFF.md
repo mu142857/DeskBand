@@ -1,4 +1,4 @@
-# DeskBand 交接文档
+# WaveLens 交接文档
 
 > 写于 2026-09-19 凌晨（Hack the North 2026，提交截止：周日 08:00）。
 > 读者：Hank（硬件线）、Richard（AI / 音乐 API 线），以及任何接手的人。
@@ -8,15 +8,15 @@
 
 ## 0. 一页纸速览
 
-**DeskBand 是什么**：把桌上的东西举到摄像头前，按一下快门，画面定格，每个被认出的物体变成一件乐器，组成一支永远不跑调的乐队。
+**WaveLens 是什么**：把桌上的东西举到摄像头前，按一下快门，画面定格，每个被认出的物体变成一件乐器，组成一支永远不跑调的乐队。
 
 **30 秒跑起来**（在 Aaron 的 MacBook 上，环境已经全部装好）：
 
 ```bash
-cd ~/Desktop/DeskBand && .venv/bin/python main.py
+cd ~/Desktop/WaveLens && .venv/bin/python main.py
 ```
 
-或者直接双击 `dist/DeskBand.app`。操作：`空格` 拍照 / 重拍，点右侧乐器架上的缩略图（或 `1`–`8`）开关已保存的乐器，`e`（或 **Collections** 按钮）打开收藏总览；总览中点击卡片或按 `1`–`8` 选择加入歌曲的乐器，`b` / `e` / Esc 返回。`p`（或快门右边的按钮）演奏 / 暂停，`m`（或快门左边的 φ 钮）数学旋律模式，`0` 全部取消选择，`s` 存当前画面，`d` 调试面板，`f` 全屏，`q` 退出。标题旁边的小圆点是 Zybo 指示灯：不亮表示没有找到板子，常亮表示已连上但节拍还在 Mac 这边，跟着小节闪表示板子在指挥。总览目前可离线浏览和选曲；渲染与 ElevenLabs 按钮等后续里程碑接入后启用。
+或者直接双击 `dist/WaveLens.app`。操作：`空格` 拍照 / 重拍，点右侧乐器架上的缩略图（或 `1`–`8`）开关已保存的乐器，`e`（或 **Collections** 按钮）打开收藏总览；总览中点击卡片或按 `1`–`8` 选择加入歌曲的乐器，`b` / `e` / Esc 返回。`p`（或快门右边的按钮）演奏 / 暂停，`m`（或快门左边的 φ 钮）数学旋律模式，`0` 全部取消选择，`s` 存当前画面，`d` 调试面板，`f` 全屏，`q` 退出。标题旁边的小圆点是 Zybo 指示灯：不亮表示没有找到板子，常亮表示已连上但节拍还在 Mac 这边，跟着小节闪表示板子在指挥。总览目前可离线浏览和选曲；渲染与 ElevenLabs 按钮等后续里程碑接入后启用。
 
 **现在的状态**
 
@@ -57,15 +57,15 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 
 - 每次拍照，照片里认出的物体会被裁成缩略图存进自己的槽，并且立刻点亮（开始演奏）。同一种物体重拍，新照片覆盖旧的。
 - 乐器架一开始是**空的，什么都不显示**。第一样被认出并拍下的东西排在最上面，之后按拍到的先后往下排（每种乐器最多一格；同一种东西重拍只换图片，位置不变）。
-- **乐队 = 乐器架上点亮的格子**。点一下（或按 `1`–`8`，从上往下数）开关这件乐器，物体不需要还在镜头前。每件乐器的缩略图叠着自己颜色的半透明滤镜（颜色在 `deskband/config.py` 的 `INSTRUMENTS[...]["tint"]`，滤镜在 `ui.tint()`）。点亮的是实的，发声时边框跟着闪；关掉的变成半透明。
+- **乐队 = 乐器架上点亮的格子**。点一下（或按 `1`–`8`，从上往下数）开关这件乐器，物体不需要还在镜头前。每件乐器的缩略图叠着自己颜色的半透明滤镜（颜色在 `wavelens/config.py` 的 `INSTRUMENTS[...]["tint"]`，滤镜在 `ui.tint()`）。点亮的是实的，发声时边框跟着闪；关掉的变成半透明。
 - **演奏 / 暂停键**（快门右边的小圆钮，键盘 `p` 或回车）：总开关。暂停 = 全部静音，但乐器架上的选择保留，再按一下原样恢复。
-- **一个物体只算一次**：同一个东西被读成两个名字（杯子同时被认成 cup 和 bottle）或者同类的大框套小框（整个杯子 + 杯把），只保留置信度最高的那个框；笔放在书上这种“在里面但框差很多”的情况两个都保留。逻辑在 `deskband/vision.py` 的 `same_thing()`。
+- **一个物体只算一次**：同一个东西被读成两个名字（杯子同时被认成 cup 和 bottle）或者同类的大框套小框（整个杯子 + 杯把），只保留置信度最高的那个框；笔放在书上这种“在里面但框差很多”的情况两个都保留。逻辑在 `wavelens/vision.py` 的 `same_thing()`。
 - `0`：全部静音，但保存的东西都还在（换下一位评委时用）。
 - 右键点槽，或鼠标悬停在槽上按 `x`：删除这个槽。
 - 存在 `cache/shelf/`（每个槽一张 jpg + `shelf.json`，`shelf.json` 里的 `description` 是拍下它时 Gemini 写的描述），**重启后还在，选择状态也会恢复**（恢复的乐队等加载完才出声，见 5 的第 1 条）。按 `0` 可清空当前选择。这个目录不进 git（缩略图里可能有人脸）。
-- 代码：`deskband/shelf.py`（存取），`main.py` 的 `draw_dock / slot_at / select / forget / silence`。
+- 代码：`wavelens/shelf.py`（存取），`main.py` 的 `draw_dock / slot_at / select / forget / silence`。
 
-**物体 → 乐器**（定义在 `deskband/config.py` 的 `INSTRUMENTS`）
+**物体 → 乐器**（定义在 `wavelens/config.py` 的 `INSTRUMENTS`）
 
 | 物体（摄像头认的词） | 乐器 | 在乐队里的角色 |
 |---|---|---|
@@ -95,7 +95,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python main.py
 - 对比新旧模型、不同分辨率、不同提示词，只需要一条命令（不需要摄像头）：
 
 ```bash
-cd ~/Desktop/DeskBand
+cd ~/Desktop/WaveLens
 .venv/bin/python tools/eval_prompts.py --model yolov8l-worldv2.pt --imgsz 640 960 1280 --conf 0.03
 ```
 
@@ -107,12 +107,12 @@ cd ~/Desktop/DeskBand
 .venv/bin/python tools/eval_prompts.py --prompts "pen,ballpoint pen,blue pen,pencil,stylus,marker" --conf 0.03
 ```
 
-  输出里带 `*` 的是低于 app 阈值（`DETECT_CONF = 0.25`）的检测。看笔在哪个模型、哪个分辨率、哪个提示词下分数最高，然后改 `deskband/config.py`。
+  输出里带 `*` 的是低于 app 阈值（`DETECT_CONF = 0.25`）的检测。看笔在哪个模型、哪个分辨率、哪个提示词下分数最高，然后改 `wavelens/config.py`。
 - 最可能的原因（按可能性排序，均未验证）：
   1. 大模型对 "pen" 这个词给的置信度整体偏低（不同模型的分数标定不一样），被 0.25 的阈值卡掉 → 降低 `DETECT_CONF`，或给笔换更具体的提示词。
   2. 实时识别从 1280 降到了 960，笔很细，像素不够 → 把 `DETECT_IMGSZ` 调回 1280（大模型 1280 每帧约 195ms，预览时框会更新得慢，但拍照模式可以接受）。
   3. 提示词变多（13 → 16 个）后，相近的词互相分走了检测。
-- **一键回退到之前能认笔的配置**：把 `deskband/config.py` 里改成
+- **一键回退到之前能认笔的配置**：把 `wavelens/config.py` 里改成
 
 ```python
 DETECT_MODEL = "yolov8s-worldv2.pt"
@@ -125,7 +125,7 @@ DETECT_IMGSZ = 1280
 提示词已经加了（`glasses / eyeglasses / sunglasses`，`laptop / tablet / ipad`），链路用假摄像头测过不报错，但识别率需要真人在镜头前试。按 `d` 打开调试面板，第三行会显示触发的词和置信度。
 
 ### 2.3 蓝牙耳机
-Aaron 平时用一副叫 "🌵" 的蓝牙入耳式耳机输出。引擎已经做了适配（按设备原生采样率 48kHz 输出、大缓冲），实测无问题。但**演示时建议用 MacBook 扬声器或有线音箱**：蓝牙有约 180ms 的固有延迟，而且一旦有任何程序打开了耳机的麦克风，macOS 会把它切到通话模式，音质会变得极差，这与本程序无关。程序每次启动时读取系统默认输出设备，**切换输出设备后要重启 DeskBand**。
+Aaron 平时用一副叫 "🌵" 的蓝牙入耳式耳机输出。引擎已经做了适配（按设备原生采样率 48kHz 输出、大缓冲），实测无问题。但**演示时建议用 MacBook 扬声器或有线音箱**：蓝牙有约 180ms 的固有延迟，而且一旦有任何程序打开了耳机的麦克风，macOS 会把它切到通话模式，音质会变得极差，这与本程序无关。程序每次启动时读取系统默认输出设备，**切换输出设备后要重启 WaveLens**。
 
 ---
 
@@ -139,7 +139,7 @@ Aaron 平时用一副叫 "🌵" 的蓝牙入耳式耳机输出。引擎已经做
 | 虚拟环境 | 项目内 `.venv/`（1.2 GB），**不要用系统自带的 Python 3.14**，torch 对它的支持不完整 |
 | Logic Pro | 11.0.1（`/Applications/Logic Pro X.app`），并且下载了完整音色库 |
 | 音色库位置 | `/Library/Application Support/Logic/`、`/Library/Application Support/GarageBand/`、`/Library/Audio/Apple Loops/`（都在内置硬盘；Aaron 的外置盘 `/Volumes/T7` 上有一份同样的拷贝，程序不依赖它） |
-| 仓库 | `https://github.com/mu142857/DeskBand.git`，分支 `main` |
+| 仓库 | `https://github.com/mu142857/WaveLens.git`，分支 `main` |
 
 **Python 包版本**（`.venv/bin/pip list` 实测）
 
@@ -168,8 +168,8 @@ Aaron 平时用一副叫 "🌵" 的蓝牙入耳式耳机输出。引擎已经做
 | `cache/concert_grand/` | 88 MB | 同一架钢琴的中强层（备用） | 同上 |
 | `cache/kings_cross/` | 72 MB | 国王十字弦乐，61 个 wav + keymap.json | `tools/make_kings_cross.py` |
 | `cache/shots/` | 几 MB | 每次拍照存下的原图（**含人脸，勿外传**） | 运行时自动生成 |
-| `cache/deskband.log` | | 从 `.app` 启动时的日志 | 自动 |
-| `dist/DeskBand.app` | | 启动器 | `tools/build_app.sh` |
+| `cache/wavelens.log` | | 从 `.app` 启动时的日志 | 自动 |
+| `dist/WaveLens.app` | | 启动器 | `tools/build_app.sh` |
 
 ---
 
@@ -180,11 +180,11 @@ Aaron 平时用一副叫 "🌵" 的蓝牙入耳式耳机输出。引擎已经做
 前提：Apple Silicon Mac；装了 Logic Pro 或 GarageBand 并下载了音色库（没有的话，采样乐器会**静音但不会崩**，只有 laptop 的合成电钢琴有声音）。
 
 ```bash
-git clone https://github.com/mu142857/DeskBand.git ~/Desktop/DeskBand
+git clone https://github.com/mu142857/WaveLens.git ~/Desktop/WaveLens
 ```
 
 ```bash
-cd ~/Desktop/DeskBand && /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
+cd ~/Desktop/WaveLens && /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 -m venv .venv
 ```
 
 ```bash
@@ -210,8 +210,8 @@ tools/build_app.sh
 ```
 
 注意事项：
-- `dist/DeskBand.app` 里**写死了项目的绝对路径**（编译进了启动器），所以项目文件夹移动或换机器后必须重新跑 `tools/build_app.sh`。它需要 Xcode Command Line Tools 里的 `clang`。
-- 第一次运行会下载模型（共约 460 MB）并弹摄像头权限。从终端运行时权限记在"终端"名下；从 `.app` 运行时记在 "DeskBand" 名下，是两份独立的授权。
+- `dist/WaveLens.app` 里**写死了项目的绝对路径**（编译进了启动器），所以项目文件夹移动或换机器后必须重新跑 `tools/build_app.sh`。它需要 Xcode Command Line Tools 里的 `clang`。
+- 第一次运行会下载模型（共约 460 MB）并弹摄像头权限。从终端运行时权限记在"终端"名下；从 `.app` 运行时记在 "WaveLens" 名下，是两份独立的授权。
 - 路径不在桌面也可以，代码里没有写死 `~/Desktop`，只有 `.app` 启动器写死了构建时的路径。
 
 ---
@@ -244,7 +244,7 @@ tools/build_app.sh
 4. 各声部当前音量（0–1，淡入淡出中会是中间值）。
 5. 已加载的采样集。
 
-**日志**：从终端运行时直接打印；从 `.app` 运行时在 `cache/deskband.log`（每次启动清空）。
+**日志**：从终端运行时直接打印；从 `.app` 运行时在 `cache/wavelens.log`（每次启动清空）。
 
 ---
 
@@ -290,17 +290,17 @@ tools/build_app.sh
 | 文件 | 行数级别 | 职责 |
 |---|---|---|
 | `main.py` | ~330 | App：状态机（preview / show）、拍照、界面绘制、键盘、远程指令处理、`state_dict()` |
-| `deskband/config.py` | ~140 | **所有可调参数**：速度、和弦、物体→乐器表、提示词、音色路径、混响、限幅、识别模型与分辨率、远程端口 |
-| `deskband/vision.py` | ~150 | 摄像头、YOLO-World、提示词→声部映射、重复框合并 |
-| `deskband/music.py` | ~260 | Composer：和弦循环，每种乐器一个 Pattern 类，逐小节生成音符事件 |
-| `deskband/synth.py` | ~330 | Engine：步进时钟、Voice（采样/合成）、声部增益、混响发送、补偿增益、限幅器、一次性音效、变速 |
-| `deskband/sampler.py` | ~180 | 读音频、从文件名解析音高、KeyMap（就近取样 + 变调比率）、各音色集的加载 |
-| `deskband/fx.py` | ~100 | 大厅混响（Freeverb 结构，按 256 采样的子块向量化） |
-| `deskband/ui.py` | ~200 | 绘图原语：双色调底图、保留彩色区域、细线圆角框、SF Pro 文字、毛玻璃卡片、乐器架的颜色滤镜 |
-| `deskband/remote.py` | ~110 | UDP/JSON 远程端口 |
-| `deskband/stage.py` | ~400 | 舞台：响度 × 复杂度平面，拖放、随机落位与随机发牌、math 模式的背景和节奏环、位置 → 引擎增益和作曲复杂度 |
-| `deskband/cloud.py` | ~120 | Gemini 看照片写描述（后台线程，回来后存进货架条目）、ElevenLabs 生成音效；只用 urllib，key 只从环境变量读 |
-| `deskband/vocals.py` | ~110 | 人声采样：ElevenLabs 生成 → 测音高 → 微调到半音 → keymap |
+| `wavelens/config.py` | ~140 | **所有可调参数**：速度、和弦、物体→乐器表、提示词、音色路径、混响、限幅、识别模型与分辨率、远程端口 |
+| `wavelens/vision.py` | ~150 | 摄像头、YOLO-World、提示词→声部映射、重复框合并 |
+| `wavelens/music.py` | ~260 | Composer：和弦循环，每种乐器一个 Pattern 类，逐小节生成音符事件 |
+| `wavelens/synth.py` | ~330 | Engine：步进时钟、Voice（采样/合成）、声部增益、混响发送、补偿增益、限幅器、一次性音效、变速 |
+| `wavelens/sampler.py` | ~180 | 读音频、从文件名解析音高、KeyMap（就近取样 + 变调比率）、各音色集的加载 |
+| `wavelens/fx.py` | ~100 | 大厅混响（Freeverb 结构，按 256 采样的子块向量化） |
+| `wavelens/ui.py` | ~200 | 绘图原语：双色调底图、保留彩色区域、细线圆角框、SF Pro 文字、毛玻璃卡片、乐器架的颜色滤镜 |
+| `wavelens/remote.py` | ~110 | UDP/JSON 远程端口 |
+| `wavelens/stage.py` | ~400 | 舞台：响度 × 复杂度平面，拖放、随机落位与随机发牌、math 模式的背景和节奏环、位置 → 引擎增益和作曲复杂度 |
+| `wavelens/cloud.py` | ~120 | Gemini 看照片写描述（后台线程，回来后存进货架条目）、ElevenLabs 生成音效；只用 urllib，key 只从环境变量读 |
+| `wavelens/vocals.py` | ~110 | 人声采样：ElevenLabs 生成 → 测音高 → 微调到半音 → keymap |
 | `tools/exs_extract.py` | ~770 | 把 Logic 的"打包"采样器乐器（.exs + consolidated .caf）解成一个音一个 wav |
 | `tools/make_kings_cross.py` | | 国王十字：五个弦乐声部叠成合奏 |
 | `tools/render_demo.py` | | **离线把乐队渲染成 wav**，不需要摄像头，调音乐时最常用 |
@@ -309,7 +309,7 @@ tools/build_app.sh
 | `tools/write_instruments_txt.py` | | 重新生成 `INSTRUMENTS.txt` |
 | `tools/remote_test.py` | | 远程端口的命令行客户端 |
 | `tools/remote_sim.py` | | **远程端口模拟器**，零依赖，给硬件和 AI 脚本开发用 |
-| `tools/build_app.sh` + `tools/launcher.c` + `tools/make_icon.py` | | 生成 `dist/DeskBand.app` |
+| `tools/build_app.sh` + `tools/launcher.c` + `tools/make_icon.py` | | 生成 `dist/WaveLens.app` |
 | `tests/test_reverb.py` | | 向量化混响 vs 逐采样参考实现，误差须 < 1e-4 |
 | `tests/test_voice.py` | | 采样播放器跨块播放须与原始采样逐位一致 |
 | `tests/test_remote.py` | | 远程端口端到端：指令、强制开关、变速、换和弦、音效、状态推送 |
@@ -319,7 +319,7 @@ tools/build_app.sh
 **跑全部测试**（不需要摄像头、不出声）：
 
 ```bash
-cd ~/Desktop/DeskBand && .venv/bin/python tests/test_reverb.py && .venv/bin/python tests/test_voice.py && .venv/bin/python tests/test_remote.py
+cd ~/Desktop/WaveLens && .venv/bin/python tests/test_reverb.py && .venv/bin/python tests/test_voice.py && .venv/bin/python tests/test_remote.py
 ```
 
 ### 6.4 音符事件的格式
@@ -361,7 +361,7 @@ cd ~/Desktop/DeskBand && .venv/bin/python tests/test_reverb.py && .venv/bin/pyth
 
 **永不跑调的原理**（学自 Mikutap）：旋律音只从 C 大调五声音阶（C D E G A）里选，这五个音对这四个和弦都成立；落在重音上的音再吸附到"既是和弦音又是五声音阶音"的音上。所以无论随机成什么样都和谐。Mikutap 的另一个做法，所有声音对齐到统一的节拍网格，这里同样采用。
 
-### 7.2 各乐器的演奏型（`deskband/music.py`）
+### 7.2 各乐器的演奏型（`wavelens/music.py`）
 
 - **Piano（cup）**：第 0 步把排列从低到高滚出来（每个音隔 0.22 步 ≈ 27ms，最高音略响），时值拖到下一小节第 6 步，形成踏板式的模糊重叠；45% 的概率在第 10 步弱弱地重复上面两个音。旋律：每轮和弦循环生成一个"动机"（2–3 个八分音符位置 + 一条在五声音阶梯子上的走向），在四个和弦上各陈述一遍，起点锚在离音区中心最近的和弦音上。每次拍到物品（同类重新拍也算）都会生成新的随机种子并保存；新动机从下一轮完整和弦循环开始播放。贝斯和弦乐音符由和弦直接决定，不随随机种子改变。
 - **Keys（laptop）**：排列提高八度，在第 2、5、8、11、14 步（附点八分的间距）上下行，和钢琴的正拍错开。
@@ -370,10 +370,10 @@ cd ~/Desktop/DeskBand && .venv/bin/python tests/test_reverb.py && .venv/bin/pyth
 - **Drums（book）**：底鼓第 0、10 步，rim（30% 概率换成 snap）在第 4、12 步，闭镲每个八分音符，25% 概率第 14 步一个开镲。整体很轻。
 - **Strings（glasses）**：低八度根音 + 排列的最低、中间、最高音，整小节长音，时值 19 步（略拖过小节线，和下一个和弦叠一下，因为国王十字的弓弦起音很慢，约 0.4 秒才到一半音量）。
 - **Bells（cell phone）**：每小节 1–2 个高音区和弦音，只落在第 2、6、10、14 步（反拍）。
-- **Sax（mouth，张嘴拍照，`deskband/face.py`）**：Logic 录音室管乐的 Studio Baritone Sax，`tools/make_bari_sax.py` 抽成 `cache/bari_sax/` 里的 22 个单音。主旋律：单声部、连奏（每个音延续到下一个音），每轮和弦循环用这件乐器的种子生成一个动机（落在哪几个八分音符、走向如何），在每个和弦上重述，重音落在和弦音上；数学模式下每小节重新计算（欧几里得节奏 + 1/f 轮廓）。音域 45–64。
-- **Vocal（现在默认不用；把某件乐器的 voice 改成 `"vocal"` 才启用）**：ElevenLabs 生成的 "ooh" 人声采样（`deskband/vocals.py`）。每小节一到两个长音，落在和弦音上、就近移动，下面再叠一个轻一点的和弦音（两声部）。第一次启动且设了 `ELEVENLABS_API_KEY` 时，用 `config.VOCAL_PROMPTS` 里的每句提示词各生成一条几秒的长音，自动测音高，音高飘的丢掉，稳的微调到最近的半音，存成 `cache/vocal/<midi>.wav + keymap.json`，之后就和其他采样乐器一样按和弦变调播放。想重新生成就删掉 `cache/vocal/`，或运行 `.venv/bin/python -m deskband.vocals`。没有 key 时这件乐器不出声，其他一切照常。
+- **Sax（mouth，张嘴拍照，`wavelens/face.py`）**：Logic 录音室管乐的 Studio Baritone Sax，`tools/make_bari_sax.py` 抽成 `cache/bari_sax/` 里的 22 个单音。主旋律：单声部、连奏（每个音延续到下一个音），每轮和弦循环用这件乐器的种子生成一个动机（落在哪几个八分音符、走向如何），在每个和弦上重述，重音落在和弦音上；数学模式下每小节重新计算（欧几里得节奏 + 1/f 轮廓）。音域 45–64。
+- **Vocal（现在默认不用；把某件乐器的 voice 改成 `"vocal"` 才启用）**：ElevenLabs 生成的 "ooh" 人声采样（`wavelens/vocals.py`）。每小节一到两个长音，落在和弦音上、就近移动，下面再叠一个轻一点的和弦音（两声部）。第一次启动且设了 `ELEVENLABS_API_KEY` 时，用 `config.VOCAL_PROMPTS` 里的每句提示词各生成一条几秒的长音，自动测音高，音高飘的丢掉，稳的微调到最近的半音，存成 `cache/vocal/<midi>.wav + keymap.json`，之后就和其他采样乐器一样按和弦变调播放。想重新生成就删掉 `cache/vocal/`，或运行 `.venv/bin/python -m wavelens.vocals`。没有 key 时这件乐器不出声，其他一切照常。
 - **数学模式**（`m`，`music.Sequence` 和各声部的 `plan_math`）：钢琴旋律、吉他、电钢琴、钟琴、人声不再重复固定的型，每小节现算，永不循环。节奏用欧几里得节奏（k 个音尽量均匀地铺在一小节里再旋转；E(3,8) 就是 3-3-2），k 和旋转量由混沌区的 logistic 映射 x→r·x·(1−x)（r=`config.LOGISTIC_R`）决定。音高朝一条 1/f 走向（Voss 算法，每一行是一个无理数旋转 frac(n·α)，所以永远不会回到同一个值）以级进为主地移动。音仍然只取五声音阶，强拍落在和弦音上，所以不会跑调。从下一小节线开始生效；贝斯、鼓、弦乐不变。
-- **舞台（stage，`tab`，`deskband/stage.py`）**：每件乐器在平面上的位置决定两件事。**纵轴 = 响度**：在声部自己的 `level` 上再乘一个增益，正中间 0 dB，最下 −24 dB，最上 +9 dB（`config.STAGE_DB`，上下两半各自按 dB 线性），引擎里约 50ms 平滑（`Part.trim`），拖的时候立刻听到。**横轴 = 复杂度**（`Pattern.arrange`，每小节在 `plan`/`plan_math` 之后执行，所以从下一小节线生效）：中间一条（`config.STAGE_AS_WRITTEN`，0.4–0.6）原样演奏；往左按拍位强弱（`music.weight`：正拍 4、3-3-2 的另两个重音 3、四分拍 2、八分 1、十六分 0）从弱到强删音，最左只剩第 0 步，但永远不会删空；往右在空着的八分（弦乐和人声是四分）上加经过音，从前一个音朝后一个音级进，连着加就成了音阶跑动，过了一半还会给部分音加十六分倚音；鼓是加十六分闭镲、重音前的轻 rim、第 6 步底鼓。加的音只取五声音阶（吉他、贝斯、弦乐、人声取和弦音），所以不会跑调。加花用每个声部自己的随机数（`Pattern.orn`），所以放在中间时和原来的演奏一模一样。位置存在 `cache/shelf/shelf.json` 的 `pos` 里，重启后还在；拍照或点乐器架加入、但从没放过位置的乐器，会随机落在平面中间一带（`stage.NEW_BOX`，横 0.2–0.8、纵 0.35–0.65）的一个空位上，不会贴边，也不会压在别人身上（`Stage.free_spot` 随机试点，够不开时才往整个平面找）。`r` 或骰子钮（`Stage.shuffle`）重新发牌：受 math 影响的旋律声部里随机挑一个放到最上面一条（+8 dB 往上），其余旋律声部一律留在中线以下，鼓固定在中间偏上，贝斯和弦乐随便落；横轴也一起随机，所以从下一小节线才听全。
+- **舞台（stage，`tab`，`wavelens/stage.py`）**：每件乐器在平面上的位置决定两件事。**纵轴 = 响度**：在声部自己的 `level` 上再乘一个增益，正中间 0 dB，最下 −24 dB，最上 +9 dB（`config.STAGE_DB`，上下两半各自按 dB 线性），引擎里约 50ms 平滑（`Part.trim`），拖的时候立刻听到。**横轴 = 复杂度**（`Pattern.arrange`，每小节在 `plan`/`plan_math` 之后执行，所以从下一小节线生效）：中间一条（`config.STAGE_AS_WRITTEN`，0.4–0.6）原样演奏；往左按拍位强弱（`music.weight`：正拍 4、3-3-2 的另两个重音 3、四分拍 2、八分 1、十六分 0）从弱到强删音，最左只剩第 0 步，但永远不会删空；往右在空着的八分（弦乐和人声是四分）上加经过音，从前一个音朝后一个音级进，连着加就成了音阶跑动，过了一半还会给部分音加十六分倚音；鼓是加十六分闭镲、重音前的轻 rim、第 6 步底鼓。加的音只取五声音阶（吉他、贝斯、弦乐、人声取和弦音），所以不会跑调。加花用每个声部自己的随机数（`Pattern.orn`），所以放在中间时和原来的演奏一模一样。位置存在 `cache/shelf/shelf.json` 的 `pos` 里，重启后还在；拍照或点乐器架加入、但从没放过位置的乐器，会随机落在平面中间一带（`stage.NEW_BOX`，横 0.2–0.8、纵 0.35–0.65）的一个空位上，不会贴边，也不会压在别人身上（`Stage.free_spot` 随机试点，够不开时才往整个平面找）。`r` 或骰子钮（`Stage.shuffle`）重新发牌：受 math 影响的旋律声部里随机挑一个放到最上面一条（+8 dB 往上），其余旋律声部一律留在中线以下，鼓固定在中间偏上，贝斯和弦乐随便落；横轴也一起随机，所以从下一小节线才听全。
 
   **math 模式下的舞台**：网格换成黄金角点阵（`Stage.field`，隔一条螺旋臂压暗），中间那条标签变成 "as computed"，每个被 math 计算的声部外面多一圈 16 分音符的环：这一小节实际发声的步用乐器颜色点亮并连成多边形，一根指针跟着正在听到的那一步走，所以每小节形状都在变。切换跟着声音走——按下 `m` 到下一小节线之间，φ 钮闪烁、标签显示 `next bar`。UI 读的是 `Engine.bar_now()`（按输出延迟换算出"此刻听到的是哪一小节"）拿到的 `Composer.bar_view` 快照，而不是音频线程正在写的 `Pattern.bar`。
 - **Backing**：可选的背景层（黑胶噪声、沙锤、低音铺底），**默认全关**，因为 Aaron 觉得它"诡异"。开关在 `config.BACKING`。
@@ -450,7 +450,7 @@ Freeverb 结构：每声道 8 个带阻尼的梳状滤波器 + 3 个全通，右
 
 输入分辨率同样关键：摄像头是 1280×720，缩到 640 后一支笔只剩几个像素宽。当前策略是**预览用 960，按快门时对定格帧再跑一次 1280**（约 0.35 秒，正好藏在快门闪白里），两次结果合并。
 
-### 9.3 相关参数（`deskband/config.py`）
+### 9.3 相关参数（`wavelens/config.py`）
 
 ```python
 DETECT_MODEL = "yolov8l-worldv2.pt"            # 找不到这个文件就用下面的备用
@@ -467,7 +467,7 @@ DETECT_CONF = 0.25        # 低于这个分数的检测丢弃
 2. 跑 `tools/eval_prompts.py`（用法见第 2.1 节），对比提示词、阈值、分辨率、模型。
 3. 改 config，重启。
 
-画面默认使用摄像头原始方向，并显示设备提供的完整帧（适合 iPhone 连续互通相机），等比例缩放进窗口，不裁切；如需镜像自拍预览，可将 `deskband/config.py` 中的 `MIRROR_CAMERA` 设为 `True`。识别、显示和保存照片始终使用同一方向的帧。如果系统的视频菜单本身设成 3×，须在 macOS 视频菜单关闭 Center Stage、调回 1× 并选择 iPhone Main 摄像头。
+画面默认使用摄像头原始方向，并显示设备提供的完整帧（适合 iPhone 连续互通相机），等比例缩放进窗口，不裁切；如需镜像自拍预览，可将 `wavelens/config.py` 中的 `MIRROR_CAMERA` 设为 `True`。识别、显示和保存照片始终使用同一方向的帧。如果系统的视频菜单本身设成 3×，须在 macOS 视频菜单关闭 Center Stage、调回 1× 并选择 iPhone Main 摄像头。
 
 ---
 
@@ -475,7 +475,7 @@ DETECT_CONF = 0.25        # 低于这个分数的检测丢弃
 
 ### 10.1 总览
 
-DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0"`，同一局域网内的设备都能连；只想本机可连就改成 `"127.0.0.1"`）。
+WaveLens 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0"`，同一局域网内的设备都能连；只想本机可连就改成 `"127.0.0.1"`）。
 
 - **一个 UDP 包 = 一个 JSON 对象**，UTF-8。
 - 每条指令都会向发送方回一个 JSON。
@@ -496,7 +496,7 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 | `{"cmd":"select","name":"cup","on":true}` | 开关乐器架上一件**已保存**的乐器，等同于点击那个槽。不带 `on`（或 `null`）= 切换。没保存过的会被忽略。**硬件按键选乐器用这个** |
 | `{"cmd":"silence"}` | 乐器架全部关掉，保存的东西不丢（等同于按 `0`） |
 | `{"cmd":"part","name":"cup","on":true}` | **强制**某个声部开/关，不管有没有保存过。`"on": null` = 取消强制，重新听乐器架的。`name` 必须是 `INSTRUMENTS` 的 key：`cup pen bottle book glasses "cell phone" laptop mouth` |
-| `{"cmd":"sfx","file":"/绝对路径.wav","gain":0.6}` | 播放一个声音文件。**会等到下一个八分音符才响**（和 Mikutap 一样，所以永远在拍子上），经过混响和限幅器。支持 wav/aiff/flac 等 libsndfile 能读的格式，最长 20 秒，任意采样率。文件必须在**运行 DeskBand 的那台 Mac 上** |
+| `{"cmd":"sfx","file":"/绝对路径.wav","gain":0.6}` | 播放一个声音文件。**会等到下一个八分音符才响**（和 Mikutap 一样，所以永远在拍子上），经过混响和限幅器。支持 wav/aiff/flac 等 libsndfile 能读的格式，最长 20 秒，任意采样率。文件必须在**运行 WaveLens 的那台 Mac 上** |
 | `{"cmd":"bpm","value":110}` | 改速度，取整；超出 60–180 的按 60 / 180 算，立即生效 |
 | `{"cmd":"tap"}` | 敲击定速的一下，等同于 `t` / BTN3：连续四下（间隔不超过 2 秒）定出速度 |
 | `{"cmd":"grid","eighths":true}` | 节奏网格：只用八分 / 八分 + 十六分，等同于 `g` / BTN2。不带（或 `null`）= 切换，从下一小节生效。状态包里的 `eighths` 是此刻听到的网格 |
@@ -558,7 +558,7 @@ DeskBand 启动后在 **UDP 9000 端口**监听（`config.REMOTE_HOST = "0.0.0.0
 ```python
 import json, socket
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(2)
-ADDR = ("192.168.x.x", 9000)          # 运行 DeskBand 的 Mac 的 IP；本机就写 127.0.0.1
+ADDR = ("192.168.x.x", 9000)          # 运行 WaveLens 的 Mac 的 IP；本机就写 127.0.0.1
 def ask(obj):
     s.sendto(json.dumps(obj).encode(), ADDR)
     return json.loads(s.recvfrom(65535)[0])
@@ -580,7 +580,7 @@ while True:
 .venv/bin/python tools/remote_test.py style styles/descending.json
 ```
 
-其它子命令：`ping / shoot / retake / toggle / silence / state / select cup [on|off] / part cup on|off|auto / sfx 文件 [增益] / bpm 110`。连别的机器：`DESKBAND_HOST=192.168.x.x .venv/bin/python tools/remote_test.py ping`。
+其它子命令：`ping / shoot / retake / toggle / silence / state / select cup [on|off] / part cup on|off|auto / sfx 文件 [增益] / bpm 110`。连别的机器：`WAVELENS_HOST=192.168.x.x .venv/bin/python tools/remote_test.py ping`。
 
 **MicroPython（ESP32 一类带 WiFi 的板子）**
 
@@ -620,7 +620,7 @@ while True:
     if time.time() - last > 5: udp.sendto(b'{"cmd":"subscribe","hz":20}', ADDR); last = time.time()
 ```
 
-### 10.6 模拟器（不需要 DeskBand、不需要 Mac）
+### 10.6 模拟器（不需要 WaveLens、不需要 Mac）
 
 ```bash
 python3 tools/remote_sim.py
@@ -635,7 +635,7 @@ python3 tools/remote_sim.py
 目标：让评委第一眼看到"这是一个有硬件的项目"。优先级：**胸牌 > Zybo > LeLamp**，QNX 不建议做。
 
 ### 11.1 Solana：Best Badge Hack（$2500，单项最高）
-改造 Hack the North 的胸牌。规则明说可以和主项目无关，但做成 DeskBand 的无线小控制器，或者让胸牌的屏幕和灯跟着节拍跳，就正好能串进 demo。
+改造 Hack the North 的胸牌。规则明说可以和主项目无关，但做成 WaveLens 的无线小控制器，或者让胸牌的屏幕和灯跟着节拍跳，就正好能串进 demo。
 - 如果胸牌能联网：直接用第 10.5 节的 MicroPython 示例。按键 → `{"cmd":"toggle"}`；订阅状态 → 用 `beat`、`beat_phase` 让灯卡拍，用 `parts[...].glow` 让每个乐器对应一颗灯，用 `chord` 在屏幕上显示当前和弦。
 - 如果只能走 USB 串口：用第 10.5 节的串口桥。
 - 先确认的事：胸牌是什么芯片、能不能刷固件、有没有 WiFi、有什么外设（屏、LED、按键）。
@@ -651,7 +651,7 @@ python3 tools/remote_sim.py
 - **旧版 2026-09-19 真机验证通过**：Zybo Z7-20 的双向 UART、PL ID、16 个连续 sequencer event、各轨 event mask、envelope endpoint 和 LFO movement 全部通过。
 - 新版 PL ID 是 `44420102`，`tools/zybo_smoke.py` 会检查 32 个 event：第一小节必须等于 base pattern，第二小节必须逐位等于主机镜像的 LFSR/Euclidean 安全网格结果，并继续检查 envelope/LFO。
 - 新版 `BOOT.BIN` SHA-256：`482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa7b82a427`。2026-09-19 已写入 Zybo 的 16 MiB Winbond QSPI，全部 4,213,904 bytes 逐块回读验证成功；烧写工具同时报告当前 boot mode 为 QSPI。
-- **剩余工作**：断电后确认 JP5 在 QSPI（不要带电移动），冷启动并通过新版 smoke test；拿到 Mac 后运行 DeskBand（会自动启动 `tools/zybo_bridge.py`），检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
+- **剩余工作**：断电后确认 JP5 在 QSPI（不要带电移动），冷启动并通过新版 smoke test；拿到 Mac 后运行 WaveLens（会自动启动 `tools/zybo_bridge.py`），检查自动小节变化、两种按钮模式和长时间无 FIFO overflow。J12 板载 FT2232 已是 USB-UART，不需要 TTL 串口模块或网线。接线及命令见 `fpga/README.md`。
 
 ### 11.3 Human Computer Lab：LeLamp / Bracket Bot
 去展台借硬件：让台灯机器人跟着节奏点头、转向正在发声的物体。画面很出效果。先去问一句能不能借到，借到再决定做不做。
@@ -665,13 +665,13 @@ python3 tools/remote_sim.py
 
 ## 12. AI / 音乐 API 线（Richard）
 
-> 已接入 DeskBand 本体：ElevenLabs 人声乐器（mouth 张嘴，见 7.2）和 Gemini 照片描述（定格时显示在标题下面，回来后一并存进货架，Collections 页卡片上还能看到；不影响音乐），key 用环境变量 `ELEVENLABS_API_KEY` / `GEMINI_API_KEY`。下面是最初的分工计划。
+> 已接入 WaveLens 本体：ElevenLabs 人声乐器（mouth 张嘴，见 7.2）和 Gemini 照片描述（定格时显示在标题下面，回来后一并存进货架，Collections 页卡片上还能看到；不影响音乐），key 用环境变量 `ELEVENLABS_API_KEY` / `GEMINI_API_KEY`。下面是最初的分工计划。
 
-优先级：**ElevenLabs > Gemini > OMNI**，Baseten 可选。所有 API key 放环境变量，脚本放 `tools/` 或新建 `integrations/`，不要碰 `deskband/` 里的音频代码，全部通过第 10 节的 UDP 指令接入。
+优先级：**ElevenLabs > Gemini > OMNI**，Baseten 可选。所有 API key 放环境变量，脚本放 `tools/` 或新建 `integrations/`，不要碰 `wavelens/` 里的音频代码，全部通过第 10 节的 UDP 指令接入。
 
 ### 12.1 MLH：ElevenLabs（和音乐最贴合）
 两个方向，可以都做：
-- **按物体生成专属音效**：识别到杯子 → 调 ElevenLabs 的音效生成接口生成一个"叮" → 存成 wav → 发 `{"cmd":"sfx","file":"...","gain":0.5}`。DeskBand 会把它对齐到下一个八分音符、过混响播出来。脚本的触发条件：订阅状态包，发现 `mode` 从 `preview` 变成 `show` 时，读 `detected` 列表，为每个物体播一次。生成有延迟，建议**提前为七种物体各生成几个并缓存**到 `cache/sfx/`，演示时只播不生成。
+- **按物体生成专属音效**：识别到杯子 → 调 ElevenLabs 的音效生成接口生成一个"叮" → 存成 wav → 发 `{"cmd":"sfx","file":"...","gain":0.5}`。WaveLens 会把它对齐到下一个八分音符、过混响播出来。脚本的触发条件：订阅状态包，发现 `mode` 从 `preview` 变成 `show` 时，读 `detected` 列表，为每个物体播一次。生成有延迟，建议**提前为七种物体各生成几个并缓存**到 `cache/sfx/`，演示时只播不生成。
 - **AI 主持人**：用 TTS 报出当前段落（"现在加入的是大提琴……"），同样用 `sfx` 指令播。人声建议 `gain` 0.8 左右，并且挑乐器少的时候播。
 - 限制：`sfx` 是一次性播放，没有音高概念。如果想让生成的"叮"**作为一件有音高的乐器**被作曲器演奏，需要生成一组不同音高的采样，放进一个文件夹，在 `config.SAMPLE_SETS` 里加一项（参考 `bells` 那一项：`dir`、`glob`、`pitch` 文件名音高约定），再把某个物体的 `voice` 指过去。
 
@@ -683,27 +683,27 @@ python3 tools/remote_sim.py
 - 也可以让它顺便给一个 `bpm`（建议限制在 90–130）。
 
 ### 12.3 Huawei：OMNI Live
-要求视觉、音频、语言三种模态都用上，恰好是 DeskBand 本来就有的结构：摄像头、音乐，再加一个语音指令（比如说一句"来点爵士"）。要换成他们的模型 API。
+要求视觉、音频、语言三种模态都用上，恰好是 WaveLens 本来就有的结构：摄像头、音乐，再加一个语音指令（比如说一句"来点爵士"）。要换成他们的模型 API。
 - 最小实现：麦克风 → 他们的语音/多模态接口 → 解析出意图 → 映射成指令。"拍照"→`shoot`；"重来"→`retake`；"快一点/慢一点"→`bpm`；"不要鼓"→`{"cmd":"part","name":"book","on":false}`；"来点爵士"→发一个预先写好的 `styles/jazz.json`。
 - 注意：**如果 Aaron 用蓝牙耳机听，任何程序打开耳机的麦克风都会让耳机音质崩掉**。语音输入请用 MacBook 内置麦克风，并且演示时用扬声器输出。
 
 ### 12.4 Baseten
 把 YOLO-World 推理部署到 Baseten 上。注意延迟，只作备选方案，本地推理继续保留。
-- 接入点只有一个函数：`deskband/vision.py` 的 `Vision.detect(frame, imgsz)`，输入一帧 BGR 图像，返回 `Detection(name, conf, [x0,y0,x1,y1], alias)` 的列表。远端版本可以只用在**拍照时的那一次精识别**（`main.py` 的 `shoot()` 里调用 `self.vision.detect(frame, C.SHOOT_IMGSZ)` 的地方），这样网络延迟藏在快门动画里，预览仍然走本地。
+- 接入点只有一个函数：`wavelens/vision.py` 的 `Vision.detect(frame, imgsz)`，输入一帧 BGR 图像，返回 `Detection(name, conf, [x0,y0,x1,y1], alias)` 的列表。远端版本可以只用在**拍照时的那一次精识别**（`main.py` 的 `shoot()` 里调用 `self.vision.detect(frame, C.SHOOT_IMGSZ)` 的地方），这样网络延迟藏在快门动画里，预览仍然走本地。
 - 它顺便可能解决第 2.1 节的识别问题：云上可以跑 x 尺寸的模型。
 
 ### 12.5 OpenAI
 评审要求讲清楚 Codex 怎么帮助了开发，我们没有用它，讲不出真实的故事，**不建议报**。
 
 ### 12.6 顺手的
-- **MLH：GoDaddy 域名**：注册一个 deskband.xxx，花 5 分钟，谁有空谁做。
+- **MLH：GoDaddy 域名**：注册一个 wavelens.xxx，花 5 分钟，谁有空谁做。
 - **Aramco 新手奖**：如果三个人参加过的黑客松都不超过 1 次，自动有资格参评。
 
 ---
 
 ## 13. Git 与协作约定
 
-- 仓库：`https://github.com/mu142857/DeskBand.git`，分支 `main`。目前的提交都是 Aaron 用 GitHub Desktop 做的。
+- 仓库：`https://github.com/mu142857/WaveLens.git`，分支 `main`。目前的提交都是 Aaron 用 GitHub Desktop 做的。
 - GitHub Desktop 流程：左侧 Changes 勾选文件 → 填 Summary → Commit to main → 顶部 Push origin。如果 Changes 是空的但明明改过文件，看左下角有没有 **Stashed Changes**，点进去 Restore。
 - **每个人用自己的 GitHub 账号提交自己写的部分**。
 - 提交前扫一眼 Changes 列表，不应该出现 `cache/`、`weights/`、`*.pt`、`*.wav`、`dist/`、`.venv/`。如果出现了，说明 `.gitignore` 被改坏了，先修它。单个文件超过 100MB GitHub 会直接拒绝。
@@ -717,14 +717,14 @@ python3 tools/remote_sim.py
 |---|---|---|
 | 首次运行下载模型报 `SSL: CERTIFICATE_VERIFY_FAILED` | python.org 版 Python 不带 CA 证书 | `main.py` 开头已经把 `SSL_CERT_FILE` 指向 certifi；单独跑脚本时手动 `export SSL_CERT_FILE=$PWD/.venv/lib/python3.11/site-packages/certifi/cacert.pem` |
 | 双击 `.app` 一闪就没，日志里 `have 'arm64', need 'x86_64'` | 启动器如果是 shell 脚本，Finder 会用 Rosetta（Intel 模式）启动它，而 venv 里的库只有 arm64 | 已解决：启动器是 `tools/launcher.c` 编译出的 arm64 原生程序。重新 `tools/build_app.sh` |
-| 从 `.app` 启动后窗口里一直 "waiting for camera access"，也不弹权限窗 | ① 摄像头必须在**主线程**打开，macOS 才会弹窗；② 如果 app 的主程序是脚本，系统看到的进程身份是 `/bin/bash`，无法把权限算到 DeskBand 头上 | 两个都已解决（`vision.open_camera()` 在主线程调用；原生启动器 + ad-hoc 签名）。若仍不行：系统设置 → 隐私与安全性 → 摄像头 里打开 DeskBand；或者从终端运行 |
-| `open dist/DeskBand.app` 报 `error -600` | 刚杀掉旧进程，系统还没回收 | 等一两秒再开 |
+| 从 `.app` 启动后窗口里一直 "waiting for camera access"，也不弹权限窗 | ① 摄像头必须在**主线程**打开，macOS 才会弹窗；② 如果 app 的主程序是脚本，系统看到的进程身份是 `/bin/bash`，无法把权限算到 WaveLens 头上 | 两个都已解决（`vision.open_camera()` 在主线程调用；原生启动器 + ad-hoc 签名）。若仍不行：系统设置 → 隐私与安全性 → 摄像头 里打开 WaveLens；或者从终端运行 |
+| `open dist/WaveLens.app` 报 `error -600` | 刚杀掉旧进程，系统还没回收 | 等一两秒再开 |
 | 严重破音，但峰值没超 | **混响延迟线的 bug**：`Delay.read()` 返回了缓冲区的视图，紧接着的 `write()` 覆盖了它，输出在对错两种状态间跳变 | 已解决（`.copy()`）。`tests/test_reverb.py` 专门防它复发。**教训：用 numpy 切片做环形缓冲时，读出来的东西如果之后还要用，必须拷贝** |
 | 破音，且乐器越多越严重 | 总线过载：每个声部单独就接近满幅，叠加后被 `tanh` 硬压 | 已解决（见 7.3）。**教训：量电平要量限幅器之前的，不能只看输出峰值** |
 | 只在蓝牙耳机上有毛刺 | 引擎 44.1kHz、设备 48kHz，PortAudio 在低延迟模式下做实时变采样 | 已解决：`config._device_rate()` 启动时读设备原生采样率；`latency="high"`、块大小 1024 |
 | 蓝牙耳机音质突然变得像电话 | 有程序打开了耳机的麦克风，macOS 切到了通话模式 | 与本程序无关。关掉占用麦克风的程序，或者换扬声器 |
 | 刚启动的头几十毫秒卡一下 | numpy / scipy 首次调用的预热 | 已解决：`Engine.warm_up()` |
-| 改了输出设备后没声音或音调不对 | 采样率在 import 时读一次 | 重启 DeskBand |
+| 改了输出设备后没声音或音调不对 | 采样率在 import 时读一次 | 重启 WaveLens |
 | 某个采样乐器没声音，其它正常 | 这台机器上没有对应的音色库或 `cache/` | 看启动日志里 `[sampler]` 那几行各加载了多少个音；0 个就是没找到。程序会静音该声部而不是崩溃 |
 | 远程端口没反应 | 端口被占用（日志里会有 `remote control disabled`）；或者 macOS 防火墙拦了外部连接；或者 IP 写错 | 先在本机 `tools/remote_test.py ping`；再查防火墙；`config.REMOTE_PORT` 可改 |
 | 某个物体认不出来 | 见第 2.1 和第 9 节 | `s` 存图 → `tools/eval_prompts.py` |
@@ -741,9 +741,9 @@ python3 tools/remote_sim.py
 6. "晃动交互"：最初的设想是拿起物体摇晃 → 该声部变密、变亮。改成拍照模式后物体是定格的，这个交互没有了。可选的替代：定格演奏期间**继续看实时画面**，如果某个物体在实时画面里的移动速度大，就给它的声部加密度和亮度（`Pattern` 需要一个 `energy` 参数；`Vision.last_seen` 里有每个物体最新的框，前后两次的位移除以时间就是速度）。没时间就不做。
 7. README 里的截图 / 演示视频；Devpost 文案。
 8. 演示前检查表：
-   - 输出设备切到扬声器或音箱，**然后**再启动 DeskBand
+   - 输出设备切到扬声器或音箱，**然后**再启动 WaveLens
    - 音量调好；环境光足够；摄像头对着的背景尽量干净
-   - 用 `dist/DeskBand.app` 启动，按 `f` 全屏
+   - 用 `dist/WaveLens.app` 启动，按 `f` 全屏
    - 按 `d` 确认 `xruns 0`、识别帧率正常，再按 `d` 关掉
    - 准备好一套确定能认出来的物体，提前试拍
    - 硬件和 AI 脚本先 `ping` 通

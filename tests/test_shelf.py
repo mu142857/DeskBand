@@ -8,13 +8,13 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband.shelf import Shelf, THUMB, crop_square
+from wavelens.shelf import Shelf, THUMB, crop_square
 
 NAMES = ["cup", "pen", "cell phone"]
 
 
 def test_shelf():
-    folder = tempfile.mkdtemp(prefix="deskband_shelf_")
+    folder = tempfile.mkdtemp(prefix="wavelens_shelf_")
     frame = np.zeros((720, 1280, 3), np.uint8)
     frame[200:400, 500:700] = (40, 160, 220)
 
@@ -48,7 +48,7 @@ def test_shelf():
 def test_description():
     """Gemini's words are filed with the object and survive a restart; the first
     description stays even when the same object is shot again."""
-    folder = tempfile.mkdtemp(prefix="deskband_shelf_")
+    folder = tempfile.mkdtemp(prefix="wavelens_shelf_")
     frame = np.zeros((720, 1280, 3), np.uint8)
     shelf = Shelf(folder, NAMES)
 

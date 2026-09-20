@@ -8,8 +8,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.synth import Engine
+from wavelens import config as C
+from wavelens.synth import Engine
 
 
 class FakeComposer:

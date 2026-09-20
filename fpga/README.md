@@ -1,4 +1,4 @@
-# DeskBand FPGA conductor
+# WaveLens FPGA conductor
 
 The Zybo Z7-20 is the real-time conductor and effects controller. The Mac
 still performs vision, composes pitches/chords, and renders samples, while the
@@ -36,7 +36,7 @@ The buttons have one fixed meaning; the switches do not change their layer:
 
 | Button | Action |
 |---|---|
-| BTN0 | DeskBand shutter: photo/retake |
+| BTN0 | WaveLens shutter: photo/retake |
 | BTN1 | toggle the Mac's Math melody mode at the next bar |
 | BTN2 | toggle generated rhythm between mixed 8th/16th and eighth-only at the next bar |
 | BTN3 | tap four times at quarter-note speed to set BPM |
@@ -49,7 +49,7 @@ than the written patterns, so hardware can create new rhythmic onsets. The Mac
 maps each new onset to a nearby chord-safe note, or a quiet hi-hat for drums.
 Downbeats are protected and bass/strings remain stable.
 
-The bridge sends BTN0/BTN1 to DeskBand as shutter/Math commands. BTN2 is
+The bridge sends BTN0/BTN1 to WaveLens as shutter/Math commands. BTN2 is
 committed by the PL at a bar boundary. BTN3 is measured entirely against the
 100 MHz FPGA clock: four valid taps provide three intervals, their average is
 converted to a sixteenth-note period, clamped to 60–180 BPM, and reported to
@@ -80,7 +80,7 @@ vivado -mode batch -source fpga/vivado/build_project.tcl \
 
 ```bash
 source /path/to/Vitis/2025.2/settings64.sh
-XILINX_VITIS_DATA_DIR=/tmp/deskband-vitis-data \
+XILINX_VITIS_DATA_DIR=/tmp/wavelens-vitis-data \
   vitis -s fpga/vitis/build_firmware.py
 bootgen -arch zynq -image fpga/vitis/boot.bif -o fpga/build/BOOT.BIN -w
 ```
@@ -116,7 +116,7 @@ use:
 source /path/to/Vitis/2025.2/settings64.sh
 program_flash -f fpga/build/BOOT.BIN -offset 0 \
   -flash_type qspi-x4-single \
-  -fsbl fpga/build/vitis_workspace/deskband_platform/zynq_fsbl/build/fsbl.elf \
+  -fsbl fpga/build/vitis_workspace/wavelens_platform/zynq_fsbl/build/fsbl.elf \
   -verify
 ```
 
@@ -129,7 +129,7 @@ Current image SHA-256: `482c6c200a258fe6d55a2ddb43bcf579341402ace83fc039595c37aa
 in software, written to QSPI, and fully read-back verified on 2026-09-19.
 Cold-boot smoke testing is still required.
 
-Before starting DeskBand, verify the physical board path by itself:
+Before starting WaveLens, verify the physical board path by itself:
 
 ```bash
 .venv/bin/pip install pyserial
@@ -148,15 +148,15 @@ transport stopped and restores track 0 to full level.
 .venv/bin/python main.py
 ```
 
-`main.py` (and `dist/DeskBand.app`) finds the board by itself: every two
+`main.py` (and `dist/WaveLens.app`) finds the board by itself: every two
 seconds it sends `PING` to each `/dev/cu.usbserial-*` UART, skipping the
 JTAG half of the FT2232 pair, and starts `tools/zybo_bridge.py` as a child
-process on the port that answers `PONG`. If the board is unplugged, DeskBand
+process on the port that answers `PONG`. If the board is unplugged, WaveLens
 returns to its own clock and keeps looking, so the board can be connected at
 any time. A dot beside the title shows the state at a glance (unlit, steady,
 or beating once a bar while the board conducts), and the debug panel (`d`)
 shows the link and which clock is running. Do not also run the bridge by
-hand while DeskBand is open; two readers would split the serial stream.
+hand while WaveLens is open; two readers would split the serial stream.
 Running it by hand is still useful without the app:
 
 ```bash
@@ -165,7 +165,7 @@ PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 
 The bridge mirrors the Mac's vision-selected tracks and BPM into the FPGA,
 forwards FPGA events/control streams and `BAR` generation telemetry back to
-DeskBand, and renews hardware mode. See [registers.md](docs/registers.md) for
+WaveLens, and renews hardware mode. See [registers.md](docs/registers.md) for
 the PS/PL contract.
 
 At 100 MHz, `cycles_per_step = 100_000_000 * 60 / (BPM * 4)`. At 120 BPM,

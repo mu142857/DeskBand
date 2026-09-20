@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module tb_deskband_timing_core;
+module tb_wavelens_timing_core;
     localparam int NUM_TRACKS = 7;
     localparam int STEPS_PER_BAR = 16;
     localparam logic [1:0] Q_STEP = 2'd0;
@@ -35,7 +35,7 @@ module tb_deskband_timing_core;
             $fatal(1, "beat_index does not match step_index");
     end
 
-    deskband_timing_core #(
+    wavelens_timing_core #(
         .NUM_TRACKS(NUM_TRACKS)
     ) dut (.*);
 

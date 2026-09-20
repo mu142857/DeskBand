@@ -3,7 +3,7 @@ part of the app instead of a second terminal.
 
 The bridge runs as its own process: its serial loop polls every millisecond
 and must not compete with the audio callback for the GIL. If the board is
-unplugged or the bridge exits, DeskBand drops back to its own sequencer and
+unplugged or the bridge exits, WaveLens drops back to its own sequencer and
 this keeps looking, so the board can be plugged in at any time.
 """
 
@@ -28,7 +28,7 @@ def uart_candidates(ports):
 
 
 def probe(serial, port, seconds=1.0):
-    """True if the DeskBand firmware on `port` answers PING."""
+    """True if the WaveLens firmware on `port` answers PING."""
     try:
         with serial.Serial(port, 115200, timeout=0.1) as ser:
             ser.reset_input_buffer()

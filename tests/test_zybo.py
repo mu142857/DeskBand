@@ -5,8 +5,8 @@ import types
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.zybo import probe, uart_candidates
+from wavelens import config as C
+from wavelens.zybo import probe, uart_candidates
 from main import App
 
 

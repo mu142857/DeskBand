@@ -1,10 +1,10 @@
-/* DeskBand.app main executable.
+/* WaveLens.app main executable.
  *
  * A shell script cannot be the bundle's executable: the running process would
- * be /bin/bash, and macOS would not attribute the camera request to DeskBand
+ * be /bin/bash, and macOS would not attribute the camera request to WaveLens
  * (no prompt, no access). This small native program is the app's process; it
- * starts Python as a child and waits, so the child inherits DeskBand as its
- * responsible app and the permission prompt carries DeskBand's name.
+ * starts Python as a child and waits, so the child inherits WaveLens as its
+ * responsible app and the permission prompt carries WaveLens's name.
  *
  * Built by tools/build_app.sh with -DROOT="\"/path/to/project\"".
  */
@@ -26,7 +26,7 @@ extern char **environ;
 int main(void) {
     const char *python = ROOT "/.venv/bin/python";
     const char *script = ROOT "/main.py";
-    const char *logfile = ROOT "/cache/deskband.log";
+    const char *logfile = ROOT "/cache/wavelens.log";
 
     if (chdir(ROOT) != 0) {
         perror("chdir");

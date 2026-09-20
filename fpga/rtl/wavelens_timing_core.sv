@@ -1,12 +1,12 @@
 `timescale 1ns/1ps
 
-// DeskBand's deterministic musical timing core.
+// WaveLens's deterministic musical timing core.
 //
 // `step_index` identifies the next step that will fire.  On each tick the
 // core emits one timestamped, seven-bit event mask and then advances the
 // position. Track patterns and configuration come from the AXI-Lite wrapper
 // driven by the Zynq processing system.
-module deskband_timing_core #(
+module wavelens_timing_core #(
     parameter int unsigned NUM_TRACKS = 7
 ) (
     input  logic clk,

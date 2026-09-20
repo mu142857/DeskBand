@@ -1,4 +1,4 @@
-"""Voices: sung samples for the mouth part (an open mouth, deskband/face.py), made once by ElevenLabs.
+"""Voices: sung samples for the mouth part (an open mouth, wavelens/face.py), made once by ElevenLabs.
 
 Each prompt in config.VOCAL_PROMPTS asks the sound-effects model for one long
 sung note. It comes back at whatever pitch the model chose, so the take is
@@ -8,7 +8,7 @@ is an ordinary keymap folder (<midi>.wav + keymap.json in config.VOCAL_DIR)
 that the sampler plays like any other pitched instrument, so the voices follow
 the chords. Delete the folder to make new ones.
 
-    .venv/bin/python -m deskband.vocals        # make them now (DeskBand also does it on start)
+    .venv/bin/python -m wavelens.vocals        # make them now (WaveLens also does it on start)
 """
 
 import json
@@ -96,7 +96,7 @@ def make(log=print):
 
 def load(log=print):
     """The voices keymap, made first if it is not on disk yet. None when there
-    is no key or no usable take (DeskBand runs on without the voices)."""
+    is no key or no usable take (WaveLens runs on without the voices)."""
     km = sampler.load_keymap_dir("vocal", C.VOCAL_DIR, 8.0)
     if km is None and make(log):
         km = sampler.load_keymap_dir("vocal", C.VOCAL_DIR, 8.0)

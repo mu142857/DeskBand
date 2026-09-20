@@ -1,4 +1,4 @@
-#include "deskband_regs.h"
+#include "wavelens_regs.h"
 #include "protocol.h"
 
 #include "xil_io.h"

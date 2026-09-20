@@ -1,6 +1,6 @@
 """Remote control: a tiny JSON-over-UDP port so hardware (badge, FPGA board,
 lamp robot) and other programs (speech, LLM, sound generation) can drive
-DeskBand and follow its beat without touching its code.
+WaveLens and follow its beat without touching its code.
 
 One UDP datagram = one JSON object. Every command gets a JSON reply to the
 sender. Commands are only queued here; the app's main loop executes them, so

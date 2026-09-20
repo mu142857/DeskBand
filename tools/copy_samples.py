@@ -1,4 +1,4 @@
-"""Copy the factory samples DeskBand uses into samples/, so the band still
+"""Copy the factory samples WaveLens uses into samples/, so the band still
 plays when the disk holding the Logic / GarageBand libraries is unplugged.
 
   python tools/copy_samples.py
@@ -12,7 +12,7 @@ import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from deskband import config as C
+from wavelens import config as C
 
 
 def wanted():

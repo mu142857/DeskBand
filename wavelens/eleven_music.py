@@ -1,4 +1,4 @@
-"""ElevenLabs Music continuation of a rendered DeskBand loop.
+"""ElevenLabs Music continuation of a rendered WaveLens loop.
 
 The worker is called only after a separate UI confirmation. Network access is
 injectable for tests, and neither credentials nor source audio enter job JSON.
@@ -114,7 +114,7 @@ class MusicHTTP:
     """Small urllib adapter; tests supply an object with upload and compose."""
 
     def upload(self, wav_path, api_key):
-        boundary = "deskband-" + uuid.uuid4().hex
+        boundary = "wavelens-" + uuid.uuid4().hex
         body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
                 f"filename=\"{os.path.basename(wav_path)}\"\r\n"
                 "Content-Type: audio/wav\r\n\r\n").encode()
@@ -253,7 +253,7 @@ def continue_song(snapshot, clip, progress=lambda message: None, *, client=None,
                 output.write(audio)
             expected = (intro_ms + plan["chunks"][1]["duration_ms"]) / 1000
             info = _validate_song(pending, expected)
-            name = f"deskband-song-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{clip.fingerprint[:10]}.mp3"
+            name = f"wavelens-song-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}-{clip.fingerprint[:10]}.mp3"
             path = os.path.join(folder, name)
             os.replace(pending, path)
         finally:

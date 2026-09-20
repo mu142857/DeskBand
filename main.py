@@ -1,4 +1,4 @@
-"""DeskBand - put things on the desk, shoot a photo, they become a band."""
+"""WaveLens - put things on the desk, shoot a photo, they become a band."""
 
 import math
 import os
@@ -17,23 +17,23 @@ except ImportError:
 import cv2
 import numpy as np
 
-from deskband import config as C
-from deskband import ui
-from deskband.cloud import Describer
-from deskband.clip import ClipPlayer
-from deskband.eleven_music import continue_song, load_saved_song
-from deskband.export import render_loop
-from deskband.arrangement import build_snapshot
-from deskband.music import Composer
-from deskband.remote import Remote
-from deskband.shelf import Shelf
-from deskband.stage import Stage
-from deskband.summary import SummaryJobs, SummaryView, contains
-from deskband.synth import Engine
-from deskband.vision import Detection, Vision, echoes, merge_duplicates, open_camera
-from deskband.zybo import ZyboLink
+from wavelens import config as C
+from wavelens import ui
+from wavelens.cloud import Describer
+from wavelens.clip import ClipPlayer
+from wavelens.eleven_music import continue_song, load_saved_song
+from wavelens.export import render_loop
+from wavelens.arrangement import build_snapshot
+from wavelens.music import Composer
+from wavelens.remote import Remote
+from wavelens.shelf import Shelf
+from wavelens.stage import Stage
+from wavelens.summary import SummaryJobs, SummaryView, contains
+from wavelens.synth import Engine
+from wavelens.vision import Detection, Vision, echoes, merge_duplicates, open_camera
+from wavelens.zybo import ZyboLink
 
-WINDOW = "DeskBand"
+WINDOW = "WaveLens"
 W, H = 1280, 720
 PREVIEW, SHOW, SUMMARY = "preview", "show", "summary"
 TILE, TILE_GAP, TILE_R = 72, 12, 14            # shelf slots, down the right edge
@@ -959,7 +959,7 @@ class App:
             out[:] = ui.TONE_DARK.astype(np.uint8)
             msg = self.vision.error or "starting camera and model…"
             ui.text(out, msg, W // 2, H // 2 - 10, 18, 0.7, "Light", align="center")
-            ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+            ui.text(out, "WaveLens", 28, 22, 22, 0.9, "Semibold")
             self.draw_zybo_light(out)
             self.draw_tempo(out)
             self.draw_finish_button(out)
@@ -979,7 +979,7 @@ class App:
         else:
             desk = self.draw_preview(out, frame, dets, dt, scale_x, scale_y,
                                      offset_x, offset_y)
-        ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+        ui.text(out, "WaveLens", 28, 22, 22, 0.9, "Semibold")
         self.draw_zybo_light(out)
         self.draw_tempo(out)
         if self.state == PREVIEW:
@@ -1113,7 +1113,7 @@ class App:
                         self.vision.start()
                         camera_ok = True
                     else:
-                        self.vision.error = ("waiting for camera access  ·  allow DeskBand in "
+                        self.vision.error = ("waiting for camera access  ·  allow WaveLens in "
                                              "System Settings › Privacy & Security › Camera")
                         next_try = time.time() + 1.5
                 dt = min(max(t0 - self.t_prev, 1e-3), 0.1)

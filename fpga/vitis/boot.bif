@@ -1,6 +1,6 @@
 the_ROM_image:
 {
-  [bootloader] fpga/build/vitis_workspace/deskband_platform/zynq_fsbl/build/fsbl.elf
-  fpga/build/vivado_project/deskband_zybo.runs/impl_1/system_wrapper.bit
-  fpga/build/vitis_workspace/deskband_firmware/build/deskband_firmware.elf
+  [bootloader] fpga/build/vitis_workspace/wavelens_platform/zynq_fsbl/build/fsbl.elf
+  fpga/build/vivado_project/wavelens_zybo.runs/impl_1/system_wrapper.bit
+  fpga/build/vitis_workspace/wavelens_firmware/build/wavelens_firmware.elf
 }

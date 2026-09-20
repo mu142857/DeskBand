@@ -1,4 +1,4 @@
-# DeskBand ending screen, loop export, and ElevenLabs song roadmap
+# WaveLens ending screen, loop export, and ElevenLabs song roadmap
 
 Status: Milestones 0–2 complete. Milestone 3 code and automated checks complete; subjective speaker listening remains. Milestone 4 code and mocked checks complete; Music API access, source-audio rights, and one paid live rehearsal remain. Milestone 5 documentation, tests, rebuilt app, and local fallback are prepared; the full visual/ElevenLabs rehearsal remains open.
 
@@ -6,8 +6,8 @@ Status: Milestones 0–2 complete. Milestone 3 code and automated checks complet
 
 1. The user photographs objects as today. Each recognized instrument type occupies one persistent shelf slot; a second object of the same type replaces that slot's picture. This is **not** per-physical-object recognition yet.
 2. A new **Finish** button opens an ending screen inside the existing 1280×720 desktop window. It shows every collected shelf entry, including entries currently switched off. Each entry shows its thumbnail, object name, instrument name, and a short visual representation of its actual melody or rhythm. Switched-on entries are marked **In this song**.
-3. The user can adjust which collected entries are included, then choose **Render loop**. DeskBand freezes that selection and the active BPM/chords into a session snapshot, renders one complete chord cycle, and offers playback plus a local WAV file. The default progression has four bars; at 120 BPM its duration is 8 seconds. If a remote `style` command changed the progression length, the UI must show and render the actual cycle length rather than claim it is always four bars.
-4. After rendering, **Make a full song with ElevenLabs** uploads that exact WAV and generates a longer track. The default experience keeps the DeskBand clip unchanged as the intro and asks ElevenLabs Music v2.5 to continue it. The output is saved locally and can be played from the ending screen. This is an explicit, potentially paid network action; no upload starts when the user merely opens the screen.
+3. The user can adjust which collected entries are included, then choose **Render loop**. WaveLens freezes that selection and the active BPM/chords into a session snapshot, renders one complete chord cycle, and offers playback plus a local WAV file. The default progression has four bars; at 120 BPM its duration is 8 seconds. If a remote `style` command changed the progression length, the UI must show and render the actual cycle length rather than claim it is always four bars.
+4. After rendering, **Make a full song with ElevenLabs** uploads that exact WAV and generates a longer track. The default experience keeps the WaveLens clip unchanged as the intro and asks ElevenLabs Music v2.5 to continue it. The output is saved locally and can be played from the ending screen. This is an explicit, potentially paid network action; no upload starts when the user merely opens the screen.
 5. **Back to collecting** returns to the previous camera state with the shelf intact. Changing the selection, BPM, chord progression, or an item's motif invalidates the old render as the *current* song. The previous WAV remains on disk but cannot be sent as if it represents the new selection.
 
 ### Locked screen copy and file contract
@@ -20,12 +20,12 @@ Status: Milestones 0–2 complete. Milestone 3 code and automated checks complet
 
 ### Important current-code facts
 
-- `deskband/config.py` defines four default chords, one bar each, and 120 BPM. `Composer` can also accept a different progression with 1–16 chords through the remote `style` command.
-- `deskband/shelf.py` now persists thumbnails, selected state, stage position, and the random seed from the latest capture in `cache/shelf/shelf.json`. There is one slot per instrument type, not one slot per physical item.
-- `deskband/music.py` uses the saved seed for a repeating standard-mode motif; math mode intentionally keeps evolving. `deskband/arrangement.py` provides a fresh bar-one score with the active chords, BPM, selected parts, stage positions, and math-mode setting. This is a new cycle, not a recording of the one already sounding.
+- `wavelens/config.py` defines four default chords, one bar each, and 120 BPM. `Composer` can also accept a different progression with 1–16 chords through the remote `style` command.
+- `wavelens/shelf.py` now persists thumbnails, selected state, stage position, and the random seed from the latest capture in `cache/shelf/shelf.json`. There is one slot per instrument type, not one slot per physical item.
+- `wavelens/music.py` uses the saved seed for a repeating standard-mode motif; math mode intentionally keeps evolving. `wavelens/arrangement.py` provides a fresh bar-one score with the active chords, BPM, selected parts, stage positions, and math-mode setting. This is a new cycle, not a recording of the one already sounding.
 - The synced app also has a stage view, Gemini captions for the current photo, and optional ElevenLabs-generated vocal samples. Captions are not stored per shelf item, and those vocal samples are separate from the planned full-song continuation.
 - `tools/render_demo.py` exercises offline rendering, but is a scripted demo with hard-coded entries (including an obsolete `lamp`). It should be refactored or used as a reference, not called unchanged from the ending screen.
-- `deskband/synth.py` mixes audio through samples, reverb, and limiter. The live `Engine` and `Composer` are mutable; exporting should use an isolated engine rather than drive the live audio callback from a worker.
+- `wavelens/synth.py` mixes audio through samples, reverb, and limiter. The live `Engine` and `Composer` are mutable; exporting should use an isolated engine rather than drive the live audio callback from a worker.
 
 ## Proposed data contracts
 
@@ -50,9 +50,9 @@ Status: Milestones 0–2 complete. Milestone 3 code and automated checks complet
 
 **Goal:** each card describes the part the user will actually hear in the exported arrangement.
 
-- [x] M1.1 Extend `Shelf.Entry` serialization with a versioned motif seed and instrument key. Migrate existing shelf entries without losing pictures or order (`deskband/shelf.py`).
+- [x] M1.1 Extend `Shelf.Entry` serialization with a versioned motif seed and instrument key. Migrate existing shelf entries without losing pictures or order (`wavelens/shelf.py`).
 - [x] M1.2 Decide whether selection should survive an app restart; for this flow, persist the selected flag and load it before `App.apply_parts()` so a returning user sees the intended band. Provide a clear “select none” action.
-- [x] M1.3 Replace `hash(name)` as the source of musical identity with a fresh random seed on each capture. Keep the latest seed per shelf slot, and define how it is harmonized when the chord loop changes (`deskband/music.py`).
+- [x] M1.3 Replace `hash(name)` as the source of musical identity with a fresh random seed on each capture. Keep the latest seed per shelf slot, and define how it is harmonized when the chord loop changes (`wavelens/music.py`).
 - [x] M1.4 Make each part expose a four-bar note/hit timeline or a compact motif description. For drums, display a beat grid rather than pretending pitched notes exist. Include note, step, duration, and velocity in the underlying data.
 - [x] M1.5 Ensure live playback and offline rendering consume the same saved seed. Re-photographing an item updates its thumbnail and requests a new motif from the next full loop.
 - [x] M1.6 Define and implement an immutable `ArrangementSnapshot` factory from the shelf selection, current `Engine.bpm`, and active `Composer.chords`. Resolve any pending `style` command before freezing the snapshot or explicitly show that it is pending.
@@ -77,7 +77,7 @@ Implementation note: the score and future WAV export describe a **new complete c
 - [x] M2.7 Keep the main OpenCV loop responsive: UI reads job status from a thread-safe queue; no sample loading, file writing, upload, or generation occurs in `render()` or the audio callback.
 - [x] M2.8 Add UI tests for state transitions and hitboxes, plus a manual visual check with 0, 1, 4, and 7 collected items and long labels.
 
-Implementation note: `deskband/summary.py` draws the collection and caches its score strips. `App.current_summary()` rebuilds a snapshot only after the shelf, selection, BPM, chords, stage positions, or math mode changes. `SummaryJobs` receives progress and results from worker threads through a queue. Visual checks covered 0, 1, 4, 7, and 8 items, including a long item name. The disabled action buttons explain that loop rendering arrives in Milestone 3; ElevenLabs follows in Milestone 4.
+Implementation note: `wavelens/summary.py` draws the collection and caches its score strips. `App.current_summary()` rebuilds a snapshot only after the shelf, selection, BPM, chords, stage positions, or math mode changes. `SummaryJobs` receives progress and results from worker threads through a queue. Visual checks covered 0, 1, 4, 7, and 8 items, including a long item name. The disabled action buttons explain that loop rendering arrives in Milestone 3; ElevenLabs follows in Milestone 4.
 
 **Done when:** the user can inspect the collection, choose the band, and return to the camera even with no network or API key.
 
@@ -97,18 +97,18 @@ Implementation note: `deskband/summary.py` draws the collection and caches its s
 
 **Done when:** the WAV and the on-screen item patterns refer to the same arrangement, and a default four-bar export lasts about eight seconds at 120 BPM.
 
-Implementation note: `deskband/export.py` rebuilds the displayed score from the frozen snapshot, verifies the events match, and renders through an isolated `Engine`. Selected channel gains are initialized to full level before the first downbeat, so the live engine's fade-in is not recorded; the offline reverb begins empty and a 20 ms ending fade removes a cut-edge click. `deskband/clip.py` plays the WAV through a separate stream. The live band is muted while the Collected page is open and resumes to its previous play/pause state on Back. Existing vocal samples are required for a headphones export; exporting never generates them. Automated audio, duration, provenance, and UI tests pass. The environment used for these checks exposes no output audio device, so the listening portion of M3.9 must be done on the presentation Mac.
+Implementation note: `wavelens/export.py` rebuilds the displayed score from the frozen snapshot, verifies the events match, and renders through an isolated `Engine`. Selected channel gains are initialized to full level before the first downbeat, so the live engine's fade-in is not recorded; the offline reverb begins empty and a 20 ms ending fade removes a cut-edge click. `wavelens/clip.py` plays the WAV through a separate stream. The live band is muted while the Collected page is open and resumes to its previous play/pause state on Back. Existing vocal samples are required for a headphones export; exporting never generates them. Automated audio, duration, provenance, and UI tests pass. The environment used for these checks exposes no output audio device, so the listening portion of M3.9 must be done on the presentation Mac.
 
 ## Milestone 4 — ElevenLabs full-song continuation
 
 **Goal:** turn the user-approved local loop into a longer song while preserving its provenance.
 
 - [ ] M4.1 Confirm the team's ElevenLabs account has Music API access, available credits, and permission to upload the rendered source audio. Check whether any bundled instrument samples trigger the upload copyright screening; prepare an upload-safe fallback sound palette if needed.
-- [x] M4.2 Build a small integration module, separate from `deskband/synth.py`, with an injectable HTTP client so API calls can be tested without charging credits. Read `ELEVENLABS_API_KEY` only from the environment and show a useful missing-key state.
+- [x] M4.2 Build a small integration module, separate from `wavelens/synth.py`, with an injectable HTTP client so API calls can be tested without charging credits. Read `ELEVENLABS_API_KEY` only from the environment and show a useful missing-key state.
 - [x] M4.3 Require an explicit click after local preview. Display that the WAV will be sent to ElevenLabs and that generation can take time or consume credits.
 - [x] M4.4 Validate the selected WAV exists, matches the current snapshot fingerprint, has a supported format and sensible duration, and is at most the reference limit used by the chosen API path.
 - [x] M4.5 Upload the WAV with the Music Upload API and save the returned `song_id` with the local job. Handle content screening or upload rejection without losing the WAV.
-- [x] M4.6 Submit an explicit `music_v2_5` composition plan: first an audio-reference chunk containing the full DeskBand loop unchanged, then one or more instrumental generation chunks. Apply `conditioning_ref` to the first generated chunk and specify the selected instrument palette, tempo, mood, and high context adherence. Keep the plan short for demo latency.
+- [x] M4.6 Submit an explicit `music_v2_5` composition plan: first an audio-reference chunk containing the full WaveLens loop unchanged, then one or more instrumental generation chunks. Apply `conditioning_ref` to the first generated chunk and specify the selected instrument palette, tempo, mood, and high context adherence. Keep the plan short for demo latency.
 - [x] M4.7 Stream or download the generated audio to a temporary file, validate that it decodes and has the expected duration, then move it atomically to `cache/songs/`. Persist the model, prompt/plan, uploaded `song_id`, source fingerprint, output path, and status without logging secrets.
 - [x] M4.8 Show queued/uploading/generating/saving/done/error states. Keep the UI and local audio usable during network waits. Support retry from the saved WAV; avoid blindly repeating an uncertain, possibly charged compose request.
 - [x] M4.9 Provide play/stop and reveal controls for the full song. Label the retained intro and AI-generated continuation honestly; the generated portion may reinterpret rather than duplicate the original motif.
@@ -116,14 +116,14 @@ Implementation note: `deskband/export.py` rebuilds the displayed score from the 
 
 **Done when:** a fresh local four-bar WAV can be uploaded, heard unchanged at the start of a longer downloaded track, and shown with clear failure states if the service is unavailable.
 
-Implementation note: `deskband/eleven_music.py` validates the current PCM WAV and its SHA-256, uploads only after an explicit in-app confirmation, and uses `music_v2_5` with a kept audio-reference intro plus a conditioned instrumental continuation. It saves MP3 output and resumable job metadata under ignored `cache/songs/`. A second user-confirmed attempt can reuse an uploaded `song_id`; a compose timeout is marked uncertain and never retried automatically. Mocked API, error, retry, source-validation, and UI tests pass. The supplied key is in ignored `cache/elevenlabs_api_key`. On the latest live check, `/v1/user` returned HTTP 200 but reported the account tier as `free`; `/v1/music/plan` returned HTTP 402 (`paid_plan_required`). No audio upload or paid song generation was attempted. M4.1/M4.10 remain open until the account has Music API access and the team establishes upload rights for the source samples.
+Implementation note: `wavelens/eleven_music.py` validates the current PCM WAV and its SHA-256, uploads only after an explicit in-app confirmation, and uses `music_v2_5` with a kept audio-reference intro plus a conditioned instrumental continuation. It saves MP3 output and resumable job metadata under ignored `cache/songs/`. A second user-confirmed attempt can reuse an uploaded `song_id`; a compose timeout is marked uncertain and never retried automatically. Mocked API, error, retry, source-validation, and UI tests pass. The supplied key is in ignored `cache/elevenlabs_api_key`. On the latest live check, `/v1/user` returned HTTP 200 but reported the account tier as `free`; `/v1/music/plan` returned HTTP 402 (`paid_plan_required`). No audio upload or paid song generation was attempted. M4.1/M4.10 remain open until the account has Music API access and the team establishes upload rights for the source samples.
 
 ## Milestone 5 — release and demo verification
 
 - [x] M5.1 Document the new controls, `.venv` dependencies, `ELEVENLABS_API_KEY` setup, local export locations, model choice, and API/network requirements in `README.md` and `DEMO_RUNBOOK.md`.
 - [x] M5.2 Verify `cache/exports/`, `cache/songs/`, shelf photos, API keys, and generated audio remain outside Git; inspect `git status` after a complete session.
 - [x] M5.3 Run the existing reverb, voice, remote, shelf, and FPGA tests. Add only meaningful tests for new snapshot, exporter, UI transitions, and API integration behavior.
-- [ ] M5.4 Rebuild `dist/DeskBand.app`, verify its arm64 launcher/signature, and test the full click path in the app on the presentation Mac with the actual camera and audio output.
+- [ ] M5.4 Rebuild `dist/WaveLens.app`, verify its arm64 launcher/signature, and test the full click path in the app on the presentation Mac with the actual camera and audio output.
 - [ ] M5.5 Do a timed rehearsal: collect 2–4 reliable objects, inspect the summary, render and play the loop, generate and play the full track. Record actual upload/generation times and adjust the demo script.
 - [ ] M5.6 Prepare an offline demo fallback: the local render must work without ElevenLabs, and a previously generated full song should be available if network or credits fail.
 

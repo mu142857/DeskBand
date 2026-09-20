@@ -17,12 +17,12 @@ import soundfile as sf
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from deskband import config as C
-from deskband.clip import ClipPlayer
-from deskband.eleven_music import (MODEL, MusicHTTP, RenderedSong, composition_plan,
+from wavelens import config as C
+from wavelens.clip import ClipPlayer
+from wavelens.eleven_music import (MODEL, MusicHTTP, RenderedSong, composition_plan,
                                   continue_song, load_saved_song, validate_source)
-from deskband.export import render_loop
-from deskband.summary import CANCEL_UPLOAD, CONFIRM_UPLOAD
+from wavelens.export import render_loop
+from wavelens.summary import CANCEL_UPLOAD, CONFIRM_UPLOAD
 
 
 def helper(path, name):
@@ -113,7 +113,7 @@ def test_http_request_construction():
             requests.append((req, timeout))
             return b'{"song_id":"uploaded-123"}' if len(requests) == 1 else b"music bytes"
 
-        with patch("deskband.eleven_music._request", fake_request):
+        with patch("wavelens.eleven_music._request", fake_request):
             client = MusicHTTP()
             assert client.upload(clip.path, "test-secret") == "uploaded-123"
             assert client.compose({"chunks": []}, "test-secret") == b"music bytes"
@@ -129,7 +129,7 @@ def test_http_request_construction():
 def test_http_rejects_invalid_key():
     error = urllib.error.HTTPError("https://api.elevenlabs.io/v1/music/upload", 401,
                                    "Unauthorized", {}, io.BytesIO(b'{"detail":"invalid key"}'))
-    with patch("deskband.eleven_music.urllib.request.urlopen", side_effect=error):
+    with patch("wavelens.eleven_music.urllib.request.urlopen", side_effect=error):
         try:
             MusicHTTP().compose({"chunks": []}, "test-secret")
         except RuntimeError as exc:
@@ -180,7 +180,7 @@ def test_success_and_explicit_retry():
             def close(self):
                 pass
 
-        with patch("deskband.clip.sd.OutputStream", FakeStream):
+        with patch("wavelens.clip.sd.OutputStream", FakeStream):
             player = ClipPlayer()
             player(result, True)
             out = np.zeros((256, 2), np.float32)

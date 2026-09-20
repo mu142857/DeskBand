@@ -363,7 +363,7 @@ class Stage:
         pulse = math.exp(-into / 0.18) if view and app.on else 0.0
         if pulse > 0.02:                                  # the plane's edge lights on each downbeat
             ui.outline(out, self.x0, self.y0, self.x1, self.y1, 16, 0.35 * pulse)
-        ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+        ui.text(out, "WaveLens", 28, 22, 22, 0.9, "Semibold")
         ui.text(out, "drag instruments in from the shelf  ·  up is louder, right is busier",
                 28, 52, 15, 0.5, "Light")
         d = self.drag

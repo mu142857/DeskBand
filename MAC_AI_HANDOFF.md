@@ -1,12 +1,12 @@
-# DeskBand Zybo handoff for the Mac-side AI
+# WaveLens Zybo handoff for the Mac-side AI
 
 Read this file first. It is the source of truth for finishing the physical
-DeskBand demo on a Mac with Hank's Zybo Z7-20. Do not redesign the architecture
+WaveLens demo on a Mac with Hank's Zybo Z7-20. Do not redesign the architecture
 until the baseline acceptance procedure below has been run.
 
 ## Mission and current boundary
 
-DeskBand turns one camera photo into a continuously playing band. The Mac owns
+WaveLens turns one camera photo into a continuously playing band. The Mac owns
 camera vision, composition, sample loading and audio synthesis. The Zybo owns
 the real-time musical clock, seven-track sequencing, quantized physical
 controls, envelopes and LFOs. It sends timestamped events/control values back
@@ -35,14 +35,14 @@ listed below.
 For a new checkout:
 
 ```bash
-git clone https://github.com/mu142857/DeskBand.git
-cd DeskBand
+git clone https://github.com/mu142857/WaveLens.git
+cd WaveLens
 ```
 
 For an existing checkout:
 
 ```bash
-cd /path/to/DeskBand
+cd /path/to/WaveLens
 git fetch origin
 git switch main
 git pull --ff-only origin main
@@ -81,7 +81,7 @@ The UART is normally the FTDI `B` channel. If two ports appear and the suffix
 is not clear, run the smoke test against each; the UART port is the one that
 returns `PONG` and ID `44420102`.
 
-From the repository root, prove the board before starting DeskBand:
+From the repository root, prove the board before starting WaveLens:
 
 ```bash
 PYTHONPATH=. .venv/bin/python tools/zybo_smoke.py /dev/cu.usbserial-XXXXXXXX
@@ -99,7 +99,7 @@ Start vision and audio:
 .venv/bin/python main.py
 ```
 
-DeskBand automatically scans the FTDI ports, probes for `PONG DB01`, and starts
+WaveLens automatically scans the FTDI ports, probes for `PONG DB01`, and starts
 the bridge as a child process. Wait for `[remote] listening on ...:9000`, then
 for `[zybo] board found on ...` and `connected` in the debug overlay. Only if
 automatic detection fails, run the bridge manually in a second terminal:
@@ -108,7 +108,7 @@ automatic detection fails, run the bridge manually in a second terminal:
 PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 ```
 
-The bridge reports the serial device at 115200 baud and DeskBand UDP port
+The bridge reports the serial device at 115200 baud and WaveLens UDP port
 9000. Press Zybo BTN0, the spacebar or the onscreen shutter once to take a
 photo. The detected instruments must then loop continuously without taking
 more photos. Press BTN0 again to return to the camera (the music keeps
@@ -127,7 +127,7 @@ BTN3 taps set BPM.
   FPGA architecture change.
 - The Mac bridge's repeated `fpga_mode` keepalive must remain idempotent. It
   must not clear queued hardware events every four seconds.
-- The transport follows the band, not the photo mode. DeskBand keeps shot
+- The transport follows the band, not the photo mode. WaveLens keeps shot
   instruments on a shelf and the band plays in preview as well, so the bridge
   resets/starts the transport when the first track starts sounding and stops it
   when the band is paused (`play` command, `p`) or empty. The engine
@@ -161,7 +161,7 @@ keeps bass/strings stable, and commits BTN2 grid changes at a bar edge.
 The Zynq Cortex-A9 bare-metal firmware parses line-oriented UART commands,
 drives those AXI registers, drains the event FIFO and emits `EV`, `CV` and
 `BTN` records. The Mac bridge converts those records to localhost UDP commands
-understood by DeskBand.
+understood by WaveLens.
 
 Full implementation results for `xc7z020clg400-1` at 100 MHz:
 
@@ -182,9 +182,9 @@ They come from the board preset and did not cause timing or DRC failure.
 | `fpga/docs/registers.md` | Exact PS/PL register contract |
 | `fpga/rtl/` | Timing core, AXI peripheral, debounce, envelope and LFO RTL |
 | `fpga/ps/src/` | Bare-metal Cortex-A9 firmware |
-| `deskband/fpga_protocol.py` | Dependency-free UART codec |
+| `wavelens/fpga_protocol.py` | Dependency-free UART codec |
 | `tools/zybo_smoke.py` | Board-only physical acceptance test |
-| `tools/zybo_bridge.py` | Production UART-to-DeskBand bridge |
+| `tools/zybo_bridge.py` | Production UART-to-WaveLens bridge |
 | `tests/test_fpga_engine.py` | Mac audio lookahead/gating regression test |
 | `tests/test_fpga_protocol.py` | Mac/firmware protocol codec test |
 
@@ -236,7 +236,7 @@ from the repository root:
 source /home/leech/Xilinx/2025.2/Vitis/settings64.sh
 program_flash -f fpga/build/BOOT.BIN -offset 0 \
   -flash_type qspi-x4-single \
-  -fsbl fpga/build/vitis_workspace/deskband_platform/zynq_fsbl/build/fsbl.elf \
+  -fsbl fpga/build/vitis_workspace/wavelens_platform/zynq_fsbl/build/fsbl.elf \
   -verify
 ```
 
@@ -255,7 +255,7 @@ captures. Missing sample libraries can make individual instruments silent even
 when FPGA integration is correct, so inspect the application's `[sampler]`
 startup lines before blaming UART.
 
-## Phase 1: prove the board without DeskBand
+## Phase 1: prove the board without WaveLens
 
 Do this before opening the camera or audio application:
 
@@ -300,7 +300,7 @@ fallback only:
 PYTHONPATH=. .venv/bin/python tools/zybo_bridge.py /dev/cu.usbserial-XXXXXXXX
 ```
 
-The bridge sends `PING`, `RESET`, `STOP`, subscribes to DeskBand state, mirrors
+The bridge sends `PING`, `RESET`, `STOP`, subscribes to WaveLens state, mirrors
 integer BPM and the seven hardware-backed shelf-selected parts into hardware, then
 forwards events and continuous controls. It renews FPGA mode every four seconds
 without disturbing the event timeline.
@@ -310,7 +310,7 @@ stopped the LEDs mirror them, which is useful as an input/LED sanity check.
 
 Physical controls:
 
-- BTN0: DeskBand shutter. Preview → take photo (its objects join the band);
+- BTN0: WaveLens shutter. Preview → take photo (its objects join the band);
   show → back to the camera. The music keeps playing either way.
 - BTN1: toggle the Mac's Math melody mode; the melodic change begins on the
   next bar because composition is bar-planned.
@@ -319,7 +319,7 @@ Physical controls:
 - BTN3: tap exactly four times at the desired quarter-note pulse. The FPGA
   averages the three intervals, clamps to 60–180 BPM, changes its clock, and
   sends the BPM to the Mac audio scheduler.
-- DeskBand's `p` key, on-screen button, and remote `play` command pause and
+- WaveLens's `p` key, on-screen button, and remote `play` command pause and
   resume the whole band.
 - LEDs: switches while stopped; low four bits of the step while running.
 
@@ -397,7 +397,7 @@ BAR index energy locked_mask_hex fill_active fill_pending enabled random_hex eig
 TAP bpm
 ```
 
-Do not parse these ad hoc; use `deskband/fpga_protocol.py`.
+Do not parse these ad hoc; use `wavelens/fpga_protocol.py`.
 
 ## If a change is necessary
 
@@ -406,7 +406,7 @@ Keep the failure localized:
 - If `zybo_smoke.py` fails, do not modify the audio engine.
 - If it passes but the bridge shows malformed UART, save raw lines and inspect
   `fpga_protocol.py` plus firmware formatting.
-- If events reach DeskBand but audio timing is wrong, inspect
+- If events reach WaveLens but audio timing is wrong, inspect
   `tests/test_fpga_engine.py`, the two-step origin, BPM resynchronization and
   callback offsets before touching RTL.
 - If audio timing is correct but a control sounds weak/strong, tune only the
