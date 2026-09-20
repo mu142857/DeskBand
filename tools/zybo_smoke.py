@@ -99,6 +99,12 @@ def main():
                 yield message
 
     try:
+        # A previous host may have left a partial line in the firmware's buffer
+        # and the transport running; end the line and stop before identifying.
+        ser.write(b"\n")
+        send("STOP")
+        for _ in messages(0.3):
+            pass
         ser.reset_input_buffer()
         send("PING")
         send("ID")
@@ -161,6 +167,7 @@ def main():
         send("LFOOFF 0")
         send("ENV 0 255 0")
         send("STOP")
+        ser.flush()                 # close() discards unsent bytes on macOS
         ser.close()
 
 
