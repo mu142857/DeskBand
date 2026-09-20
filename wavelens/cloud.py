@@ -9,6 +9,7 @@ import base64
 import json
 import os
 import ssl
+import stat
 import threading
 import urllib.error
 import urllib.request
@@ -28,7 +29,26 @@ except ImportError:
 
 
 def key(env):
-    return os.environ.get(env, "").strip() or None
+    value = os.environ.get(env, "").strip()
+    if value:
+        return value
+    if env != C.GEMINI_KEY_ENV:
+        return None
+    # Finder does not inherit shell exports. Read the same private project key
+    # that the user already saved, without changing the system environment.
+    path = os.path.join(C.CACHE_DIR, "gemini_api_key")
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                    or info.st_mode & 0o077 or info.st_size > 256):
+                return None
+            return os.read(fd, 257).decode("ascii").strip() or None
+        finally:
+            os.close(fd)
+    except (OSError, UnicodeError):
+        return None
 
 
 def post(url, headers, body):

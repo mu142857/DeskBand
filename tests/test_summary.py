@@ -12,9 +12,13 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from wavelens import config as C
+from wavelens import cloud, ui
 from wavelens.shelf import Shelf
 from wavelens.summary import BACK, BUTTONS, SummaryJobs, card_rect, duration_seconds
 from main import App, PREVIEW, SHOW, SUMMARY
+
+# These UI tests must never pick up a developer's private Gemini key file.
+C.CACHE_DIR = tempfile.mkdtemp(prefix="wavelens_test_keys_")
 
 
 def make_app(folder, names=()):
@@ -173,10 +177,98 @@ def test_description_is_kept_and_shown():
         assert abs(float(app.render(0.033)[panel].mean()) - float(shown[panel].mean())) > 3
 
 
+def test_existing_items_get_individual_descriptions():
+    original_describe = cloud.describe
+    original_key = os.environ.get(C.GEMINI_KEY_ENV)
+    descriptions = []
+
+    def describe(frame, api_key):
+        descriptions.append(int(frame[0, 0, 0]))
+        return f"Saved object shade {descriptions[-1]}"
+
+    try:
+        os.environ[C.GEMINI_KEY_ENV] = "test-key"
+        cloud.describe = describe
+        with tempfile.TemporaryDirectory() as folder:
+            app = make_app(folder, ("cup", "pen"))
+            app.enter_summary()
+            for _ in range(100):
+                app.render(0.033)
+                if all(entry.description for entry in app.shelf.entries.values()):
+                    break
+                time.sleep(0.01)
+            assert len(descriptions) == 2
+            assert all(entry.description for entry in app.shelf.entries.values())
+            assert len({entry.description for entry in app.shelf.entries.values()}) == 2
+            saved = Shelf(folder, C.INSTRUMENTS)
+            assert all(saved.entries[name].description == app.shelf.entries[name].description
+                       for name in ("cup", "pen"))
+    finally:
+        cloud.describe = original_describe
+        if original_key is None:
+            os.environ.pop(C.GEMINI_KEY_ENV, None)
+        else:
+            os.environ[C.GEMINI_KEY_ENV] = original_key
+
+
+def test_failed_description_is_not_retried_each_frame():
+    original_describe = cloud.describe
+    original_key = os.environ.get(C.GEMINI_KEY_ENV)
+    attempts = []
+
+    def fail(frame, api_key):
+        attempts.append(1)
+        raise RuntimeError("temporary Gemini failure")
+
+    try:
+        os.environ[C.GEMINI_KEY_ENV] = "test-key"
+        cloud.describe = fail
+        with tempfile.TemporaryDirectory() as folder:
+            app = make_app(folder, ("cup",))
+            app.enter_summary()
+            for _ in range(30):
+                app.render(0.033)
+                time.sleep(0.001)
+            assert len(attempts) == 1
+            assert app.shelf.entries["cup"].description is None
+    finally:
+        cloud.describe = original_describe
+        if original_key is None:
+            os.environ.pop(C.GEMINI_KEY_ENV, None)
+        else:
+            os.environ[C.GEMINI_KEY_ENV] = original_key
+
+
+def test_six_descriptions_do_not_rasterize_hundreds_of_trial_strings():
+    """Opening Collections with six long Gemini captions must stay light enough
+    that the audio callback can keep running while its instruments fade out."""
+    with tempfile.TemporaryDirectory() as folder:
+        app = make_app(folder, tuple(C.INSTRUMENTS)[:6])
+        for name in app.shelf.order():
+            app.shelf.describe(name, "A ceramic and metal object with a bright finish " * 3)
+        app.enter_summary()
+        original = ui.text_mask
+        masks = []
+
+        def counted(*args, **kwargs):
+            masks.append(1)
+            return original(*args, **kwargs)
+
+        try:
+            ui.text_mask = counted
+            app.render(0.033)
+        finally:
+            ui.text_mask = original
+        assert len(masks) < 120, len(masks)
+
+
 if __name__ == "__main__":
     test_layout_and_empty_state()
     test_navigation_and_cards()
     test_job_updates_are_nonblocking()
     test_render_state_and_stale_clip()
     test_description_is_kept_and_shown()
+    test_existing_items_get_individual_descriptions()
+    test_failed_description_is_not_retried_each_frame()
+    test_six_descriptions_do_not_rasterize_hundreds_of_trial_strings()
     print("ok")

@@ -37,6 +37,11 @@ def _font(size, weight):
     return _fonts[key]
 
 
+def text_width(s, size, weight="Regular"):
+    """Measure text without rasterizing it into a mask."""
+    return _font(size, weight).getlength(str(s))
+
+
 def text_mask(s, size, weight="Regular"):
     """-> (alpha float32 HxW, left bearing, top bearing). Cached per string."""
     key = (s, size, weight)

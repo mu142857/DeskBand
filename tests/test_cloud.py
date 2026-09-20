@@ -58,6 +58,8 @@ def test_vocals():
 def test_describer():
     frame = np.full((720, 1280, 3), 128, np.uint8)
     sent = {}
+    previous_cache = C.CACHE_DIR
+    C.CACHE_DIR = tempfile.mkdtemp(prefix="wavelens_empty_keys_")
 
     def fake_post(url, headers, body):
         sent.update(url=url, headers=headers, body=body)
@@ -94,9 +96,37 @@ def test_describer():
     time.sleep(0.1)
     assert d.status == "error" and "429" in d.text
     del os.environ[C.GEMINI_KEY_ENV]
+    C.CACHE_DIR = previous_cache
+
+
+def test_private_gemini_key():
+    previous_cache = C.CACHE_DIR
+    previous_env = os.environ.pop(C.GEMINI_KEY_ENV, None)
+    try:
+        with tempfile.TemporaryDirectory() as folder:
+            C.CACHE_DIR = folder
+            path = os.path.join(folder, "gemini_api_key")
+            with open(path, "w") as file:
+                file.write("private-test-key\n")
+            os.chmod(path, 0o600)
+            assert cloud.key(C.GEMINI_KEY_ENV) == "private-test-key"
+            os.environ[C.GEMINI_KEY_ENV] = "environment-test-key"
+            assert cloud.key(C.GEMINI_KEY_ENV) == "environment-test-key"
+            del os.environ[C.GEMINI_KEY_ENV]
+            os.chmod(path, 0o644)
+            assert cloud.key(C.GEMINI_KEY_ENV) is None
+            os.chmod(path, 0o600)
+            os.remove(path)
+            os.symlink("missing", path)
+            assert cloud.key(C.GEMINI_KEY_ENV) is None
+    finally:
+        C.CACHE_DIR = previous_cache
+        if previous_env is not None:
+            os.environ[C.GEMINI_KEY_ENV] = previous_env
 
 
 if __name__ == "__main__":
     test_vocals()
     test_describer()
+    test_private_gemini_key()
     print("ok")

@@ -2,6 +2,8 @@
 
 import queue
 import threading
+from functools import lru_cache
+from math import ceil
 
 import cv2
 import numpy as np
@@ -43,21 +45,30 @@ def contains(rect, x, y):
     return rect[0] <= x < rect[2] and rect[1] <= y < rect[3]
 
 
+@lru_cache(maxsize=512)
 def fit_text(value, size, width):
     value = str(value)
-    if ui.text_mask(value, size)[0].shape[1] <= width:
+    if ui.text_width(value, size) <= width:
         return value
-    while value and ui.text_mask(value + "…", size)[0].shape[1] > width:
-        value = value[:-1]
-    return value + "…"
+    if ui.text_width("…", size) > width:
+        return ""
+    low, high = 0, len(value)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if ui.text_width(value[:middle] + "…", size) <= width:
+            low = middle
+        else:
+            high = middle - 1
+    return value[:low] + "…"
 
 
+@lru_cache(maxsize=128)
 def fit_lines(value, size, width, lines):
     """Wrap to at most `lines`; the last one ends in … when there is more to read."""
     wrapped = ui.wrap(value, size, width)
     if len(wrapped) > lines:
         wrapped = wrapped[:lines - 1] + [fit_text(" ".join(wrapped[lines - 1:]), size, width)]
-    return wrapped
+    return tuple(wrapped)
 
 
 class SummaryJobs:
@@ -142,7 +153,7 @@ class SummaryView:
     def _description_panel(out, x0, y0, y1, text):
         """What Gemini said about the photo, in full, beside the card it belongs to."""
         lines = fit_lines(text, 14, HOVER_W - 36, 5)
-        wide = max(ui.text_mask(line, 14)[0].shape[1] for line in lines) + 36
+        wide = ceil(max(ui.text_width(line, 14) for line in lines)) + 36
         high = 26 + 20 * len(lines)
         x = min(max(x0 + DESC[0] - 16, 8), 1280 - wide - 8)
         y = y1 - 10 if y1 - 10 + high <= 600 else max(y0 + 10 - high, 132)   # attached to its own card
@@ -163,7 +174,8 @@ class SummaryView:
     def render(self, snapshot, shelf, jobs, mouse=(-1, -1), *, song_jobs=None,
                clip_playing=False, can_render=False, can_play=False, can_reveal=False,
                can_extend=False, song_playing=False, confirm_upload=False,
-               has_music_key=False, notice=""):
+               has_music_key=False, notice="", description_pending=None,
+               description_attempts=(), has_gemini_key=False):
         self._prepare(snapshot)
         out = np.empty((720, 1280, 3), np.uint8)
         out[:] = ui.TONE_DARK.astype(np.uint8)
@@ -197,9 +209,19 @@ class SummaryView:
             if entry.description:
                 dx, dy, dw, line, rows = DESC
                 for row, text in enumerate(fit_lines(entry.description, 12, dw, rows)):
-                    ui.text(out, text, x0 + dx, y0 + dy + row * line, 12, 0.5, "Light")
+                    ui.text(out, text, x0 + dx, y0 + dy + row * line, 12, 0.82, "Regular")
                 if hover:
                     described = (x0, y0, y1, entry.description)
+            else:
+                if not has_gemini_key:
+                    caption = "Gemini key needed for description"
+                elif item.name == description_pending:
+                    caption = "Gemini is describing…"
+                elif item.name in description_attempts:
+                    caption = "Gemini could not describe this item"
+                else:
+                    caption = "Waiting for Gemini…"
+                ui.text(out, caption, x0 + 94, y0 + 69, 12, 0.62, "Light")
             label = "BEAT GRID" if item.kind == "rhythm" else "MELODY"
             ui.text(out, label, x0 + 275, y0 + 11, 11, 0.45, "Medium")
             strip = self._strips[item.name]

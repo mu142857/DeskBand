@@ -19,7 +19,7 @@ import numpy as np
 
 from wavelens import config as C
 from wavelens import ui
-from wavelens.cloud import Describer
+from wavelens.cloud import Describer, key
 from wavelens.clip import ClipPlayer
 from wavelens.eleven_music import continue_song, load_saved_song
 from wavelens.export import render_loop
@@ -119,6 +119,7 @@ class App:
         self.describer = Describer()    # Gemini's description of the current photo
         self.caption = (None, [])       # (text, wrapped lines)
         self.describing = None          # (instrument, Gemini job) still waiting for its words
+        self.description_attempts = set()  # one background attempt per saved item this run
         self.zybo = ZyboLink(on_lost=lambda: self.remote.commands.put({"cmd": "fpga_mode", "on": False}))
         self.apply_parts()              # restore the saved selection before audio starts
 
@@ -136,15 +137,20 @@ class App:
         dets = self.pick(dets)
         self.captured = (frame.copy(), dets)
         self.save_frame(frame, "shot")
-        self.describer.request(frame)
         self.describing = None
         self.state = SHOW
         self.flash = 1.0
+        target = None
         for d in sorted(dets, key=lambda d: d.conf):       # best box of each object last, so it wins
             if entry := self.shelf.add(d.name, d.shown, d.conf, frame, d.box):
                 self.composer.set_motif_seed(d.name, entry.motif_seed)
                 self.shelf.select(d.name, True)
-                self.describing = (d.name, self.describer.job)
+                target = entry
+        self.describer.request(target.thumb if target is not None else frame)
+        if target is not None:
+            self.describing = (target.name, self.describer.job)
+            if self.describer.status != "off":
+                self.description_attempts.add(target.name)
         self.start_band()
         self.apply_parts()
 
@@ -163,6 +169,21 @@ class App:
             self.describing = None
         elif status in ("error", "off", None):
             self.describing = None
+
+    def describe_missing_items(self):
+        """Fill older collection cards from their saved object photos, one at a time."""
+        if (self.describing is not None or self.describer.status == "looking"
+                or not key(C.GEMINI_KEY_ENV)):
+            return
+        for name in self.shelf.order():
+            entry = self.shelf.entries[name]
+            if entry.description or name in self.description_attempts:
+                continue
+            self.describer.request(entry.thumb)
+            self.describing = (name, self.describer.job)
+            if self.describer.status != "off":
+                self.description_attempts.add(name)
+            break
 
     def pick(self, dets):
         """Choose one object, keeping the current target when it is still plausible.
@@ -921,6 +942,7 @@ class App:
     def render(self, dt):
         self.file_description()
         if self.state == SUMMARY:
+            self.describe_missing_items()
             self.summary_jobs.poll()
             self.song_jobs.poll()
             if isinstance(self.clip_player, ClipPlayer):
@@ -939,7 +961,10 @@ class App:
                 can_extend=self.extend_worker is not None,
                 song_playing=self.song_playing, confirm_upload=self.confirm_upload,
                 has_music_key=bool(os.environ.get(C.ELEVENLABS_KEY_ENV, "").strip()),
-                notice=self.song_notice)
+                notice=self.song_notice,
+                description_pending=self.describing[0] if self.describing else None,
+                description_attempts=self.description_attempts,
+                has_gemini_key=bool(key(C.GEMINI_KEY_ENV)))
         if self.on_stage:
             out = self.stage.render()
             self.draw_zybo_light(out)

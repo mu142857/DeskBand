@@ -39,6 +39,7 @@ def test_silent_until_started():
     engine.set_bpm(120)
     blocks(engine, 200)                                    # several bars' worth of loading
     assert composer.steps == []
+    assert 0 <= engine.cpu < 10                         # callback diagnostic is a duration ratio
     engine.start_transport()
     blocks(engine, 20)
     assert composer.steps and composer.steps[0] == 0       # in at the top of the loop, not mid-bar

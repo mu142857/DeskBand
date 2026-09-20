@@ -515,9 +515,9 @@ class Engine:
             g0 = p.gain
             g1 = g0 + (p.target - g0) * min(1.0, frames / (0.5 * SR))
             p.gain = g1
-            t0 = p.trim
-            p.trim = t1 = t0 + (p.trim_to - t0) * min(1.0, frames / (0.05 * SR))
-            g0, g1 = g0 * t0, g1 * t1
+            trim_start = p.trim
+            p.trim = trim_end = trim_start + (p.trim_to - trim_start) * min(1.0, frames / (0.05 * SR))
+            g0, g1 = g0 * trim_start, g1 * trim_end
             control_gain = 1.0
             track = self.fpga_track_index.get(p.name)
             if self.fpga_mode and track is not None:
