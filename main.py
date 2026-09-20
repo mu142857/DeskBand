@@ -669,6 +669,22 @@ class App:
         ui.text(out, "tab  ·  camera" if self.on_stage else "tab  ·  stage", cx, cy + self.shutter[2] + 10,
                 13, 0.55, "Light", align="center")
 
+    def draw_tempo(self, out):
+        """Persistent clock-source/BPM readout; the dot flashes on each beat."""
+        e = self.engine
+        x0, y0, x1, y1 = W // 2 - 90, 18, W // 2 + 90, 58
+        ui.frosted(out, x0, y0, x1, y1, r=18)
+        heard = max(0, e.pos - int(e.latency * C.SAMPLE_RATE))
+        beat_samples = max(1, e.step_len * C.STEPS_PER_BEAT)
+        phase = (heard % beat_samples) / beat_samples
+        pulse = math.exp(-7.0 * phase)
+        ui.circle(out, x0 + 22, (y0 + y1) // 2, 4,
+                  0.35 + 0.65 * pulse, thickness=-1)
+        bpm = f"{e.bpm:.0f}" if abs(e.bpm - round(e.bpm)) < 0.05 else f"{e.bpm:.1f}"
+        source = "FPGA" if e.fpga_mode else "MAC"
+        ui.text(out, f"{source}  ·  {bpm} BPM", x0 + 38, y0 + 9,
+                17, 0.9, "Medium")
+
     def draw_caption(self, out):
         """Top left, under the title: what Gemini sees in the photo."""
         d = self.describer
@@ -738,6 +754,7 @@ class App:
                 notice=self.song_notice)
         if self.on_stage:
             out = self.stage.render()
+            self.draw_tempo(out)
             self.draw_math_button(out)
             self.draw_finish_button(out)
             self.draw_random_button(out)
@@ -755,6 +772,7 @@ class App:
             msg = self.vision.error or "starting camera and model…"
             ui.text(out, msg, W // 2, H // 2 - 10, 18, 0.7, "Light", align="center")
             ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+            self.draw_tempo(out)
             self.draw_finish_button(out)
             return out
         frame, scale_x, scale_y, offset_x, offset_y = fit_camera_frame(frame)
@@ -773,6 +791,7 @@ class App:
             desk = self.draw_preview(out, frame, dets, dt, scale_x, scale_y,
                                      offset_x, offset_y)
         ui.text(out, "DeskBand", 28, 22, 22, 0.9, "Semibold")
+        self.draw_tempo(out)
         if self.state == PREVIEW:
             ui.text(out, "shoot an object to add it to the band", 28, 52, 15, 0.5, "Light")
         self.draw_card(out, desk)
