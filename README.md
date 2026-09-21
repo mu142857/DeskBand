@@ -2,7 +2,7 @@
 
 > Put the things on your desk in front of the camera, shoot a photo, and they become a band that never plays out of tune.
 
-Built at **Hack the North 2026** by Aaron Shangguan, Richard Cai and Hank Lee.
+Built at **Hack the North 2026** by Aaron (Jiamu) Shangguan, Richard (Qiyuan) Cai and Hank (Chenghan) Lee.
 
 ## What it does
 
